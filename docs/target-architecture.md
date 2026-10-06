@@ -69,7 +69,7 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - Trusted Origins werden exakt aus Runtime-Konfiguration abgeleitet. Der Public-Form-Origin ist CORS-Origin, aber nicht automatisch Auth-Origin. Kein Wildcard-Origin, keine deaktivierte CSRF-/Origin-Prüfung und keine Cross-Subdomain-Cookies, da Login und Admin auf derselben Vega-Origin liegen.
 - HTTPS, `Secure`, `HttpOnly` und `SameSite=Lax` Cookies. Proxy-IP-Header nur dann vertrauen, wenn der Hostinger-Reverse-Proxy verifiziert ist.
 - Better-Auth-Rate-Limits bleiben aktiviert; Login, Reset und 2FA bekommen strengere endpoint-spezifische Limits mit persistenter Speicherung statt nur In-Memory-Countern. Proxy-IP-Header werden nur nach Verifikation der Hostinger-Proxykette vertraut.
-- Noch im A0-Proof festzulegen: E-Mail-Verifikation für eingeladene Mitarbeiterkonten sowie maximale Sessiondauer. Empfehlung: verifizierte Mitarbeiteradresse, maximal ein Arbeitstag und erneute Authentifizierung bei sicherheitskritischen Kontoänderungen.
+- Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden. Admins legen Konten an, können auch die Rolle `Admin` vergeben und Passwort-Reset-Mails auslösen. Sessions haben eine absolute Höchstdauer von 30 Tagen; spätestens dann ist eine erneute Anmeldung erforderlich. Re-Authentifizierung bei sicherheitskritischen Kontoänderungen bleibt noch zu entscheiden.
 
 ## Datenmodell – fachliche Beziehungen
 
@@ -81,8 +81,8 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - `OrderImage` speichert Objekt-Key/Link-Metadaten. Order-Purge löscht nicht das GCS-Objekt.
 - `Invoice` ist eigene Tabelle, unique nullable Beziehung zu genau einem Angebots-Order, plus `orderNumberSnapshot`, `customerNameSnapshot`, Rechnungsnummer und fachliche Rechnungsfelder. Beim Order-Purge `SET NULL` statt Cascade; Snapshots bleiben zum Suchen bis Invoice-Purge.
 - Rechnungsnummer ist von DB-ID und Auftragsnummer getrennt; einstellbarer Nummernkreis, editierbar, DB-seitig eindeutig.
-- `CreditNote` ist separater optionaler Beleg (höchstens einer je Rechnung; Nummerierungsverhalten wie bisher).
-- `ReminderEvent` hält Versandereignisse zur Rechnung fest.
+- `CreditNote` ist separater optionaler Beleg (höchstens einer je Rechnung; Nummerierungsverhalten wie bisher); `ReminderEvent` hält Versandereignisse zur Rechnung fest.
+- `Invoice`, `CreditNote` und `ReminderEvent` haben jeweils eigene Archiv-/Purge-Felder. Admins archivieren die Finanzdatensätze; Purge erfolgt einheitlich nach 30 Tagen, Restore ist bis dahin möglich.
 - `OrderActivityEvent` enthält nur Objekt, Aktion, Zeitstempel und Benutzername; keine Feld-Diffs. Order-Purge entfernt seine Events.
 - `EmailOutbox`/`EmailEvent` hält Retry-Zustand und erfolgreichen Versand inkl. Benutzer/Aktion/Zeitpunkt.
 - Katalog-/Preisstammdaten werden initial manuell gepflegt.
@@ -116,8 +116,7 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 | Archivierter Auftrag/Kopie | Restore-fähig; Purge nach 60 Tagen ab aktueller Archivierung |
 | Audit eines Auftrags | minimaler Aktionsdatensatz; zusammen mit Order-Purge entfernt |
 | GCS-Objekt | keine Order-Purge-Kaskade; Lifecycle nach 180 Tagen ab Upload |
-| Rechnung | Archivansicht/Restore; App-Purge 60 Tage nach bestätigtem Archivieren; externe gesetzliche Archivierung ist Betreiberprozess |
-| Gutschrift/Reminder-Ereignis | eigener Finanzbeleg/Eintrag; Archiv-/Purge-Verknüpfung vor Implementierung mit Buchhaltung festlegen |
+| Rechnung, Gutschrift, Mahnungsereignis | Admin-Archivierung und Restore; einheitlicher App-Purge 30 Tage nach Archivierung. Externe gesetzliche Archivierung bleibt Betreiberprozess und Go-live-Gate. |
 | Invoice PDF | bei Bedarf aus aktuellem DB-Stand; nicht persistent in App/GCS |
 
 Hostinger Cron läuft täglich, verarbeitet abgelaufene archivierte Datensätze und Mail-Retries. Purge ist transaktional/idempotent. Vor finaler Implementierung ist zu prüfen, ob Managed Node Cron eine CLI-Ausführung erlaubt; sonst wird ein kurzlebiger, signierter interner Trigger verwendet.

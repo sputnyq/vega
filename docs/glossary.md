@@ -6,7 +6,7 @@
 | Auftrag / Order | Persistierter Datensatz mit Kundendaten, Umzugsangaben, Services, Preis- und Bildreferenzen. Auch Angebotskopien werden als eigene Orders geführt. |
 | Angebotskopie | Eigenständiger Order-Datensatz mit neuer Auftragsnummer und Beziehung zum Ursprung; unabhängig bearbeit-/archivierbar. |
 | `edited` | Bestehendes Bearbeitungskennzeichen. Neue Anfrage false; Kopie true; echte Änderung oder erfolgreicher In-App-Mailversand true. Bedeutet ausdrücklich nicht „angesehen“. |
-| Archivieren | Explizite Aktion eines Berechtigten, die einen Datensatz aus der aktiven Liste nimmt und eine 60-Tage-Purge-Frist startet. |
+| Archivieren | Explizite Aktion eines Berechtigten, die einen Datensatz aus der aktiven Liste nimmt. Orders haben eine 60-Tage-, Rechnungen/Gutschriften/Mahnungen eine 30-Tage-Purge-Frist. |
 | Wiederherstellen | Reaktiviert einen archivierten Datensatz und stoppt dessen aktuelle Purge-Frist. |
 | Purge / endgültiges Entfernen | Entfernen eines archivierten Datensatzes aus der App-DB nach der Frist. Bei Orders werden die Aktionslogs mit entfernt; GCS-Objekte nicht. |
 | Kundenberater | Authentifizierter Mitarbeiter mit Order-/Einzelangebotsrechten, aber ohne globale Katalog-/Preis-, Benutzer- oder Buchhaltungsverwaltung. |

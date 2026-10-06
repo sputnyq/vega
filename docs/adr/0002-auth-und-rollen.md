@@ -1,11 +1,12 @@
 # ADR 0002: Better Auth, verpflichtendes TOTP und zwei Rollen
 
 - **Status:** Akzeptiert
-- **Datum:** 2026-10-05
+- **Datum:** 2026-10-06
+- **Fachentscheidung:** Auftraggeber, Name nicht angegeben
 
 ## Entscheidung
 
-Better Auth mit E-Mail/Passwort, Passwort-Reset via Hostinger-Mail und TOTP für Admins und Kundenberater. Keine öffentliche Registrierung. Admins verwalten Konten; ein einmaliger serverseitiger Bootstrap legt den ersten Admin an. Recovery-Codes und ein dokumentierter Admin-Reset-Prozess werden vorgesehen.
+Better Auth mit E-Mail/Passwort, Passwort-Reset via Hostinger-Mail und TOTP für Admins und Kundenberater. Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden. Es gibt keine öffentliche Registrierung. Ein einmaliger serverseitiger Bootstrap legt den ersten Admin an; danach können Admins Konten anlegen und ihnen auch die Rolle `Admin` zuweisen. Admins können für ein Konto eine Passwort-Reset-Mail auslösen; das neue Passwort setzt der Kontoinhaber über den kurzlebigen Reset-Link selbst. Recovery-Codes und ein dokumentierter Admin-Reset-Prozess werden vorgesehen.
 
 Better Auth wird mit der exakt gepinnten Version und deren Prisma-Adapter-/Plugin-Schema betrieben. `twoFactor` Server- und Client-Plugin stellen TOTP bereit; Enrollment benötigt Passwortbestätigung und eine erste erfolgreiche Codeprüfung. Einmalige Recovery-Codes werden geschützt ausgegeben/gespeichert. Geschützte Kundendatenrouten verweigern Zugriff, bis 2FA aktiviert ist.
 
@@ -25,4 +26,5 @@ Rollen sind `Admin` und `Kundenberater`. Berechtigungen werden serverseitig auf 
 - TOTP-Enrollment/Recovery muss vor Produktivbetrieb getestet werden.
 - Rollenänderung oder Account-Sperre wirkt auf API-Zugriff, nicht nur auf sichtbare Menüs.
 - Passwortreset versendet generische Antworten, nutzt kurzlebige Einmal-Token und widerruft bestehende Sessions.
-- E-Mail-Verifikationsanforderung und Sessiondauer sind A0-Konfigurationsentscheidungen; Empfehlung: verifizierte Mitarbeiteradresse und maximale Sessiondauer von einem Arbeitstag.
+- Eine Anmeldung ist spätestens alle 30 Tage erforderlich. Die absolute Sessiondauer beträgt höchstens 30 Tage und wird durch laufende Aktivität nicht verlängert.
+- Re-Authentifizierung bei sicherheitskritischen Kontoänderungen ist noch nicht entschieden und bleibt vor deren Implementierung zu klären.

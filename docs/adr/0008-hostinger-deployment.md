@@ -7,7 +7,7 @@
 
 Die App läuft als verwaltete Node.js-Web-App bei Hostinger mit Node 24 LTS, einer Express-Instanz und Hostinger MySQL. Hostnames, Auth-URLs, CORS Origins und Geheimnisse werden zur Laufzeit konfiguriert, nicht in Vite-Builds eingebrannt.
 
-Ein täglicher Hostinger-Cronjob verarbeitet 60-Tage-Purges und Mail-Retries. Betreiber verwaltet Backups, initiale Katalogpflege und finalen Go-live.
+Ein täglicher Hostinger-Cronjob verarbeitet Order-Purges nach 60 Tagen, Finanzbeleg-Purges nach 30 Tagen sowie Mail-Retries. Betreiber verwaltet Backups, initiale Katalogpflege und finalen Go-live. Provider- und Archivzugänge werden ausschließlich über serverseitige Runtime-Umgebungsvariablen bereitgestellt.
 
 ## Verifikation
 

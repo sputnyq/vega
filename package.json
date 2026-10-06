@@ -1,0 +1,44 @@
+{
+  "name": "vega",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "apps/server",
+    "apps/admin",
+    "apps/customer-form",
+    "packages/domain"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others --names server,admin,form --prefix-colors cyan,magenta,green \"npm:dev:server\" \"npm:dev:admin\" \"npm:dev:form\"",
+    "dev:server": "tsx watch apps/server/src/main.ts",
+    "dev:admin": "npm run dev --workspace @vega/admin",
+    "dev:form": "npm run dev --workspace @vega/customer-form",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose stop db",
+    "db:status": "docker compose ps db",
+    "db:logs": "docker compose logs -f db",
+    "build": "npm run typecheck && npm run build:domain && npm run build:server && npm run build:frontends",
+    "build:domain": "npm run build --workspace @vega/domain",
+    "build:server": "npm run build --workspace @vega/server",
+    "build:frontends": "npm run build --workspace @vega/admin && npm run build --workspace @vega/customer-form",
+    "typecheck": "npm run typecheck --workspace @vega/domain && npm run typecheck --workspace @vega/server && npm run typecheck --workspace @vega/admin && npm run typecheck --workspace @vega/customer-form",
+    "test": "tsx --test apps/server/test/*.test.ts",
+    "start": "npm run start --workspace @vega/server"
+  },
+  "devDependencies": {
+    "concurrently": "9.2.4",
+    "tsx": "4.20.6",
+    "typescript": "7.0.2"
+  },
+  "overrides": {
+    "shell-quote": "1.12.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}
