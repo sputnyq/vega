@@ -22,23 +22,35 @@
     "db:down": "docker compose stop db",
     "db:status": "docker compose ps db",
     "db:logs": "docker compose logs -f db",
-    "build": "npm run typecheck && npm run build:domain && npm run build:server && npm run build:frontends",
+    "db:generate": "prisma generate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "auth:generate-schema": "auth generate --config apps/server/src/auth.ts --adapter prisma --output prisma/schema.prisma",
+    "build": "npm run db:generate && npm run typecheck && npm run build:server && npm run build:frontends",
     "build:domain": "npm run build --workspace @vega/domain",
     "build:server": "npm run build --workspace @vega/server",
     "build:frontends": "npm run build --workspace @vega/admin && npm run build --workspace @vega/customer-form",
-    "typecheck": "npm run typecheck --workspace @vega/domain && npm run typecheck --workspace @vega/server && npm run typecheck --workspace @vega/admin && npm run typecheck --workspace @vega/customer-form",
-    "test": "tsx --test apps/server/test/*.test.ts",
+    "typecheck": "npm run build --workspace @vega/domain && npm run typecheck --workspace @vega/server && npm run typecheck --workspace @vega/admin && npm run typecheck --workspace @vega/customer-form && tsc --noEmit -p prisma/tsconfig.json",
+    "test": "tsx --test apps/server/test/*.test.ts apps/admin/test/*.test.ts",
     "start": "npm run start --workspace @vega/server"
   },
   "devDependencies": {
+    "auth": "1.7.7",
     "concurrently": "9.2.4",
+    "prisma": "6.19.3",
     "tsx": "4.20.6",
     "typescript": "7.0.2"
   },
   "overrides": {
+    "deepmerge-ts": "8.0.2",
+    "mysql2": "3.24.5",
     "shell-quote": "1.12.0"
   },
   "allowScripts": {
-    "esbuild@0.25.12": true
+    "esbuild@0.25.12": true,
+    "@prisma/client@6.19.3": true,
+    "prisma@6.19.3": true,
+    "@prisma/engines@6.19.3": true
   }
 }

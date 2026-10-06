@@ -59,10 +59,11 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 ### 4.2 Authentifizierung und Rechte
 
 - Rollen: `Admin` und `Kundenberater`.
-- Anmeldung mit E-Mail/Passwort; Passwort-Reset über Hostinger-Mail; TOTP-Zwei-Faktor-Authentifizierung verpflichtend für beide Rollen. Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden.
+- Anmeldung mit E-Mail/Passwort; neu gesetzte Passwörter müssen mindestens 8 Zeichen einschließlich Großbuchstabe, Kleinbuchstabe und Zahl enthalten. Passwort-Reset über Hostinger-Mail; TOTP-Zwei-Faktor-Authentifizierung verpflichtend für beide Rollen. Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden.
 - Keine öffentliche Registrierung. Admins können Mitarbeiterkonten anlegen/sperren und auch die Rolle `Admin` vergeben; für ein Konto können sie eine Passwort-Reset-Mail auslösen.
 - Erneute Anmeldung ist spätestens alle 30 Tage erforderlich (absolute Session-Höchstdauer; Aktivität verlängert die Session nicht).
 - Erster Admin: einmaliger, serverseitiger Bootstrap, danach deaktiviert. Kein öffentliches Setup.
+- Erstadmin wird über einen einmaligen Prisma-Seed als `root_user` angelegt. `INITIAL_ADMIN_EMAIL` und `INITIAL_ADMIN_PASSWORD` sind serverseitige Runtime-Variablen und nach dem Seed zu entfernen. Beim ersten Login ist Passwortwechsel plus erfolgreiches TOTP-Enrollment erforderlich, bevor geschützte Admin-Funktionen zugänglich sind.
 - Wiederherstellungscodes bei 2FA-Einrichtung; Admin-Reset für andere Accounts; dokumentierter serverseitiger Recovery-Pfad für den einzigen Admin. Ob sicherheitskritische Kontoänderungen zusätzlich Re-Authentifizierung verlangen, bleibt offen.
 - Admin darf alle Bereiche bedienen, darunter Mitarbeiterkonten, globale Preise, Kataloge und Buchhaltung.
 - Kundenberater dürfen Anfragen/Aufträge bearbeiten, Einzelangebote erstellen/kopieren/anpassen/archivieren, individuelle Einzelangebotspreise ändern, E-Mails mit PDF versenden und Aufträge archivieren/wiederherstellen.
@@ -187,6 +188,18 @@ Better Auth Version pinnen; Prisma-Schema mit der passenden Better-Auth-CLI-Vers
 
 **Abhängigkeit:** A2; A3 für geschützte Routen.  
 Servervalidierung und autoritative Preise, Order-/Copy-/Archive-/Restore-Use-Cases, Nummernvergabe, `edited`, safe public DTOs, Rate-Limits, CORS, Upload-Sitzungen und Audit-/Email-Events.
+
+**Teilstatus:** `POST /api/orders` und die Legacy-nahe Admin-Neuanlage sind
+umgesetzt: validierte Kunden-, Mehrfachadress-, Umzugsgut-, Zusatzleistungs-,
+Termin- und Konditionsdaten können anonym oder mit abgeschlossener Staff-Session
+gespeichert werden; anonyme Aufrufe sind rate-limitiert und können keine
+Preisfelder setzen. Abgeschlossene Staff-Sessions dürfen wie im Legacy-Flow auch
+unvollständige Auftragsentwürfe speichern; öffentliche Anfragen müssen vollständig
+sein. Staff-Preisfelder werden serverseitig auf Typ und Wertebereich geprüft.
+Dies schließt A2/A4 nicht ab; Katalog-CRUD und öffentliche Safe-GET-Projektionen
+sind inzwischen implementiert. Vollständige autoritative
+Orderpreisberechnung, Finanzbeleg-API, Audit-Events und Upload-Sitzungen bleiben
+offen.
 
 **Abnahme:** kein öffentlicher Order-Read; Manipulation von Browserpreisen wird abgewiesen/neu berechnet; Kopien und Archive wirken nur auf den jeweiligen Datensatz.
 

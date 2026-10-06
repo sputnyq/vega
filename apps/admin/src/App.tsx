@@ -1,19 +1,150 @@
-import { Box, Button, Container, Paper, Stack, Typography } from "@mui/material";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { Alert, CircularProgress, Container } from "@mui/material";
+import { authClient } from "./auth-client.js";
+import { AuthCard } from "./auth/AuthCard.js";
+import { InitialPasswordChangePage } from "./auth/InitialPasswordChangePage.js";
+import { SignInPage } from "./auth/SignInPage.js";
+import { TotpSetupPage } from "./auth/TotpSetupPage.js";
+import { AdminShell } from "./components/AdminShell.js";
+import { NotFoundPage } from "./components/NotFoundPage.js";
+import { RoutePlaceholderPage } from "./components/RoutePlaceholderPage.js";
+import { ProfilePage } from "./profile/ProfilePage.js";
+import { OptionsPage } from "./settings/OptionsPage.js";
+import { UserManagementPage } from "./settings/UserManagementPage.js";
+import { resolveAdminRoute } from "./routes.js";
+import type { PendingInitialPassword, StaffUser } from "./types.js";
+
+const OrderCreatePage = lazy(() => import("./orders/OrderCreatePage.js").then((module) => ({ default: module.OrderCreatePage })));
+const ContentManagementPage = lazy(() => import("./settings/ContentManagementPage.js").then((module) => ({ default: module.ContentManagementPage })));
+
+function useLocalPathname() {
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const replacePath = useCallback((path: string) => {
+    if (window.location.pathname === path) return;
+    window.history.replaceState(null, "", path);
+    setPathname(path);
+  }, []);
+
+  const navigatePath = useCallback((path: string) => {
+    if (window.location.pathname === path) return;
+    window.history.pushState(null, "", path);
+    setPathname(path);
+  }, []);
+
+  return { pathname, replacePath, navigatePath };
+}
 
 export function App() {
+  const { data: session, isPending } = authClient.useSession();
+  const { pathname, replacePath, navigatePath } = useLocalPathname();
+  const [initialPassword, setInitialPassword] = useState<PendingInitialPassword | null>(null);
+  const [orderSaved, setOrderSaved] = useState(false);
+  const [totpPassword, setTotpPassword] = useState<string | undefined>();
+  const [twoFactorRequired, setTwoFactorRequired] = useState(() => window.location.pathname === "/two-factor");
+  const route = resolveAdminRoute(pathname);
+  const isAuthPath = pathname === "/login" || pathname === "/two-factor";
+  const isKnownPath = route !== null || isAuthPath;
+
+  const onTwoFactorRequired = useCallback(() => {
+    setTwoFactorRequired(true);
+    replacePath("/two-factor");
+  }, [replacePath]);
+
+  const onCancelTwoFactor = useCallback(() => {
+    setTwoFactorRequired(false);
+    replacePath("/login");
+  }, [replacePath]);
+
+  useEffect(() => {
+    if (isPending || !isKnownPath) return;
+    if (!session && route) replacePath("/login");
+    if (!session && pathname === "/two-factor" && !twoFactorRequired) replacePath("/login");
+    if (session && isAuthPath) replacePath("/");
+  }, [isAuthPath, isKnownPath, isPending, pathname, replacePath, route, session, twoFactorRequired]);
+
+  useEffect(() => {
+    setOrderSaved(false);
+  }, [pathname]);
+
+  if (!isKnownPath) return <NotFoundPage onHome={() => replacePath("/")} />;
+
+  if (
+    isPending ||
+    (!session && route !== null) ||
+    (session && isAuthPath) ||
+    (!session && pathname === "/two-factor" && !twoFactorRequired)
+  ) {
+    return <Container sx={{ py: 10, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>;
+  }
+
+  if (initialPassword) {
+    return (
+      <InitialPasswordChangePage
+        currentPassword={initialPassword.currentPassword}
+        onChanged={(password) => {
+          setInitialPassword(null);
+          setTotpPassword(password);
+        }}
+      />
+    );
+  }
+
+  if (totpPassword !== undefined) {
+    return <TotpSetupPage initialPassword={totpPassword} onComplete={() => window.location.reload()} />;
+  }
+
+  if (!session) {
+    return (
+      <SignInPage
+        onInitialPassword={setInitialPassword}
+        onTotpSetup={setTotpPassword}
+        twoFactorRequired={twoFactorRequired}
+        onTwoFactorRequired={onTwoFactorRequired}
+        onCancelTwoFactor={onCancelTwoFactor}
+      />
+    );
+  }
+
+  const user = session.user as unknown as StaffUser;
+  if (user.mustChangePassword) {
+    return <InitialPasswordChangePage onChanged={(password) => setTotpPassword(password)} />;
+  }
+  if (!user.twoFactorEnabled) {
+    return <TotpSetupPage onComplete={() => window.location.reload()} />;
+  }
+  if (user.role !== "Admin" && user.role !== "Kundenberater") {
+    return <AuthCard><Alert severity="error">Dieses Konto ist für die Vega-Verwaltung nicht freigeschaltet.</Alert></AuthCard>;
+  }
+  if (!route) return <NotFoundPage onHome={() => replacePath("/")} />;
+
+  const page = route.adminOnly && user.role !== "Admin"
+    ? <Alert severity="error">Diese Route ist nur für Admins freigeschaltet.</Alert>
+    : route.profile
+      ? <ProfilePage user={user} />
+      : route.path === "/edit/-1"
+        ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
+            <OrderCreatePage navigate={navigatePath} onSaved={() => setOrderSaved(true)} />
+          </Suspense>
+        : route.settingsArea === "options"
+          ? <OptionsPage />
+          : route.settingsArea === "content"
+            ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
+                <ContentManagementPage route={route} navigate={navigatePath} />
+              </Suspense>
+            : route.settingsArea === "users"
+              ? <UserManagementPage />
+              : <RoutePlaceholderPage route={route} />;
+
   return (
-    <Container maxWidth="md" sx={{ py: 8 }}>
-      <Paper elevation={0} variant="outlined" sx={{ p: { xs: 3, sm: 5 } }}>
-        <Stack spacing={2}>
-          <Typography variant="overline" color="primary">Vega · Verwaltung</Typography>
-          <Typography component="h1" variant="h3">Die Admin-App ist bereit.</Typography>
-          <Typography color="text.secondary">
-            Dieses Grundgerüst wird in den nächsten Arbeitspaketen um Anmeldung,
-            Auftragsverwaltung und Katalogpflege ergänzt.
-          </Typography>
-          <Box><Button href="/health" variant="contained">Server-Healthcheck</Button></Box>
-        </Stack>
-      </Paper>
-    </Container>
+    <AdminShell user={user} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved}>
+      {page}
+    </AdminShell>
   );
 }

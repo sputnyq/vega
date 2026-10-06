@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String      @id
+  name               String
+  email              String
+  emailVerified      Boolean     @default(false)
+  image              String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  twoFactorEnabled   Boolean?    @default(false)
+  role               String      @default("Kundenberater")
+  mustChangePassword Boolean     @default(false)
+  sessions           Session[]
+  accounts           Account[]
+  twofactors         TwoFactor[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  // Encrypted backup-code payload exceeds MySQL's default VARCHAR(191) limit.
+  backupCodes             String    @db.Text
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime?
+
+  @@index([secret])
+  @@index([userId])
+  @@map("twoFactor")
+}
+
+model RateLimit {
+  id          String @id
+  key         String
+  count       Int
+  lastRequest BigInt
+
+  @@unique([key])
+  @@map("rateLimit")
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  orderNumber   Int      @unique
+  customerName  String   @db.VarChar(300)
+  customerEmail String? @db.VarChar(254)
+  customerPhone String   @db.VarChar(64)
+  source        String   @db.VarChar(32)
+  data          Json
+  createdAt     DateTime @default(now())
+
+  @@index([customerName])
+  @@index([customerEmail])
+  @@index([createdAt])
+  @@map("order")
+}
+
+model PublicApiRateLimit {
+  key             String   @id @db.VarChar(191)
+  windowStartedAt DateTime
+  count           Int      @default(0)
+
+  @@index([windowStartedAt])
+  @@map("publicApiRateLimit")
+}
+
+model OrderNumberSequence {
+  id        Int @id
+  nextValue Int
+
+  @@map("orderNumberSequence")
+}
+
+model CatalogCategory {
+  id          Int                       @id @default(autoincrement())
+  name        String                    @db.VarChar(191)
+  sort        Int                       @default(0)
+  furniture   CatalogFurnitureCategory[]
+
+  @@index([sort])
+  @@map("catalogCategory")
+}
+
+model CatalogFurniture {
+  id               Int                       @id @default(autoincrement())
+  name             String                    @db.VarChar(191)
+  volume           Decimal                   @default(0) @db.Decimal(10, 2)
+  step             Int?
+  sortOrder        Int                       @default(0)
+  weight           String?                   @db.VarChar(64)
+  montagePrice     Decimal                   @default(0) @db.Decimal(10, 2)
+  extraPrice       Decimal                   @default(0) @db.Decimal(10, 2)
+  demontage        Boolean                   @default(false)
+  notDismountable  Boolean                   @default(false)
+  bulky            Boolean                   @default(false)
+  montage          Boolean                   @default(false)
+  m100             Boolean                   @default(false)
+  m150             Boolean                   @default(false)
+  categories       CatalogFurnitureCategory[]
+
+  @@index([sortOrder])
+  @@map("catalogFurniture")
+}
+
+model CatalogFurnitureCategory {
+  furnitureId Int
+  categoryId  Int
+  furniture   CatalogFurniture @relation(fields: [furnitureId], references: [id], onDelete: Cascade)
+  category    CatalogCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([furnitureId, categoryId])
+  @@index([categoryId])
+  @@map("catalogFurnitureCategory")
+}
+
+model CatalogService {
+  id    Int     @id @default(autoincrement())
+  name  String  @db.VarChar(191)
+  price Decimal @default(0) @db.Decimal(10, 2)
+  sort  Int     @default(0)
+  show  Boolean @default(true)
+
+  @@index([sort])
+  @@map("catalogService")
+}
+
+model CatalogPacking {
+  id          Int     @id @default(autoincrement())
+  name        String  @db.VarChar(191)
+  price       Decimal @default(0) @db.Decimal(10, 2)
+  description String  @db.Text
+  media       String? @db.VarChar(2048)
+  sort        Int     @default(0)
+  show        Boolean @default(true)
+
+  @@index([sort])
+  @@map("catalogPacking")
+}
+
+model CatalogOffer {
+  id            Int     @id @default(autoincrement())
+  name          String  @db.VarChar(191)
+  workers       Int
+  trucks        Int
+  includedHours Int
+  sum           Decimal @default(0) @db.Decimal(10, 2)
+  hourPrice     Decimal @default(0) @db.Decimal(10, 2)
+  ridingCosts   Decimal @default(0) @db.Decimal(10, 2)
+  sort          Int     @default(0)
+
+  @@unique([trucks, workers, includedHours])
+  @@index([sort])
+  @@map("catalogOffer")
+}
+
+model CatalogServiceRate {
+  key   String  @id @db.VarChar(64)
+  price Decimal @default(0) @db.Decimal(10, 2)
+
+  @@map("catalogServiceRate")
+}

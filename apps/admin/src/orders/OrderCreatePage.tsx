@@ -1,0 +1,128 @@
+import { useState, type FormEvent } from "react";
+import { Alert, Button, Paper, Stack, Tab, Tabs } from "@mui/material";
+import type { CreateOrderResult, OrderDetailsInput } from "@vega/domain";
+import { AccountingTab } from "./AccountingTab.js";
+import { AddressesTab } from "./AddressesTab.js";
+import { BasisTab } from "./BasisTab.js";
+import { ConditionsTab } from "./ConditionsTab.js";
+import { CustomerTab } from "./CustomerTab.js";
+import { ExtrasTab } from "./ExtrasTab.js";
+import { FurnitureTab } from "./FurnitureTab.js";
+import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
+
+const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Buchhaltung"];
+
+interface OrderCreatePageProps {
+  navigate: (path: string) => void;
+  onSaved: () => void;
+}
+
+interface ApiErrorResponse {
+  error?: {
+    message?: string;
+    issues?: Array<{ field: string; message: string }>;
+  };
+}
+
+export function OrderCreatePage({ navigate, onSaved }: OrderCreatePageProps) {
+  const [value, setValue] = useState(createEmptyOrder);
+  const [activeTab, setActiveTab] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<CreateOrderResult | null>(null);
+
+  function update(patch: Partial<OrderFormValue>) {
+    setValue((current) => ({ ...current, ...patch }));
+  }
+
+  function updateDetails(details: OrderDetailsInput) {
+    setValue((current) => ({ ...current, details }));
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(value),
+      });
+      const body = await response.json() as { data?: CreateOrderResult } & ApiErrorResponse;
+      if (!response.ok || !body.data) {
+        const issues = body.error?.issues ?? [];
+        const fieldErrors = issues.map((issue) => `${issue.field}: ${issue.message}`);
+        const firstField = issues[0]?.field ?? "";
+        if (firstField.startsWith("customer")) setActiveTab(0);
+        else if (firstField === "from" || firstField === "to" || firstField.startsWith("details.secondaryFrom") || firstField.startsWith("details.secondaryTo")) setActiveTab(1);
+        else if (firstField.startsWith("details.furniture")) setActiveTab(2);
+        else if (firstField.startsWith("details.extras")) setActiveTab(3);
+        else if (firstField === "movingDate" || firstField === "movingTime" || firstField.startsWith("date") || firstField.startsWith("details.basis")) setActiveTab(4);
+        else if (firstField.startsWith("details.conditions")) setActiveTab(5);
+        setError(fieldErrors.length > 0 ? fieldErrors.join(" · ") : body.error?.message ?? "Der Auftrag konnte nicht gespeichert werden.");
+        return;
+      }
+      setSaved(body.data);
+      onSaved();
+    } catch {
+      setError("Der Server ist derzeit nicht erreichbar. Bitte versuchen Sie es erneut.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (saved) {
+    return (
+      <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, maxWidth: 780 }}>
+        <Stack spacing={2}>
+          <Alert severity="success">Auftrag {saved.orderNumber} wurde erfolgreich gespeichert.</Alert>
+          <Button variant="contained" onClick={() => navigate("/")}>Zur Auftragsübersicht</Button>
+        </Stack>
+      </Paper>
+    );
+  }
+
+  return (
+    <Stack component="form" id="order-create-form" spacing={2} onSubmit={submit} noValidate>
+      {error && <Alert severity="error" role="alert">{error}</Alert>}
+      <Paper variant="outlined" sx={{ position: "sticky", top: 64, zIndex: 2 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, next: number) => setActiveTab(next)}
+          variant="scrollable"
+          allowScrollButtonsMobile
+          aria-label="Auftragsschritte"
+        >
+          {tabNames.map((label, index) => <Tab key={label} id={`order-tab-${index}`} aria-controls={`order-tabpanel-${index}`} label={label} />)}
+        </Tabs>
+      </Paper>
+      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <div role="tabpanel" id="order-tabpanel-0" aria-labelledby="order-tab-0" hidden={activeTab !== 0}>
+          <CustomerTab value={value} update={update} />
+        </div>
+        <div role="tabpanel" id="order-tabpanel-1" aria-labelledby="order-tab-1" hidden={activeTab !== 1}>
+          <AddressesTab value={value} update={update} onDetailsChange={updateDetails} />
+        </div>
+        <div role="tabpanel" id="order-tabpanel-2" aria-labelledby="order-tab-2" hidden={activeTab !== 2}>
+          <FurnitureTab value={value} update={update} onFurnitureChange={(furniture) => updateDetails({ ...value.details, furniture })} />
+        </div>
+        <div role="tabpanel" id="order-tabpanel-3" aria-labelledby="order-tab-3" hidden={activeTab !== 3}>
+          <ExtrasTab value={value} onExtrasChange={(extras) => updateDetails({ ...value.details, extras })} />
+        </div>
+        <div role="tabpanel" id="order-tabpanel-4" aria-labelledby="order-tab-4" hidden={activeTab !== 4}>
+          <BasisTab value={value} update={update} onBasisChange={(basis) => updateDetails({ ...value.details, basis })} />
+        </div>
+        <div role="tabpanel" id="order-tabpanel-5" aria-labelledby="order-tab-5" hidden={activeTab !== 5}>
+          <ConditionsTab value={value} onConditionsChange={(conditions) => updateDetails({ ...value.details, conditions })} />
+        </div>
+        <div role="tabpanel" id="order-tabpanel-6" aria-labelledby="order-tab-6" hidden={activeTab !== 6}>
+          <AccountingTab />
+        </div>
+      </fieldset>
+      {busy && <Alert severity="info" role="status">Auftrag wird gespeichert …</Alert>}
+    </Stack>
+  );
+}

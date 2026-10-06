@@ -12,13 +12,20 @@ Kunde
 
 Kundenberater/Admin
   └─ vega.umzugruckzuck24.de
-       ├─ React/Vite Admin-SPA
+       ├─ React/Vite Admin-SPA am Origin-Root (`/`); Redirect zu `/login` bzw. `/two-factor`, unbekannte Pfade zeigen 404
        ├─ Better Auth + TOTP
        ├─ Express 5 API / Domain Services
        ├─ Prisma → Hostinger MySQL
        ├─ Hostinger Mail API
        └─ Google Cloud Storage (private EU bucket)
 ```
+
+Die Vega-Admin-Navigation behält die Legacy-Routen für Aufträge, Bearbeitung,
+Rechnungserstellung, E-Mail-Text und Einstellungen. Einstellungen sind in
+Optionen (`/settings`), Content Management (`/settings/content/*`) und
+User Management (`/settings/users`) gegliedert. Legacy-Content-Pfade bleiben
+als Aliase verfügbar; archivierte Orders/Rechnungen und Profil haben eigene
+Routen.
 
 WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend, Auth-System oder Mailer. Alte WordPress-REST-Daten und Altdaten werden nicht migriert. Das Formular-Bundle wird aus derselben Codebasis wie die Node-App gebaut; der kleine Loader auf Vega liefert absolute URLs. Die konkreten Runtime-Pfade kommen aus Konfiguration und werden nicht in Vite-Builds eingebrannt.
 
@@ -27,6 +34,7 @@ WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend,
 ### Express-Server
 
 - Statische Admin- und Kundenformular-Builds ausliefern.
+- Admin-SPA am Origin-Root: Legacy-Pfade `/`, `/edit/:id`, `/blanco`, `/settings/*` und `/email-text/:id`; zusätzlich `/invoices`, `/invoices/archived`, `/orders/archived`, `/profile`. Unbekannte Admin-Pfade zeigen 404.
 - Better Auth-Routen und Session-Cookies auf Vega hosten.
 - Öffentliche und geschützte API-Router getrennt registrieren.
 - Request-ID, strukturierte Logs, Rate-Limits, CSP und Security-Headers zentral konfigurieren.
@@ -62,7 +70,7 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 
 - Prisma-Adapter mit dem Schema, das für die gepinnte Better-Auth-Version generiert wurde. Bei Änderung von Adapter/Plugins CLI-Schema erneut generieren und Migration prüfen.
 - Better-Auth-Konfiguration benennt Prisma-Modelle gemäß ORM-Modellnamen (nicht SQL-Tabellennamen); generiertes Plugin-Schema wird nicht von Hand an der CLI vorbei geändert.
-- E-Mail/Passwort aktiv; `sendResetPassword` nutzt den serverseitigen Hostinger-Maildienst. Reset-Antworten geben nicht preis, ob ein Account existiert; Reset-Token sind kurzlebig/einmalig und Passwortreset widerruft bestehende Sessions.
+- E-Mail/Passwort aktiv; neu gesetzte Passwörter erfordern mindestens 8 Zeichen sowie Großbuchstabe, Kleinbuchstabe und Zahl. `sendResetPassword` nutzt den serverseitigen Hostinger-Maildienst. Reset-Antworten geben nicht preis, ob ein Account existiert; Reset-Token sind kurzlebig/einmalig und Passwortreset widerruft bestehende Sessions.
 - `twoFactor` Server- und Client-Plugin für TOTP. Enrollment benötigt Passwortbestätigung und einen erfolgreichen ersten Code; nur dann gilt 2FA als aktiviert. Einmalige Recovery-Codes verschlüsselt speichern/anzeigen; 2FA-Reset erzwingt erneutes Enrollment.
 - Serverseitige Middleware blockiert geschützte Kundendatenrouten, bis 2FA aktiviert ist. Kein „trusted device“-Bypass zum Start.
 - `BETTER_AUTH_SECRET` ist ein zufälliges, einzigartiges Secret (mindestens 32 Zeichen/hohe Entropie) aus Hostinger Runtime-Variablen.
@@ -70,11 +78,26 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - HTTPS, `Secure`, `HttpOnly` und `SameSite=Lax` Cookies. Proxy-IP-Header nur dann vertrauen, wenn der Hostinger-Reverse-Proxy verifiziert ist.
 - Better-Auth-Rate-Limits bleiben aktiviert; Login, Reset und 2FA bekommen strengere endpoint-spezifische Limits mit persistenter Speicherung statt nur In-Memory-Countern. Proxy-IP-Header werden nur nach Verifikation der Hostinger-Proxykette vertraut.
 - Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden. Admins legen Konten an, können auch die Rolle `Admin` vergeben und Passwort-Reset-Mails auslösen. Sessions haben eine absolute Höchstdauer von 30 Tagen; spätestens dann ist eine erneute Anmeldung erforderlich. Re-Authentifizierung bei sicherheitskritischen Kontoänderungen bleibt noch zu entscheiden.
+- Der Initial-Admin `root_user` wird einmalig per Prisma-Seed aus `INITIAL_ADMIN_EMAIL`/`INITIAL_ADMIN_PASSWORD` provisioniert; keine Bootstrap-Secrets im Client oder in Logs. Erstzugriff bleibt bis Passwortwechsel und TOTP-Verifizierung gesperrt.
 
 ## Datenmodell – fachliche Beziehungen
 
 - `Order` speichert Kunden-/Adressdaten direkt, kein `Customer`-Stamm.
 - `Order.orderNumber` ist eindeutige Geschäftsnummer; DB-PK separat.
+- Der Intake-Endpunkt `POST /api/orders` ist öffentlich und für abgeschlossene
+  Staff-Sessions verwendbar. Er speichert validierte Kunden-, Mehrfachadress-,
+  Umzugsgut-, Zusatzleistungs-, Termin- und Konditionsdaten, vergibt die Nummer
+  serverseitig ab 1000 und liefert ausschließlich die neue Auftragsnummer zurück.
+  Preisfelder sind bei anonymen Requests verboten; Staff-Preisangaben werden
+  serverseitig typ- und wertebereichsgeprüft. Öffentliche Order-Reads bleiben
+  verboten; anonyme Requests werden serverseitig limitiert.
+- Öffentliche Katalogprojektionen sind getrennte, rate-limitierte GETs unter
+  `/api/catalog/categories`, `/api/catalog/furniture`, `/api/catalog/offers`,
+  `/api/catalog/packings`, `/api/catalog/services` und
+  `/api/catalog/service-rates`. Packungen und Leistungen werden öffentlich nur
+  ausgeliefert, wenn `show=true` ist. Die Admin-CRUD-Routen liegen getrennt unter
+  `/api/admin/catalog/*`, verlangen eine abgeschlossene Admin-Session und geben
+  nur explizit freigegebene DTO-Felder aus.
 - Angebotskopie ist ein neuer Order-Datensatz mit neuer Nummer und nullable Ursprung-Relation. Die Kopie ist eigenständig; FK-Regeln dürfen keine anderen Orders löschen.
 - `Order.edited` beschreibt die bestehende Bearbeitungsmarkierung, nicht „gesehen“: Kundeingang false, Kopie true, tatsächliche Änderung/erfolgreiche In-App-Mail true; Öffnen allein unverändert.
 - `Order.archivedAt`/`purgeAt` bestimmen 60-Tage-Frist; Restore setzt Archivzustand zurück, Re-Archive startet Frist neu.

@@ -1,5 +1,8 @@
 export interface AppConfig {
   appBaseUrl: URL;
+  betterAuthSecret: string;
+  betterAuthUrl: URL;
+  betterAuthTrustedOrigins: string[];
   corsAllowedOrigins: string[];
   host: string;
   nodeEnv: string;
@@ -55,6 +58,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const corsAllowedOrigins = parseOriginList(env.CORS_ALLOWED_ORIGINS);
+  const betterAuthSecret = env.BETTER_AUTH_SECRET;
+  if (!betterAuthSecret || betterAuthSecret.length < 32) {
+    throw new Error("BETTER_AUTH_SECRET muss gesetzt sein und mindestens 32 Zeichen enthalten.");
+  }
+
+  const rawBetterAuthUrl = env.BETTER_AUTH_URL ?? rawBaseUrl;
+  let betterAuthUrl: URL;
+  try {
+    betterAuthUrl = new URL(rawBetterAuthUrl);
+  } catch {
+    throw new Error("BETTER_AUTH_URL muss eine gültige absolute URL sein.");
+  }
+  if (
+    !["http:", "https:"].includes(betterAuthUrl.protocol) ||
+    betterAuthUrl.username ||
+    betterAuthUrl.password ||
+    betterAuthUrl.pathname !== "/" ||
+    betterAuthUrl.search ||
+    betterAuthUrl.hash
+  ) {
+    throw new Error("BETTER_AUTH_URL muss ein HTTP(S)-Origin ohne Pfad oder Zugangsdaten sein.");
+  }
+
+  const betterAuthTrustedOrigins = parseOriginList(env.BETTER_AUTH_TRUSTED_ORIGINS);
+  if (betterAuthTrustedOrigins.length === 0) {
+    if (nodeEnv === "production") {
+      throw new Error("BETTER_AUTH_TRUSTED_ORIGINS muss in Produktion explizit gesetzt sein.");
+    }
+    betterAuthTrustedOrigins.push(betterAuthUrl.origin);
+  }
+
   if (nodeEnv === "production") {
     if (!env.APP_BASE_URL) {
       throw new Error("APP_BASE_URL muss in Produktion explizit gesetzt sein.");
@@ -68,6 +102,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (corsAllowedOrigins.some((origin) => new URL(origin).protocol !== "https:")) {
       throw new Error("CORS-Origins müssen in Produktion HTTPS verwenden.");
     }
+    if (betterAuthUrl.protocol !== "https:") {
+      throw new Error("BETTER_AUTH_URL muss in Produktion HTTPS verwenden.");
+    }
+    if (betterAuthTrustedOrigins.some((origin) => new URL(origin).protocol !== "https:")) {
+      throw new Error("Better-Auth-Trusted-Origins müssen in Produktion HTTPS verwenden.");
+    }
   }
 
   const port = Number(env.PORT ?? 3000);
@@ -77,6 +117,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   return {
     appBaseUrl,
+    betterAuthSecret,
+    betterAuthUrl,
+    betterAuthTrustedOrigins,
     corsAllowedOrigins,
     host: env.HOST ?? "0.0.0.0",
     nodeEnv,
