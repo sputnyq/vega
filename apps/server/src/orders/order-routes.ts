@@ -5,6 +5,8 @@ import type { AppConfig } from "../config.js";
 import { createOrder } from "./order-service.js";
 import { consumePublicApiRateLimit } from "../public-rate-limit.js";
 import { validateOrderCreateInput } from "./order-input.js";
+import { createConfiguredMailService } from "../mail/configured-mail-service.js";
+import { deliverOutboxMail } from "../mail/mail-outbox-service.js";
 
 type AuthInstance = ReturnType<typeof createAuth>;
 
@@ -50,8 +52,15 @@ export function createOrderRouter(auth: AuthInstance, config: AppConfig) {
         ? { ...validation.value, orderSource: validation.value.orderSource ?? "individuelle" }
         : { ...validation.value, orderSource: "umzugruckzuck24.de" as const };
       const created = await createOrder(orderInput, session ? "admin" : "public");
+      const mailService = createConfiguredMailService(config);
+      if (created.outboxId && mailService) {
+        void deliverOutboxMail(created.outboxId, mailService).catch((error: unknown) => {
+          // Never log recipient, subject, content, attachments, token, or provider body.
+          req.log.warn({ outboxId: created.outboxId, code: error instanceof Error ? error.message : "MAIL_SEND_FAILED" }, "inquiry receipt delivery failed");
+        });
+      }
       res.setHeader("Cache-Control", "no-store");
-      res.status(201).json({ data: created });
+      res.status(201).json({ data: { orderNumber: created.orderNumber } });
     } catch (error) {
       if (error instanceof Error && error.message === "INVALID_ORDER_CATALOG_REFERENCE") {
         res.status(400).json({ error: { code: "INVALID_ORDER_CATALOG_REFERENCE", message: "Eine ausgewählte Katalogposition ist nicht mehr verfügbar." } });

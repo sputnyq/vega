@@ -21,6 +21,11 @@ import { PasswordField } from "../auth/PasswordField.js";
 
 export function ProfilePage({ user }: { user: StaffUser }) {
   const [tab, setTab] = useState(0);
+  const [email, setEmail] = useState(user.email);
+  const [emailPassword, setEmailPassword] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [emailSuccess, setEmailSuccess] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -72,6 +77,32 @@ export function ProfilePage({ user }: { user: StaffUser }) {
       setPasswordError("Das Passwort konnte nicht geändert werden. Bitte versuchen Sie es erneut.");
     } finally {
       setPasswordBusy(false);
+    }
+  }
+
+  async function changeEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setEmailError("");
+    setEmailSuccess("");
+    setEmailBusy(true);
+    try {
+      const response = await fetch("/api/admin/profile/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, currentPassword: emailPassword }),
+      });
+      const payload = await response.json() as { data?: { email?: string }; error?: { message?: string } };
+      if (!response.ok || !payload.data?.email) {
+        setEmailError(payload.error?.message ?? "Die E-Mail-Adresse konnte nicht geändert werden.");
+        return;
+      }
+      setEmail(payload.data.email);
+      setEmailPassword("");
+      setEmailSuccess("E-Mail-Adresse geändert. Andere aktive Sitzungen wurden abgemeldet.");
+    } catch {
+      setEmailError("Die E-Mail-Adresse konnte nicht geändert werden. Bitte versuchen Sie es erneut.");
+    } finally {
+      setEmailBusy(false);
     }
   }
 
@@ -135,7 +166,20 @@ export function ProfilePage({ user }: { user: StaffUser }) {
             {tab === 0 && (
               <Stack spacing={2} sx={{ pt: 1 }}>
                 <TextField label="Name" value={user.name} slotProps={{ htmlInput: { readOnly: true } }} />
-                <TextField label="E-Mail-Adresse" value={user.email} slotProps={{ htmlInput: { readOnly: true } }} />
+                <Box component="form" onSubmit={changeEmail}>
+                  <Stack spacing={2}>
+                    <Typography color="text.secondary">
+                      Für die Änderung Ihrer Anmelde- und Reset-E-Mail-Adresse bestätigen Sie Ihr aktuelles Passwort. Andere aktive Sitzungen werden abgemeldet.
+                    </Typography>
+                    {emailError && <Alert severity="error">{emailError}</Alert>}
+                    {emailSuccess && <Alert severity="success">{emailSuccess}</Alert>}
+                    <TextField autoComplete="email" label="E-Mail-Adresse" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                    <PasswordField autoComplete="current-password" label="Aktuelles Passwort bestätigen" value={emailPassword} onChange={setEmailPassword} />
+                    <Button type="submit" variant="contained" disabled={emailBusy}>
+                      {emailBusy ? <CircularProgress size={22} color="inherit" /> : "E-Mail-Adresse ändern"}
+                    </Button>
+                  </Stack>
+                </Box>
                 <TextField label="Rolle" value={user.role} slotProps={{ htmlInput: { readOnly: true } }} />
                 <Typography variant="body2" color="text.secondary">
                   Sitzungen laufen spätestens 30 Tage nach der Anmeldung ab.

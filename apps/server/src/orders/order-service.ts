@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { CreateOrderInput } from "@vega/domain";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { emailDefaults } from "../mail/email-template.js";
 
 export async function createOrder(input: CreateOrderInput, source: "public" | "admin") {
   let normalizedInput = input;
@@ -74,7 +75,7 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
       select: { nextValue: true },
     });
     const orderNumber = sequence.nextValue - 1;
-    await transaction.order.create({
+    const order = await transaction.order.create({
       data: {
         id: randomUUID(),
         orderNumber,
@@ -86,6 +87,25 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
       },
       select: { id: true },
     });
-    return { orderNumber };
+    // The receipt is persisted with the request. A later worker delivers it;
+    // provider failure therefore cannot lose the submitted inquiry.
+    let outboxId: string | undefined;
+    if (source === "public" && input.customer.email) {
+      const draft = emailDefaults.inquiryReceived(customerName, orderNumber);
+      const outbox = await transaction.emailOutbox.create({
+        data: {
+          id: randomUUID(),
+          orderId: order.id,
+          kind: "INQUIRY_RECEIVED",
+          recipients: [input.customer.email],
+          subject: draft.subject,
+          contentHtml: draft.contentHtml,
+          idempotencyKey: `order:${order.id}:inquiry-received:customer`,
+          nextAttemptAt: new Date(),
+        }, select: { id: true },
+      });
+      outboxId = outbox.id;
+    }
+    return { orderNumber, outboxId };
   });
 }

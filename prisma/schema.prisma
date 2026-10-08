@@ -109,11 +109,56 @@ model Order {
   source        String   @db.VarChar(32)
   data          Json
   createdAt     DateTime @default(now())
+  emailOutbox   EmailOutbox[]
+  emailEvents   EmailEvent[]
 
   @@index([customerName])
   @@index([customerEmail])
   @@index([createdAt])
   @@map("order")
+}
+
+model EmailOutbox {
+  id             String    @id
+  orderId        String?
+  order          Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  kind           String    @db.VarChar(32)
+  recipients     Json
+  subject        String    @db.VarChar(998)
+  contentHtml    String    @db.LongText
+  attachments    Json?
+  actorName      String?   @db.VarChar(191)
+  idempotencyKey String    @unique @db.VarChar(191)
+  status         String    @default("PENDING") @db.VarChar(16)
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime
+  lockedAt       DateTime?
+  sentAt         DateTime?
+  lastErrorCode  String?   @db.VarChar(100)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  events         EmailEvent[]
+
+  @@index([status, nextAttemptAt])
+  @@index([orderId])
+  @@map("emailOutbox")
+}
+
+model EmailEvent {
+  id        String      @id
+  outboxId  String
+  outbox    EmailOutbox @relation(fields: [outboxId], references: [id], onDelete: Restrict)
+  orderId   String?
+  order     Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  kind      String      @db.VarChar(32)
+  actorName String?     @db.VarChar(191)
+  sentAt    DateTime
+  createdAt DateTime    @default(now())
+
+  @@unique([outboxId])
+  @@index([orderId])
+  @@index([sentAt])
+  @@map("emailEvent")
 }
 
 model PublicApiRateLimit {

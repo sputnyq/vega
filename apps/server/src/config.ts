@@ -7,6 +7,13 @@ export interface AppConfig {
   host: string;
   nodeEnv: string;
   port: number;
+  mail: HostingerMailConfig | null;
+}
+
+export interface HostingerMailConfig {
+  apiToken: string;
+  mailboxResourceId: string;
+  apiBaseUrl: URL;
 }
 
 function parseOriginList(value: string | undefined): string[] {
@@ -115,6 +122,28 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("PORT muss eine ganze Zahl zwischen 1 und 65535 sein.");
   }
 
+  const mailToken = env.HOSTINGER_MAIL_API_TOKEN?.trim();
+  const mailboxResourceId = env.HOSTINGER_MAILBOX_RESOURCE_ID?.trim();
+  if (Boolean(mailToken) !== Boolean(mailboxResourceId)) {
+    throw new Error("HOSTINGER_MAIL_API_TOKEN und HOSTINGER_MAILBOX_RESOURCE_ID müssen gemeinsam gesetzt werden.");
+  }
+  let mail: HostingerMailConfig | null = null;
+  if (mailToken && mailboxResourceId) {
+    let apiBaseUrl: URL;
+    try {
+      apiBaseUrl = new URL(env.HOSTINGER_MAIL_API_BASE_URL?.trim() || "https://api.mail.hostinger.com");
+    } catch {
+      throw new Error("HOSTINGER_MAIL_API_BASE_URL muss eine gültige absolute URL sein.");
+    }
+    if (apiBaseUrl.protocol !== "https:" || apiBaseUrl.username || apiBaseUrl.password) {
+      throw new Error("HOSTINGER_MAIL_API_BASE_URL muss eine HTTPS-URL ohne Zugangsdaten sein.");
+    }
+    mail = { apiToken: mailToken, mailboxResourceId, apiBaseUrl };
+  }
+  if (nodeEnv === "production" && !mail) {
+    throw new Error("HOSTINGER_MAIL_API_TOKEN und HOSTINGER_MAILBOX_RESOURCE_ID müssen in Produktion gesetzt sein.");
+  }
+
   return {
     appBaseUrl,
     betterAuthSecret,
@@ -124,5 +153,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     host: env.HOST ?? "0.0.0.0",
     nodeEnv,
     port,
+    mail,
   };
 }

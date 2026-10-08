@@ -11,6 +11,7 @@ interface SignInPageProps {
   twoFactorRequired: boolean;
   onTwoFactorRequired: () => void;
   onCancelTwoFactor: () => void;
+  onForgotPassword: () => void;
 }
 
 export function SignInPage({
@@ -19,6 +20,7 @@ export function SignInPage({
   twoFactorRequired,
   onTwoFactorRequired,
   onCancelTwoFactor,
+  onForgotPassword,
 }: SignInPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -135,6 +137,7 @@ export function SignInPage({
           <Button type="submit" variant="contained" disabled={busy} size="large">
             {busy ? <CircularProgress size={24} color="inherit" /> : twoFactorRequired ? "Code prüfen" : "Anmelden"}
           </Button>
+          {!twoFactorRequired && <Button type="button" onClick={onForgotPassword}>Passwort vergessen?</Button>}
           {twoFactorRequired && (
             <Stack spacing={1}>
               <Button type="button" onClick={() => { setUseBackupCode(!useBackupCode); setCode(""); setError(""); }}>

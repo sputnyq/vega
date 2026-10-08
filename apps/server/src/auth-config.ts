@@ -5,6 +5,7 @@ import { twoFactor } from "better-auth/plugins";
 import type { AppConfig } from "./config.js";
 import { meetsPasswordPolicy, PASSWORD_POLICY_MESSAGE } from "./password-policy.js";
 import { prisma } from "./prisma.js";
+import { createConfiguredMailService } from "./mail/configured-mail-service.js";
 
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
@@ -22,6 +23,14 @@ export function createAuth(config: AppConfig) {
       minPasswordLength: 8,
       maxPasswordLength: 128,
       revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => {
+        const mailService = createConfiguredMailService(config);
+        if (!mailService) {
+          // This is a deployment misconfiguration; do not expose it to the reset caller.
+          throw new Error("MAIL_NOT_CONFIGURED");
+        }
+        await mailService.sendPasswordReset(user.email, url);
+      },
     },
     user: {
       additionalFields: {
@@ -50,6 +59,7 @@ export function createAuth(config: AppConfig) {
       storage: "database",
       customRules: {
         "/api/auth/sign-in/email": { window: 60, max: 5 },
+        "/api/auth/request-password-reset": { window: 60, max: 3 },
         "/api/auth/two-factor/verify-totp": { window: 60, max: 5 },
         "/api/auth/two-factor/verify-backup-code": { window: 60, max: 5 },
       },

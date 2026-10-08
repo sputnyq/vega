@@ -29,6 +29,22 @@ test("config rejects wildcard CORS origins", () => {
   );
 });
 
+test("mail credentials are paired and the Hostinger API endpoint remains HTTPS", () => {
+  assert.throws(
+    () => loadConfig({ BETTER_AUTH_SECRET: testSecret, HOSTINGER_MAIL_API_TOKEN: "token-only" }),
+    /gemeinsam gesetzt/,
+  );
+  assert.throws(
+    () => loadConfig({
+      BETTER_AUTH_SECRET: testSecret,
+      HOSTINGER_MAIL_API_TOKEN: "token",
+      HOSTINGER_MAILBOX_RESOURCE_ID: "mailbox",
+      HOSTINGER_MAIL_API_BASE_URL: "http://mail.example.test",
+    }),
+    /HTTPS-URL/,
+  );
+});
+
 test("production requires HTTPS and a non-empty origin allowlist", () => {
   assert.throws(
     () => loadConfig({

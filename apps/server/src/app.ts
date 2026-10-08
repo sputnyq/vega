@@ -32,6 +32,11 @@ export function createApp(config: AppConfig) {
     customProps: (_req, res) => ({ requestId: res.locals.requestId }),
     genReqId: (_req, res) => String(res.locals.requestId),
     redact: ["req.headers.authorization", "req.headers.cookie"],
+    autoLogging: {
+      // Better Auth reset links and the SPA callback both contain one-time tokens.
+      // Do not let pino's default request URL serializer persist them in logs.
+      ignore: (req) => req.url.startsWith("/api/auth/reset-password/") || req.url.startsWith("/reset-password"),
+    },
   }));
   app.use(helmet({
     contentSecurityPolicy: {
@@ -145,6 +150,51 @@ export function createApp(config: AppConfig) {
   // Every future admin API is denied until the password and mandatory TOTP setup are complete.
   app.use("/api/admin", requireCompletedStaff(auth));
 
+  app.post("/api/admin/profile/email", async (req, res, next) => {
+    try {
+      const origin = req.headers.origin;
+      if (origin !== undefined && !config.betterAuthTrustedOrigins.includes(origin)) {
+        res.status(403).json({ error: { code: "INVALID_ORIGIN", message: "Ungültige Anfrage-Origin." } });
+        return;
+      }
+      const body = req.body as { email?: unknown; currentPassword?: unknown };
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      if (!isValidEmail(email) || typeof body.currentPassword !== "string" || body.currentPassword.length === 0) {
+        res.status(400).json({ error: { code: "INVALID_EMAIL_CHANGE", message: "Bitte geben Sie eine gültige E-Mail-Adresse und Ihr aktuelles Passwort ein." } });
+        return;
+      }
+
+      const headers = fromNodeHeaders(req.headers);
+      try {
+        await auth.api.verifyPassword({ body: { password: body.currentPassword }, headers });
+      } catch {
+        res.status(400).json({ error: { code: "PASSWORD_CONFIRMATION_FAILED", message: "Das aktuelle Passwort ist nicht korrekt." } });
+        return;
+      }
+
+      const staffUser = res.locals.staffUser as { id: string; email: string };
+      if (staffUser.email.toLowerCase() === email) {
+        res.status(409).json({ error: { code: "EMAIL_UNCHANGED", message: "Diese E-Mail-Adresse ist bereits hinterlegt." } });
+        return;
+      }
+      try {
+        await prisma.user.update({ where: { id: staffUser.id }, data: { email } });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          res.status(409).json({ error: { code: "EMAIL_ALREADY_IN_USE", message: "Diese E-Mail-Adresse wird bereits verwendet." } });
+          return;
+        }
+        throw error;
+      }
+      // A mail-address change affects a recovery factor: retain only the current confirmed session.
+      await auth.api.revokeOtherSessions({ headers });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: { email } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.use("/customer-form", express.static(customerFormBuild, { index: false, fallthrough: true }));
   app.get(/^\/customer-form\/?$/, (_req, res, next) => {
     if (!existsSync(`${customerFormBuild}/index.html`)) return next();
@@ -182,6 +232,10 @@ export function createApp(config: AppConfig) {
     if (!existsSync(`${adminBuild}/index.html`)) return next();
     res.sendFile(`${adminBuild}/index.html`);
   });
+  app.get(["/forgot-password", "/reset-password"], (_req, res, next) => {
+    if (!existsSync(`${adminBuild}/index.html`)) return next();
+    return res.sendFile(`${adminBuild}/index.html`);
+  });
   app.get(/^\/admin\/?$/, (_req, res) => res.redirect(302, "/"));
 
   app.get(/^(?!\/api(?:\/|$))(?!\/health(?:\/|$))(?!\/customer-form(?:\/|$))(?!\/assets(?:\/|$)).*/, (req, res, next) => {
@@ -203,4 +257,12 @@ export function createApp(config: AppConfig) {
   app.use(errorHandler);
 
   return app;
+}
+
+function isValidEmail(value: string): boolean {
+  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }

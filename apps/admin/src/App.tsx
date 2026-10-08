@@ -4,6 +4,8 @@ import { authClient } from "./auth-client.js";
 import { AuthCard } from "./auth/AuthCard.js";
 import { InitialPasswordChangePage } from "./auth/InitialPasswordChangePage.js";
 import { SignInPage } from "./auth/SignInPage.js";
+import { ForgotPasswordPage } from "./auth/ForgotPasswordPage.js";
+import { ResetPasswordPage } from "./auth/ResetPasswordPage.js";
 import { TotpSetupPage } from "./auth/TotpSetupPage.js";
 import { AdminShell } from "./components/AdminShell.js";
 import { NotFoundPage } from "./components/NotFoundPage.js";
@@ -50,7 +52,8 @@ export function App() {
   const [twoFactorRequired, setTwoFactorRequired] = useState(() => window.location.pathname === "/two-factor");
   const route = resolveAdminRoute(pathname);
   const isAuthPath = pathname === "/login" || pathname === "/two-factor";
-  const isKnownPath = route !== null || isAuthPath;
+  const isPasswordResetPath = pathname === "/forgot-password" || pathname === "/reset-password";
+  const isKnownPath = route !== null || isAuthPath || isPasswordResetPath;
 
   const onTwoFactorRequired = useCallback(() => {
     setTwoFactorRequired(true);
@@ -100,6 +103,9 @@ export function App() {
     return <TotpSetupPage initialPassword={totpPassword} onComplete={() => window.location.reload()} />;
   }
 
+  if (pathname === "/forgot-password") return <ForgotPasswordPage onBack={() => replacePath("/login")} />;
+  if (pathname === "/reset-password") return <ResetPasswordPage onComplete={() => replacePath("/login")} />;
+
   if (!session) {
     return (
       <SignInPage
@@ -108,6 +114,7 @@ export function App() {
         twoFactorRequired={twoFactorRequired}
         onTwoFactorRequired={onTwoFactorRequired}
         onCancelTwoFactor={onCancelTwoFactor}
+        onForgotPassword={() => replacePath("/forgot-password")}
       />
     );
   }
