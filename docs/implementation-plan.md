@@ -197,8 +197,11 @@ Preisfelder setzen. Abgeschlossene Staff-Sessions dürfen wie im Legacy-Flow auc
 unvollständige Auftragsentwürfe speichern; öffentliche Anfragen müssen vollständig
 sein. Staff-Preisfelder werden serverseitig auf Typ und Wertebereich geprüft.
 Dies schließt A2/A4 nicht ab; Katalog-CRUD und öffentliche Safe-GET-Projektionen
-sind inzwischen implementiert. Vollständige autoritative
-Orderpreisberechnung, Finanzbeleg-API, Audit-Events und Upload-Sitzungen bleiben
+sind inzwischen implementiert. Geschützte Admin-Auftragsliste/-suche,
+Einzelansicht/-bearbeitung sowie Archivierung und Wiederherstellung sind
+umgesetzt; sie setzen das Bearbeitungskennzeichen und schreiben minimale
+Aktionsereignisse. Vollständige autoritative Orderpreisberechnung,
+Angebotskopien, Finanzbeleg-API, Upload-Sitzungen und der tägliche Purge bleiben
 offen.
 
 **Abnahme:** kein öffentlicher Order-Read; Manipulation von Browserpreisen wird abgewiesen/neu berechnet; Kopien und Archive wirken nur auf den jeweiligen Datensatz.
@@ -221,6 +224,15 @@ Auftragsliste/-suche, Bearbeitung, unabhängige Kopien, Preis-/Katalogpflege fü
 
 **Abhängigkeit:** A2/A4.  
 Hostinger Mail API Adapter, DB-Outbox/Retry, Anfrage-E-Mails, Angebot/Absage/Rechnung/Mahnung, editierbarer Einzelmailtext, Backend-PDFs und bestehende Layouts. Rechnungen separat, 1:1 zu Angebot, Nummer/DB-ID getrennt, Suche nach Rechnungsnummer/Auftragsnummer/Kundenname. CRUD ohne Versionshistorie.
+
+**Teilstatus:** Admin-only Rechnungs-CRUD ist umgesetzt: Rechnungen können als
+Blanco-Beleg oder mit optionalem 1:1-Auftragsbezug angelegt, bearbeitet,
+gesucht, archiviert und wiederhergestellt werden. Die Rechnung kann aus dem
+aktuellen Datenstand serverseitig im übernommenen Legacy-Layout als PDF
+heruntergeladen werden; jeder Export wird beim verknüpften Auftrag protokolliert.
+Kunden-/Auftragsnummern werden als Such-Snapshot gespeichert; beim Auftrags-Purge wird nur die
+Beziehung gelöst. Rechnungsversand, Gutschriften, Mahnungen und
+der 30-Tage-Finanz-Purge bleiben offen.
 
 **Abnahme:** Mailfehler verlieren keine Anfrage; erfolgreiche Sendungen protokollieren Benutzer/Aktion/Zeit; PDF kann jederzeit aus aktuellem Datensatz erzeugt werden; keine PDF-Dateien werden persistent in der App gespeichert.
 

@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
-import { Alert, Button, Paper, Stack, Tab, Tabs } from "@mui/material";
-import type { CreateOrderResult, OrderDetailsInput } from "@vega/domain";
+import { useEffect, useState, type FormEvent } from "react";
+import { Alert, Button, Paper, Snackbar, Stack, Tab, Tabs } from "@mui/material";
+import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
 import { AccountingTab } from "./AccountingTab.js";
 import { AddressesTab } from "./AddressesTab.js";
 import { BasisTab } from "./BasisTab.js";
@@ -8,13 +8,16 @@ import { ConditionsTab } from "./ConditionsTab.js";
 import { CustomerTab } from "./CustomerTab.js";
 import { ExtrasTab } from "./ExtrasTab.js";
 import { FurnitureTab } from "./FurnitureTab.js";
+import { JournalTab } from "./JournalTab.js";
 import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
 
-const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Buchhaltung"];
+const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Buchhaltung", "Journal"];
 
 interface OrderCreatePageProps {
   navigate: (path: string) => void;
   onSaved: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+  orderNumber?: number;
 }
 
 interface ApiErrorResponse {
@@ -24,19 +27,48 @@ interface ApiErrorResponse {
   };
 }
 
-export function OrderCreatePage({ navigate, onSaved }: OrderCreatePageProps) {
+export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber }: OrderCreatePageProps) {
   const [value, setValue] = useState(createEmptyOrder);
   const [activeTab, setActiveTab] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<CreateOrderResult | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loading, setLoading] = useState(orderNumber !== undefined);
+
+  useEffect(() => {
+    if (orderNumber === undefined) return;
+    let cancelled = false;
+    void fetch(`/api/admin/orders/${orderNumber}`, { credentials: "same-origin" })
+      .then(async (response) => ({ response, body: await response.json() as { data?: AdminOrderDetail; error?: { message?: string } } }))
+      .then(({ response, body }) => {
+        if (cancelled) return;
+        if (!response.ok || !body.data) { setError(body.error?.message ?? "Auftrag konnte nicht geladen werden."); return; }
+        const base = createEmptyOrder();
+        const data = body.data.data;
+        setValue({
+          ...base,
+          ...data,
+          customer: { ...base.customer, ...data.customer },
+          from: { ...base.from, ...data.from },
+          to: { ...base.to, ...data.to },
+          details: data.details ?? base.details,
+        });
+        onDirtyChange(false);
+      })
+      .catch(() => { if (!cancelled) setError("Auftrag konnte nicht geladen werden."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [onDirtyChange, orderNumber]);
 
   function update(patch: Partial<OrderFormValue>) {
     setValue((current) => ({ ...current, ...patch }));
+    onDirtyChange(true);
   }
 
   function updateDetails(details: OrderDetailsInput) {
     setValue((current) => ({ ...current, details }));
+    onDirtyChange(true);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -45,13 +77,13 @@ export function OrderCreatePage({ navigate, onSaved }: OrderCreatePageProps) {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/orders", {
-        method: "POST",
+      const response = await fetch(orderNumber === undefined ? "/api/orders" : `/api/admin/orders/${orderNumber}`, {
+        method: orderNumber === undefined ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify(value),
       });
-      const body = await response.json() as { data?: CreateOrderResult } & ApiErrorResponse;
+      const body = await response.json() as { data?: CreateOrderResult | AdminOrderDetail } & ApiErrorResponse;
       if (!response.ok || !body.data) {
         const issues = body.error?.issues ?? [];
         const fieldErrors = issues.map((issue) => `${issue.field}: ${issue.message}`);
@@ -65,8 +97,13 @@ export function OrderCreatePage({ navigate, onSaved }: OrderCreatePageProps) {
         setError(fieldErrors.length > 0 ? fieldErrors.join(" · ") : body.error?.message ?? "Der Auftrag konnte nicht gespeichert werden.");
         return;
       }
-      setSaved(body.data);
-      onSaved();
+      if (orderNumber === undefined) {
+        setSaved({ orderNumber: body.data.orderNumber });
+        onSaved();
+      } else {
+        onDirtyChange(false);
+        setSaveSuccess(true);
+      }
     } catch {
       setError("Der Server ist derzeit nicht erreichbar. Bitte versuchen Sie es erneut.");
     } finally {
@@ -87,6 +124,7 @@ export function OrderCreatePage({ navigate, onSaved }: OrderCreatePageProps) {
 
   return (
     <Stack component="form" id="order-create-form" spacing={2} onSubmit={submit} noValidate>
+      {loading && <Alert severity="info">Auftrag wird geladen …</Alert>}
       {error && <Alert severity="error" role="alert">{error}</Alert>}
       <Paper variant="outlined" sx={{ position: "sticky", top: 64, zIndex: 2 }}>
         <Tabs
@@ -99,7 +137,7 @@ export function OrderCreatePage({ navigate, onSaved }: OrderCreatePageProps) {
           {tabNames.map((label, index) => <Tab key={label} id={`order-tab-${index}`} aria-controls={`order-tabpanel-${index}`} label={label} />)}
         </Tabs>
       </Paper>
-      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <fieldset disabled={busy || loading} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div role="tabpanel" id="order-tabpanel-0" aria-labelledby="order-tab-0" hidden={activeTab !== 0}>
           <CustomerTab value={value} update={update} />
         </div>
@@ -119,10 +157,16 @@ export function OrderCreatePage({ navigate, onSaved }: OrderCreatePageProps) {
           <ConditionsTab value={value} onConditionsChange={(conditions) => updateDetails({ ...value.details, conditions })} />
         </div>
         <div role="tabpanel" id="order-tabpanel-6" aria-labelledby="order-tab-6" hidden={activeTab !== 6}>
-          <AccountingTab />
+          <AccountingTab navigate={navigate} {...(orderNumber === undefined ? {} : { orderNumber })} />
+        </div>
+        <div role="tabpanel" id="order-tabpanel-7" aria-labelledby="order-tab-7" hidden={activeTab !== 7}>
+          {activeTab === 7 && <JournalTab {...(orderNumber === undefined ? {} : { orderNumber })} />}
         </div>
       </fieldset>
       {busy && <Alert severity="info" role="status">Auftrag wird gespeichert …</Alert>}
+      <Snackbar open={saveSuccess} autoHideDuration={4_000} onClose={() => setSaveSuccess(false)} anchorOrigin={{ vertical: "top", horizontal: "right" }}>
+        <Alert severity="success" variant="filled" onClose={() => setSaveSuccess(false)}>Auftrag erfolgreich gespeichert.</Alert>
+      </Snackbar>
     </Stack>
   );
 }

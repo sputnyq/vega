@@ -28,3 +28,15 @@ Rollen sind `Admin` und `Kundenberater`. Berechtigungen werden serverseitig auf 
 - Passwortreset versendet generische Antworten, nutzt kurzlebige Einmal-Token und widerruft bestehende Sessions.
 - Eine Anmeldung ist spätestens alle 30 Tage erforderlich. Die absolute Sessiondauer beträgt höchstens 30 Tage und wird durch laufende Aktivität nicht verlängert.
 - Re-Authentifizierung bei sicherheitskritischen Kontoänderungen ist noch nicht entschieden und bleibt vor deren Implementierung zu klären.
+
+## Umsetzungsstand (2026-10-09)
+
+- Der Self-Service-Passwortreset nutzt den serverseitigen Hostinger-Mailadapter,
+  gibt für bekannte und unbekannte E-Mail-Adressen dieselbe Antwort und widerruft
+  nach erfolgreichem Reset Sitzungen.
+- Profil-E-Mail-Änderungen verlangen aktuell eine Passwortbestätigung und
+  widerrufen andere Sessions. Die weitergehende Entscheidung zu
+  Re-Authentifizierung bei allen sicherheitskritischen Kontoänderungen bleibt
+  dennoch offen.
+- Benutzeranlage, Sperrung, Rollenwechsel und der Admin-initiierte Reset für
+  andere Mitarbeiter sind weiterhin offen.

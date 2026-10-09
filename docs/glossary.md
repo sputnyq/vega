@@ -15,7 +15,8 @@
 | Loader | Kleines auf Vega gehostetes Script, das WordPress einbindet und absolute Formular-/Asset-/API-Pfade zur Laufzeit bereitstellt. |
 | Signierte GCS-URL | Kurzlebiger, eingeschränkter Upload-/Download-Link. Er ersetzt keine GCS-Credentials im Browser. |
 | E-Mail-Outbox | Persistierte Versandaufgabe, die nach dem erfolgreichen Speichern eines Auftrags verarbeitet und bei Providerfehler erneut versucht wird. |
-| Invoice / Rechnung | Eigenständiger Admin-only Finanzdatensatz, 1:1 zu einem Angebot; PDF wird on-demand aus dem aktuellen DB-Stand erzeugt. |
+| Invoice / Rechnung | Eigenständiger Admin-only Finanzdatensatz. Er kann als Blanco-Rechnung ohne Auftrag oder mit eindeutigem optionalem Auftragsbezug angelegt werden; PDF wird on-demand aus dem aktuellen DB-Stand erzeugt. |
+| Rechnungsjournal | Minimaler Auftragsjournal-Eintrag beim Rechnungs-PDF-Export mit Aktion, Zeitpunkt und Admin-Akteur. |
 | Gutschrift | Separater, optionaler Finanzbeleg; höchstens eine je Rechnung, Nummerierungsverhalten wie bisher. |
 | Mahnungsereignis | Protokollierter Mahnungsversand zu einer Rechnung. |
 | Geschäftsnummer | Gedruckte Auftrags-/Rechnungs-/Gutschriftennummer; getrennt von der internen Datenbank-ID. |

@@ -114,6 +114,72 @@ export interface CreateOrderResult {
   orderNumber: number;
 }
 
+/** Staff-only order representation. Never expose this DTO from public routes. */
+export interface AdminOrderListItem {
+  orderNumber: number;
+  source: string;
+  customerName: string;
+  movingDate: string;
+  fromAddress: string;
+  fromParkingSlot: boolean;
+  toAddress: string;
+  toParkingSlot: boolean;
+  workers: number | null;
+  trucks: number | null;
+  hours: number | null;
+  createdAt: string;
+  editedAt: string | null;
+  isCopy: boolean;
+  archivedAt: string | null;
+}
+
+export interface AdminOrderDetail extends AdminOrderListItem {
+  data: CreateOrderInput;
+  originOrderId: string | null;
+}
+
+/** Minimal audit projection; deliberately excludes field-level before/after values. */
+export interface AdminOrderJournalEntry {
+  id: string;
+  action: string;
+  actorName: string;
+  occurredAt: string;
+}
+
+export interface InvoiceEntryInput {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface InvoiceDueDateInput {
+  date: string;
+  amount: number;
+  text: string;
+}
+
+export interface InvoiceInput {
+  invoiceNumber?: string;
+  invoiceDate: string;
+  company: string;
+  customerName: string;
+  customerStreet: string;
+  customerPostalCity: string;
+  taxPercent: number;
+  text: string;
+  entries: InvoiceEntryInput[];
+  dueDates: InvoiceDueDateInput[];
+}
+
+export interface AdminInvoiceDto extends InvoiceInput {
+  id: string;
+  invoiceNumber: string;
+  orderNumber: number | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CatalogCategoryDto {
   id: number;
   name: string;

@@ -7,12 +7,14 @@ import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { createAuth } from "./auth-config.js";
-import { requireCompletedStaff } from "./auth-middleware.js";
+import { requireAdmin, requireCompletedStaff } from "./auth-middleware.js";
 import type { AppConfig } from "./config.js";
 import { prisma } from "./prisma.js";
 import { meetsPasswordPolicy, PASSWORD_POLICY_MESSAGE } from "./password-policy.js";
 import { createOrderRouter } from "./orders/order-routes.js";
 import { createCatalogRouter } from "./catalog/catalog-routes.js";
+import { createAdminOrderRouter } from "./orders/admin-order-routes.js";
+import { createInvoiceRouter } from "./invoices/invoice-routes.js";
 
 const adminBuild = fileURLToPath(new URL("../../admin/dist", import.meta.url));
 const customerFormBuild = fileURLToPath(new URL("../../customer-form/dist", import.meta.url));
@@ -149,6 +151,8 @@ export function createApp(config: AppConfig) {
 
   // Every future admin API is denied until the password and mandatory TOTP setup are complete.
   app.use("/api/admin", requireCompletedStaff(auth));
+  app.use("/api/admin/orders", createAdminOrderRouter());
+  app.use("/api/admin/invoices", requireAdmin(auth), createInvoiceRouter());
 
   app.post("/api/admin/profile/email", async (req, res, next) => {
     try {

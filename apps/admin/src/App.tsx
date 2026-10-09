@@ -15,6 +15,9 @@ import { OptionsPage } from "./settings/OptionsPage.js";
 import { UserManagementPage } from "./settings/UserManagementPage.js";
 import { resolveAdminRoute } from "./routes.js";
 import type { PendingInitialPassword, StaffUser } from "./types.js";
+import { OrdersPage } from "./orders/OrdersPage.js";
+import { InvoicesPage } from "./invoices/InvoicesPage.js";
+import { InvoiceEditorPage } from "./invoices/InvoiceEditorPage.js";
 
 const OrderCreatePage = lazy(() => import("./orders/OrderCreatePage.js").then((module) => ({ default: module.OrderCreatePage })));
 const ContentManagementPage = lazy(() => import("./settings/ContentManagementPage.js").then((module) => ({ default: module.ContentManagementPage })));
@@ -48,6 +51,7 @@ export function App() {
   const { pathname, replacePath, navigatePath } = useLocalPathname();
   const [initialPassword, setInitialPassword] = useState<PendingInitialPassword | null>(null);
   const [orderSaved, setOrderSaved] = useState(false);
+  const [orderDirty, setOrderDirty] = useState(false);
   const [totpPassword, setTotpPassword] = useState<string | undefined>();
   const [twoFactorRequired, setTwoFactorRequired] = useState(() => window.location.pathname === "/two-factor");
   const route = resolveAdminRoute(pathname);
@@ -74,6 +78,7 @@ export function App() {
 
   useEffect(() => {
     setOrderSaved(false);
+    setOrderDirty(false);
   }, [pathname]);
 
   if (!isKnownPath) return <NotFoundPage onHome={() => replacePath("/")} />;
@@ -135,9 +140,21 @@ export function App() {
     ? <Alert severity="error">Diese Route ist nur für Admins freigeschaltet.</Alert>
     : route.profile
       ? <ProfilePage user={user} />
-      : route.path === "/edit/-1"
+      : route.path === "/"
+        ? <OrdersPage navigate={navigatePath} />
+        : route.path === "/orders/archived"
+          ? <OrdersPage archived navigate={navigatePath} />
+        : route.path === "/invoices"
+          ? <InvoicesPage navigate={navigatePath} />
+        : route.path === "/invoices/archived"
+          ? <InvoicesPage archived navigate={navigatePath} />
+        : route.path === "/invoices/new" || route.path === "/blanco"
+          ? <InvoiceEditorPage navigate={navigatePath} />
+        : route.path.startsWith("/invoices/")
+          ? <InvoiceEditorPage navigate={navigatePath} id={route.path.slice("/invoices/".length)} />
+        : route.path.startsWith("/edit/")
         ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
-            <OrderCreatePage navigate={navigatePath} onSaved={() => setOrderSaved(true)} />
+            <OrderCreatePage navigate={navigatePath} onSaved={() => setOrderSaved(true)} onDirtyChange={setOrderDirty} {...(route.path === "/edit/-1" ? {} : { orderNumber: Number(route.path.slice("/edit/".length)) })} />
           </Suspense>
         : route.settingsArea === "options"
           ? <OptionsPage />
@@ -150,7 +167,7 @@ export function App() {
               : <RoutePlaceholderPage route={route} />;
 
   return (
-    <AdminShell user={user} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved}>
+    <AdminShell user={user} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty}>
       {page}
     </AdminShell>
   );

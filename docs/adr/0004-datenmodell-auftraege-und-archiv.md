@@ -19,3 +19,12 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
 - Rechnungen dürfen nicht per FK-Cascade mit Orders gelöscht werden.
 - Startkatalog/Preise werden nach Setup manuell durch Admins angelegt.
 - Das Frontend erhält keinen Zugriff auf beliebige Order-IDs/öffentliche Order-Reads.
+
+## Umsetzungsstand (2026-10-09)
+
+- Öffentlicher Order-POST, Staff-Bearbeitung, Angebotskopien,
+  Archivieren/Wiederherstellen und minimaler Aktionsjournal-Read sind umgesetzt.
+- Das Journal hält Anlage, Anpassung, Kopie, Archivierung, Wiederherstellung und
+  Rechnungs-PDF-Export fest. Öffentliche Anfragen verwenden als Akteur `-`;
+  Feld-Diffs werden nicht gespeichert.
+- Der tägliche 60-Tage-Purge bleibt bis zum gesicherten Hostinger-Cron offen.

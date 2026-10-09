@@ -109,13 +109,69 @@ model Order {
   source        String   @db.VarChar(32)
   data          Json
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  edited        Boolean  @default(false)
+  archivedAt    DateTime?
+  purgeAt       DateTime?
+  originOrderId String?
+  originOrder   Order?   @relation("OrderCopies", fields: [originOrderId], references: [id], onDelete: SetNull)
+  copies        Order[]  @relation("OrderCopies")
   emailOutbox   EmailOutbox[]
   emailEvents   EmailEvent[]
+  activities    OrderActivityEvent[]
+  invoice       Invoice?
 
   @@index([customerName])
   @@index([customerEmail])
   @@index([createdAt])
+  @@index([archivedAt, purgeAt])
+  @@index([originOrderId])
   @@map("order")
+}
+
+model Invoice {
+  id                  String   @id
+  invoiceNumber       String   @unique @db.VarChar(64)
+  orderId             String?  @unique
+  order               Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderNumberSnapshot Int?
+  customerNameSnapshot String  @db.VarChar(300)
+  company             String   @default("") @db.VarChar(191)
+  customerStreet      String   @default("") @db.VarChar(191)
+  customerPostalCity  String   @default("") @db.VarChar(191)
+  invoiceDate         DateTime
+  taxPercent          Decimal  @default(19) @db.Decimal(5, 2)
+  text                String   @db.Text
+  entries             Json
+  dueDates            Json
+  archivedAt          DateTime?
+  purgeAt             DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([orderNumberSnapshot])
+  @@index([customerNameSnapshot])
+  @@index([archivedAt, purgeAt])
+  @@map("invoice")
+}
+
+model InvoiceNumberSequence {
+  id        Int @id
+  nextValue Int
+
+  @@map("invoiceNumberSequence")
+}
+
+model OrderActivityEvent {
+  id        String   @id
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  action    String   @db.VarChar(32)
+  actorName String   @db.VarChar(191)
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@map("orderActivityEvent")
 }
 
 model EmailOutbox {

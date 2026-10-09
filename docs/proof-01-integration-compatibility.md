@@ -1,6 +1,6 @@
 # Issue 01 – Integrations- und Kompatibilitäts-Proof
 
-**Stand:** 2026-10-06
+**Stand:** 2026-10-09
 **Status:** Teilproof – lokale Node-24-Auth-/Prisma-Integration verifiziert; Hostinger-/Provider-Proofs offen.
 
 ## Lokaler Proof
@@ -11,17 +11,26 @@ Ausgeführt im Verzeichnis `vega/` mit Node.js `24.21.0` und npm `11.19.0`:
 |---|---|
 | Node.js / npm | `24.21.0` / `11.19.0` |
 | Typecheck (Workspaces plus Prisma-Seed) | bestanden |
-| Tests | bestanden, 10/10 |
+| Tests | bestanden, 31/31 |
 | Produktionsbuild für Domain, Server, Admin und Kundenformular | bestanden |
 | `npm audit` | 0 bekannte Schwachstellen nach Behebung des unten genannten Befunds |
-| Prisma-Migrationen auf lokaler MariaDB 10.11.19 | 2 versionierte Migrationen angewendet |
+| Prisma-Migrationen auf lokaler MariaDB 10.11.19 | 9 versionierte Migrationen angewendet, einschließlich Order-/Outbox-/Rechnungsmodell |
 | Initialadmin/Auth-Integration | Prisma-Seed → Login → erzwungener Passwortwechsel → TOTP-Enrollment → erneuter Login mit TOTP bestanden |
 
 Der getestete Versionssatz umfasst Better Auth `1.7.7`, Prisma `6.19.3`, TypeScript `7.0.2`, Express `5.2.1`, React/React DOM `19.3.0`, Vite `8.3.2` und MUI `9.4.0`. Der Auth-Smoke-Test nutzte eine lokale, nichtproduktive MariaDB-Testdatenbank mit synthetischem Konto.
 
+Am 2026-10-09 wurden zusätzlich Orderverwaltung, Rechnungs-CRUD und das
+serverseitige Rechnungs-PDF lokal gebaut/getestet. Der PDF-Test prüft einen
+gültigen PDF-Stream; das exakte visuelle Layout bleibt bei Änderungen manuell
+gegen das Legacy-PDF abzunehmen.
+
 ### Beim Proof gefundener Dependency-Befund
 
 Der erste Audit-Lauf meldete zwei kritische Findings über `concurrently@9.2.4` → `shell-quote@1.9.0` (GHSA-pqg4-j6r4-53mv). `vega/package.json` pinnt nun Overrides für `shell-quote`, `mysql2` und `deepmerge-ts`; Prisma `6.19.3` wird ohne den aktuell verwundbaren Prisma-7-MariaDB-Treiber verwendet. `npm audit` meldet 0 bekannte Schwachstellen. Es wurde kein `npm audit fix --force` verwendet.
+
+Für das Rechnungs-PDF wurde die verwundbare Legacy-Browserbibliothek `jspdf`
+nicht übernommen. Stattdessen wird `pdfkit` nur serverseitig verwendet;
+`npm audit --omit=dev` meldet nach der Änderung weiterhin 0 Vulnerabilities.
 
 Bei `npm ci` meldet npm weiterhin, dass das optionale Install-Script von `fsevents@2.3.3` nicht in `allowScripts` freigegeben ist. Installation, Tests und Builds funktionieren trotzdem; das Script wurde nicht zusätzlich freigegeben.
 

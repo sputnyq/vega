@@ -42,12 +42,19 @@ WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend,
 
 ### Domain Services
 
-- Order/Copy/Archive Service: Transaktionen für Nummernvergabe, Kopien, Bearbeitungsflag und Archivfristen.
+- Order/Copy/Archive Service: implementiert Nummernvergabe, Kopien,
+  Bearbeitungsflag, Archivieren/Wiederherstellen und minimales Journal;
+  der 60-Tage-Purge bleibt Cron-Arbeit.
 - Catalog/Pricing Service: Server ist Preisquelle; Einzelangebotsabweichungen werden im jeweiligen Order-Datensatz gespeichert.
-- Invoice/Credit Service: getrennte Finanzdatensätze, Such-Snapshots, einfache CRUD-Regeln, PDF-on-demand.
-- Mail Service: Hostinger API Adapter, Outbox, Retry/Failure Handling, Actor/Event Logs.
+- Invoice/Credit Service: implementiert Admin-only Rechnungs-CRUD mit optionalem
+  Auftragsbezug, Such-Snapshots und Rechnungs-PDF-on-demand; Gutschriften und
+  Mahnungen bleiben offen.
+- Mail Service: Hostinger API Adapter, Outbox, Retry/Failure Handling,
+  Actor/Event Logs; Angebots-/Rechnungs-Versanddialoge bleiben offen.
 - Upload Service: GCS URL-Signierung, Upload-Verifikation und Zuordnung von Bildreferenzen.
-- PDF Service: serverseitige Erzeugung aus aktuellen DB-Daten, Vorlagen/Layout zunächst wie Bestand.
+- PDF Service: Rechnungen werden serverseitig aus aktuellen DB-Daten im
+  übernommenen Legacy-Layout erzeugt; Angebots-, Gutschrift- und Mahn-PDFs
+  bleiben offen.
 
 ## Rollen-/Berechtigungsmatrix
 
@@ -102,11 +109,19 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - `Order.edited` beschreibt die bestehende Bearbeitungsmarkierung, nicht „gesehen“: Kundeingang false, Kopie true, tatsächliche Änderung/erfolgreiche In-App-Mail true; Öffnen allein unverändert.
 - `Order.archivedAt`/`purgeAt` bestimmen 60-Tage-Frist; Restore setzt Archivzustand zurück, Re-Archive startet Frist neu.
 - `OrderImage` speichert Objekt-Key/Link-Metadaten. Order-Purge löscht nicht das GCS-Objekt.
-- `Invoice` ist eigene Tabelle, unique nullable Beziehung zu genau einem Angebots-Order, plus `orderNumberSnapshot`, `customerNameSnapshot`, Rechnungsnummer und fachliche Rechnungsfelder. Beim Order-Purge `SET NULL` statt Cascade; Snapshots bleiben zum Suchen bis Invoice-Purge.
+- `Invoice` ist eigene Tabelle mit optionaler, für gesetzte Bezüge eindeutiger
+  Beziehung zu einem Angebots-Order. Blanco-Rechnungen haben keinen Orderbezug.
+  Sie enthält `orderNumberSnapshot`, `customerNameSnapshot`, Rechnungsnummer,
+  Rechnungsadresse, Positionen, Fälligkeiten und fachliche Rechnungsfelder.
+  Beim Order-Purge gilt `SET NULL` statt Cascade; Snapshots bleiben zum Suchen
+  bis Invoice-Purge.
 - Rechnungsnummer ist von DB-ID und Auftragsnummer getrennt; einstellbarer Nummernkreis, editierbar, DB-seitig eindeutig.
 - `CreditNote` ist separater optionaler Beleg (höchstens einer je Rechnung; Nummerierungsverhalten wie bisher); `ReminderEvent` hält Versandereignisse zur Rechnung fest.
 - `Invoice`, `CreditNote` und `ReminderEvent` haben jeweils eigene Archiv-/Purge-Felder. Admins archivieren die Finanzdatensätze; Purge erfolgt einheitlich nach 30 Tagen, Restore ist bis dahin möglich.
-- `OrderActivityEvent` enthält nur Objekt, Aktion, Zeitstempel und Benutzername; keine Feld-Diffs. Order-Purge entfernt seine Events.
+- `OrderActivityEvent` enthält nur Objekt, Aktion, Zeitstempel und Benutzername;
+  keine Feld-Diffs. Öffentliche Anfragen verwenden als Akteur `-`. Derzeitige
+  Aktionen umfassen Anlage, Bearbeitung, Kopie, Archivierung, Wiederherstellung
+  und Rechnungs-PDF-Export. Order-Purge entfernt seine Events.
 - `EmailOutbox`/`EmailEvent` hält Retry-Zustand und erfolgreichen Versand inkl. Benutzer/Aktion/Zeitpunkt.
 - Katalog-/Preisstammdaten werden initial manuell gepflegt.
 
@@ -115,6 +130,8 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - `public` Router enthalten ausschließlich Endpunkte, die der Gastflow tatsächlich braucht.
 - Der lange Formularflow erhält validierte Katalog-/Serviceprojektionen und kann eine Anfrage erstellen; er erhält niemals Order-Read-Zugriff.
 - `admin` Router verlangen gültige Better-Auth-Session plus Rollen-/Capability-Check.
+- Admin-only Finanzrouten liegen unter `/api/admin/invoices`; Kundenberater und
+  öffentliche Clients erhalten keinen Finanzbeleg-Zugriff.
 - CORS Origins kommen aus Runtime-Umgebung. Origin-Prüfung begrenzt Browserzugriff, ersetzt aber keine Auth.
 - Better Auth Trusted Origins sind eine separate, engere Liste als CORS und umfassen nur Vega plus ausdrücklich eingerichtete lokale/Staging-Origin.
 - Rate-Limits für öffentliche GET/POST/Upload-Anbahnung; Werte werden anhand Hostinger Proxy/IP-Verhalten im A0-Proof gesetzt.

@@ -58,6 +58,12 @@ export function resolveAdminRoute(pathname: string): AdminRoute | null {
       description: `E-Mail-Vorlage für Auftrag ${id}`,
     };
   }
+  const invoiceMatch = pathname.match(/^\/invoices\/([^/]+)$/u);
+  if (invoiceMatch) {
+    const id = decodePathSegment(invoiceMatch[1]);
+    if (id === null || id === "new" || id === "archived") return null;
+    return { path: pathname, title: "Rechnung", description: "Rechnung bearbeiten", adminOnly: true };
+  }
 
   return null;
 }

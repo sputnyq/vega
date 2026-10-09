@@ -4,7 +4,45 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { emailDefaults } from "../mail/email-template.js";
 
-export async function createOrder(input: CreateOrderInput, source: "public" | "admin") {
+export async function createOrder(input: CreateOrderInput, source: "public" | "admin", actorName = "-") {
+  const normalizedInput = await normalizeOrderCatalogInput(input);
+  const customerName = `${normalizedInput.customer.firstName} ${normalizedInput.customer.lastName}`.trim();
+  const data = JSON.parse(JSON.stringify(normalizedInput)) as Prisma.InputJsonValue;
+
+  return prisma.$transaction(async (transaction) => {
+    const sequence = await transaction.orderNumberSequence.update({
+      where: { id: 1 },
+      data: { nextValue: { increment: 1 } },
+      select: { nextValue: true },
+    });
+    const orderNumber = sequence.nextValue - 1;
+    const order = await transaction.order.create({
+      data: {
+        id: randomUUID(), orderNumber, customerName, customerEmail: normalizedInput.customer.email || null,
+        customerPhone: normalizedInput.customer.phone,
+        // `source` is the business-facing acquisition channel displayed in the
+        // order list, never the technical caller type (public/admin).
+        source: normalizedInput.orderSource ?? (source === "public" ? "umzugruckzuck24.de" : "individuelle"),
+        data,
+      }, select: { id: true },
+    });
+    await transaction.orderActivityEvent.create({
+      data: { id: randomUUID(), orderId: order.id, action: source === "public" ? "CREATED_PUBLIC" : "CREATED_ADMIN", actorName },
+    });
+    let outboxId: string | undefined;
+    if (source === "public" && normalizedInput.customer.email) {
+      const draft = emailDefaults.inquiryReceived(customerName, orderNumber);
+      const outbox = await transaction.emailOutbox.create({ data: {
+        id: randomUUID(), orderId: order.id, kind: "INQUIRY_RECEIVED", recipients: [normalizedInput.customer.email], subject: draft.subject,
+        contentHtml: draft.contentHtml, idempotencyKey: `order:${order.id}:inquiry-received:customer`, nextAttemptAt: new Date(),
+      }, select: { id: true } });
+      outboxId = outbox.id;
+    }
+    return { orderNumber, outboxId };
+  });
+}
+
+export async function normalizeOrderCatalogInput(input: CreateOrderInput): Promise<CreateOrderInput> {
   let normalizedInput = input;
   const catalogIds = [...new Set(input.details?.furniture.items.flatMap((item) => item.catalogId === undefined ? [] : [item.catalogId]) ?? [])];
   if (catalogIds.length > 0) {
@@ -65,47 +103,5 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
       },
     };
   }
-  const customerName = `${normalizedInput.customer.firstName} ${normalizedInput.customer.lastName}`.trim();
-  const data = JSON.parse(JSON.stringify(normalizedInput)) as Prisma.InputJsonValue;
-
-  return prisma.$transaction(async (transaction) => {
-    const sequence = await transaction.orderNumberSequence.update({
-      where: { id: 1 },
-      data: { nextValue: { increment: 1 } },
-      select: { nextValue: true },
-    });
-    const orderNumber = sequence.nextValue - 1;
-    const order = await transaction.order.create({
-      data: {
-        id: randomUUID(),
-        orderNumber,
-        customerName,
-        customerEmail: input.customer.email || null,
-        customerPhone: input.customer.phone,
-        source,
-        data,
-      },
-      select: { id: true },
-    });
-    // The receipt is persisted with the request. A later worker delivers it;
-    // provider failure therefore cannot lose the submitted inquiry.
-    let outboxId: string | undefined;
-    if (source === "public" && input.customer.email) {
-      const draft = emailDefaults.inquiryReceived(customerName, orderNumber);
-      const outbox = await transaction.emailOutbox.create({
-        data: {
-          id: randomUUID(),
-          orderId: order.id,
-          kind: "INQUIRY_RECEIVED",
-          recipients: [input.customer.email],
-          subject: draft.subject,
-          contentHtml: draft.contentHtml,
-          idempotencyKey: `order:${order.id}:inquiry-received:customer`,
-          nextAttemptAt: new Date(),
-        }, select: { id: true },
-      });
-      outboxId = outbox.id;
-    }
-    return { orderNumber, outboxId };
-  });
+  return normalizedInput;
 }

@@ -51,7 +51,7 @@ export function createOrderRouter(auth: AuthInstance, config: AppConfig) {
       const orderInput = session
         ? { ...validation.value, orderSource: validation.value.orderSource ?? "individuelle" }
         : { ...validation.value, orderSource: "umzugruckzuck24.de" as const };
-      const created = await createOrder(orderInput, session ? "admin" : "public");
+      const created = await createOrder(orderInput, session ? "admin" : "public", session?.user.name ?? "-");
       const mailService = createConfiguredMailService(config);
       if (created.outboxId && mailService) {
         void deliverOutboxMail(created.outboxId, mailService).catch((error: unknown) => {

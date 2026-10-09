@@ -91,10 +91,20 @@ rate-limitiert und können keine Preise setzen. Der Server validiert die Daten,
 vergibt die Auftragsnummer ab 1000 und antwortet nur mit dieser Nummer.
 Angemeldete Mitarbeiter können auch unvollständige Entwürfe speichern, wie im
 Legacy-Flow; anonyme Kundenanfragen müssen vollständig sein.
-Katalog-/Angebotsberechnung, Kartenintegration, Uploads und separate
-Finanzbelege werden erst mit der separaten Finanzbeleg-API aktiviert. Für die
-Auftrags- und Katalogtabellen müssen die versionierten Migrationen ausgerollt
-werden (`npm run db:migrate:deploy`).
+
+Die aktive Auftragsübersicht unter `/` entspricht der Legacy-Spaltenfolge und
+paginiert mit zehn Einträgen. Mitarbeitende können Aufträge suchen, bearbeiten,
+archivieren/wiederherstellen und Angebotskopien erstellen. Der Editor zeigt ein
+minimalistisches Journal ohne Feld-Diffs. Die Rechnungsverwaltung ist Admin-only:
+Blanco-Rechnungen unter `/blanco` bzw. `/invoices/new`, Rechnungen mit optionalem
+1:1-Auftragsbezug aus dem Buchhaltungsreiter sowie Übersicht/Archiv unter
+`/invoices` und `/invoices/archived`. Rechnungs-PDFs werden serverseitig aus dem
+aktuellen Stand erzeugt und nicht gespeichert.
+
+Kartenintegration, Uploads, Gutschriften, Mahnungen, Rechnungsversand und die
+vollständige autoritative Angebotsberechnung sind weiterhin offen. Für alle
+Tabellen müssen die versionierten Migrationen ausgerollt werden
+(`npm run db:migrate:deploy`).
 
 Migrationen nach Änderungen am Prisma-Schema versioniert erzeugen und deployen;
 Produktion verwendet ausschließlich bereits geprüfte Migrationen:
@@ -120,17 +130,23 @@ Liste exakter Origins (Schema, Host und Port, ohne Pfad oder Wildcard). In
 Produktion müssen öffentliche Origins HTTPS verwenden. Browser-Builds erhalten
 keine Vega- oder WordPress-Domain als Build-Variable.
 
+Für produktiven Mailversand sind außerdem zwingend
+`HOSTINGER_MAIL_API_TOKEN` und `HOSTINGER_MAILBOX_RESOURCE_ID` als reine
+Server-Runtime-Secrets zu setzen. Ein leerer optionaler
+`HOSTINGER_MAIL_API_BASE_URL` verwendet den Standard
+`https://api.mail.hostinger.com`.
+
 ## Struktur
 
 ```text
 apps/server/         Express 5, Better Auth, Prisma, Laufzeitkonfiguration
 apps/admin/          React 19 / Vite / MUI Login, Passwortwechsel und TOTP
-apps/customer-form/  React 19 / Vite Kundenformular-Platzhalter
+apps/customer-form/  React 19 / Vite Kundenformular
 packages/domain/     Geteilte fachliche Typen und DTOs
 prisma/              Better-Auth-Schema und versionierte MySQL-Migrationen
 docs/                Architektur, ADRs und Umsetzungsplan
 ```
 
-Dies implementiert den Authentifizierungs- und Erstadmin-Grundfluss. Hostinger-
-Cron, Passwort-Reset-Mailzustellung über Hostinger, Fach-APIs, Rollenverwaltung
-weiterer Mitarbeiter, Mail-Outbox und GCS bleiben nachgelagerte Arbeitspakete.
+Der aktuelle Funktions- und Restarbeitsstand steht verbindlich in
+`docs/implementation-status.md`. Hostinger-Cron, Provider-End-to-End-Proofs,
+GCS und die noch offenen Fachbereiche bleiben nachgelagerte Arbeitspakete.

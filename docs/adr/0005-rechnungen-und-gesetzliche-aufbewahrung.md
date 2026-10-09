@@ -21,6 +21,15 @@
 
 Ein bearbeiteter DB-Datensatz kann den früher ausgestellten PDF-Stand nicht rekonstruieren. Benötigte Rechnungsstände müssen vor Änderungen/Archivierung extern gesichert werden.
 
+## Umsetzungsstand (2026-10-09)
+
+- Admin-only Rechnungs-CRUD, Blanco-Rechnungen, optionale eindeutige
+  Auftragsbezüge, Such-Snapshots, Archivierung/Wiederherstellung und
+  serverseitiger PDF-Download sind umgesetzt.
+- Die 30-Tage-Finanzbereinigung, Gutschriften, Mahnungen und externe
+  Archivintegration bleiben offen. Dieser ADR-Vorbehalt ist daher unverändert
+  ein Produktiv-Release-Gate.
+
 ## Referenzen
 
 - https://www.gesetze-im-internet.de/ustg_1980/__14b.html

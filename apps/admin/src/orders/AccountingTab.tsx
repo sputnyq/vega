@@ -3,8 +3,16 @@ import { Alert, Button, Grid, Paper, Stack, Tab, Tabs, TextField, Typography } f
 
 const accountingTabs = ["Rechnung", "1. Mahnung", "2. Mahnung", "3. Mahnung", "Gutschrift"];
 
-export function AccountingTab() {
+export function AccountingTab({ orderNumber, navigate }: { orderNumber?: number; navigate: (path: string) => void }) {
   const [tab, setTab] = useState(0);
+  const [error, setError] = useState("");
+  async function createInvoice() {
+    if (orderNumber === undefined) return;
+    const response = await fetch(`/api/admin/invoices/from-order/${orderNumber}`, { method: "POST" });
+    const body = await response.json() as { data?: { id?: string }; error?: { message?: string } };
+    if (!response.ok || !body.data?.id) { setError(body.error?.message ?? "Rechnung konnte nicht angelegt werden."); return; }
+    navigate(`/invoices/${body.data.id}`);
+  }
 
   return (
     <Stack spacing={2}>
@@ -14,6 +22,7 @@ export function AccountingTab() {
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={2}>
           <Typography component="h2" variant="h6">{accountingTabs[tab]}</Typography>
+          {error && <Alert severity="error">{error}</Alert>}
           {tab === 0 ? (
             <Grid container spacing={2}>
               <Grid size={{ xs: 12, lg: 4 }}>
@@ -31,6 +40,7 @@ export function AccountingTab() {
                   <Typography variant="subtitle1">Rechnungstext und Leistungen</Typography>
                   <TextField label="Rechnungstext" multiline minRows={3} disabled />
                   <TextField label="Rechnungspositionen" multiline minRows={4} disabled />
+                  {orderNumber !== undefined && <Button variant="contained" onClick={() => void createInvoice()}>Rechnung aus Auftrag anlegen</Button>}
                 </Stack>
               </Grid>
             </Grid>

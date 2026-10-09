@@ -12,6 +12,17 @@
 - Erfolgreicher In-App-Mailversand protokolliert Aktion, Benutzername und Zeit. Externe Sendungen nach Textkopie sind nicht nachweisbar.
 - PDF-Layouts bleiben zunächst wie Bestand. PDF-Erzeugung erfolgt im Backend on-demand; Dateien werden nicht dauerhaft gespeichert.
 
+## Umsetzungsstand (2026-10-09)
+
+- Der Hostinger-Adapter, die persistente Outbox und die Reset-Mailvorlage sind
+  implementiert. Echte Provider-Calls bleiben bis zu nichtproduktiven
+  Zugangsdaten ein Proof-Gate.
+- Rechnungs-PDFs werden serverseitig aus `Invoice` im übernommenen Legacy-Layout
+  erzeugt und als Download ausgeliefert. Der PDF-Renderer ist serverseitig;
+  die verwundbare Legacy-Browserbibliothek `jspdf` wird nicht übernommen.
+- Angebots-, Gutschrift- und Mahn-PDFs sowie editierbare Versanddialoge bleiben
+  offen.
+
 ## Folgen
 
 - Hostinger API-Attachmentspezifikation muss gegen offizielle API/`api-1.json` verifiziert werden.
