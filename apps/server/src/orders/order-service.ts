@@ -1,13 +1,30 @@
 import { randomUUID } from "node:crypto";
-import type { CreateOrderInput } from "@vega/domain";
+import type { AppSettingsDto, CreateOrderInput } from "@vega/domain";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { emailDefaults } from "../mail/email-template.js";
+import { attachUploadClaims } from "../uploads/upload-service.js";
+import { orderRelationCreates } from "./order-relations.js";
 
-export async function createOrder(input: CreateOrderInput, source: "public" | "admin", actorName = "-") {
-  const normalizedInput = await normalizeOrderCatalogInput(input);
+export async function createOrder(input: CreateOrderInput, source: "public" | "admin", actorName = "-", settings?: AppSettingsDto) {
+  let normalizedInput = await normalizeOrderCatalogInput(input);
+  if (source === "public" && normalizedInput.details) {
+    const furniture = normalizedInput.details.furniture;
+    normalizedInput = { ...normalizedInput, details: {
+      ...normalizedInput.details,
+      furniture: { ...furniture,
+        volumeComplete: !(furniture.boxes > 0 && !settings?.boxCbm)
+          && !(furniture.wardrobeBoxes > 0 && !settings?.kleiderboxCbm),
+        volume:
+        furniture.items.reduce((volume, item) => volume + item.quantity * (item.volume ?? 0), 0)
+        + furniture.boxes * (settings?.boxCbm ?? 0)
+        + furniture.wardrobeBoxes * (settings?.kleiderboxCbm ?? 0),
+      },
+    } };
+  }
   const customerName = `${normalizedInput.customer.firstName} ${normalizedInput.customer.lastName}`.trim();
-  const data = JSON.parse(JSON.stringify(normalizedInput)) as Prisma.InputJsonValue;
+  const { imageClaims = [], ...storedInput } = normalizedInput;
+  const data = JSON.parse(JSON.stringify(storedInput)) as Prisma.InputJsonValue;
 
   return prisma.$transaction(async (transaction) => {
     const sequence = await transaction.orderNumberSequence.update({
@@ -24,12 +41,15 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
         // order list, never the technical caller type (public/admin).
         source: normalizedInput.orderSource ?? (source === "public" ? "umzugruckzuck24.de" : "individuelle"),
         data,
+        ...orderRelationCreates(storedInput),
       }, select: { id: true },
     });
+    await attachUploadClaims(transaction, order.id, imageClaims);
     await transaction.orderActivityEvent.create({
       data: { id: randomUUID(), orderId: order.id, action: source === "public" ? "CREATED_PUBLIC" : "CREATED_ADMIN", actorName },
     });
     let outboxId: string | undefined;
+    const outboxIds: string[] = [];
     if (source === "public" && normalizedInput.customer.email) {
       const draft = emailDefaults.inquiryReceived(customerName, orderNumber);
       const outbox = await transaction.emailOutbox.create({ data: {
@@ -37,8 +57,17 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
         contentHtml: draft.contentHtml, idempotencyKey: `order:${order.id}:inquiry-received:customer`, nextAttemptAt: new Date(),
       }, select: { id: true } });
       outboxId = outbox.id;
+      outboxIds.push(outbox.id);
     }
-    return { orderNumber, outboxId };
+    if (source === "public" && settings?.companyEmail) {
+      const draft = emailDefaults.inquiryNotification(customerName, orderNumber);
+      const outbox = await transaction.emailOutbox.create({ data: {
+        id: randomUUID(), orderId: order.id, kind: "INQUIRY_RECEIVED", recipients: [settings.companyEmail], subject: draft.subject,
+        contentHtml: draft.contentHtml, idempotencyKey: `order:${order.id}:inquiry-received:company`, nextAttemptAt: new Date(),
+      }, select: { id: true } });
+      outboxIds.push(outbox.id);
+    }
+    return { orderNumber, outboxId, outboxIds };
   });
 }
 
@@ -63,7 +92,8 @@ export async function normalizeOrderCatalogInput(input: CreateOrderInput): Promi
             const catalogItem = byId.get(item.catalogId);
             if (!catalogItem) throw new Error("INVALID_ORDER_CATALOG_REFERENCE");
             const { category: _untrustedCategory, ...itemWithoutCategory } = item;
-            const category = catalogItem.categories[0]?.category.name;
+            const category = catalogItem.categories.find((entry) => entry.category.name === item.category)?.category.name
+              ?? catalogItem.categories[0]?.category.name;
             return {
               ...itemWithoutCategory,
               name: catalogItem.name,

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": [
+    "test/order-relations.test.ts",
+    "test/database/**/*.ts",
+    "test/deployment/**/*.ts"
+  ]
+}

@@ -18,11 +18,13 @@ model User {
   twoFactorEnabled   Boolean?    @default(false)
   role               String      @default("Kundenberater")
   mustChangePassword Boolean     @default(false)
+  blocked            Boolean     @default(false)
   sessions           Session[]
   accounts           Account[]
   twofactors         TwoFactor[]
 
   @@unique([email])
+  @@index([role, blocked])
   @@map("user")
 }
 
@@ -101,25 +103,28 @@ model RateLimit {
 }
 
 model Order {
-  id            String   @id @default(cuid())
-  orderNumber   Int      @unique
-  customerName  String   @db.VarChar(300)
-  customerEmail String? @db.VarChar(254)
-  customerPhone String   @db.VarChar(64)
-  source        String   @db.VarChar(32)
+  id            String               @id @default(cuid())
+  orderNumber   Int                  @unique
+  customerName  String               @db.VarChar(300)
+  customerEmail String?              @db.VarChar(254)
+  customerPhone String               @db.VarChar(64)
+  source        String               @db.VarChar(32)
   data          Json
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  edited        Boolean  @default(false)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @default(now()) @updatedAt
+  edited        Boolean              @default(false)
   archivedAt    DateTime?
   purgeAt       DateTime?
   originOrderId String?
-  originOrder   Order?   @relation("OrderCopies", fields: [originOrderId], references: [id], onDelete: SetNull)
-  copies        Order[]  @relation("OrderCopies")
+  originOrder   Order?               @relation("OrderCopies", fields: [originOrderId], references: [id], onDelete: SetNull)
+  copies        Order[]              @relation("OrderCopies")
   emailOutbox   EmailOutbox[]
   emailEvents   EmailEvent[]
   activities    OrderActivityEvent[]
   invoice       Invoice?
+  images        OrderImage[]
+  addresses     OrderAddress[]
+  positions     OrderPosition[]
 
   @@index([customerName])
   @@index([customerEmail])
@@ -129,25 +134,90 @@ model Order {
   @@map("order")
 }
 
+enum OrderAddressRole {
+  FROM
+  TO
+  SECONDARY_FROM
+  SECONDARY_TO
+}
+
+model OrderAddress {
+  id         String           @id
+  orderId    String
+  order      Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  role       OrderAddressRole
+  street     String           @db.VarChar(160)
+  postalCode String           @db.VarChar(16)
+  city       String           @db.VarChar(100)
+  details    Json
+
+  @@unique([orderId, role])
+  @@index([postalCode, city])
+  @@map("orderAddress")
+}
+
+enum OrderPositionKind {
+  FURNITURE
+  SERVICE
+  PACKAGING
+}
+
+model OrderPosition {
+  id        String            @id
+  orderId   String
+  order     Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind      OrderPositionKind
+  position  Int
+  name      String            @db.VarChar(191)
+  quantity  Float             @db.Double
+  volume    Float?            @db.Double
+  category  String?           @db.VarChar(191)
+  catalogId Int?
+
+  @@unique([orderId, kind, position])
+  @@index([catalogId])
+  @@map("orderPosition")
+}
+
+model OrderImage {
+  id         String    @id
+  tokenHash  String    @db.VarChar(64)
+  objectKey  String    @db.VarChar(191)
+  size       Int
+  generation String?   @db.VarChar(64)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  orderId    String?
+  order      Order?    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([objectKey])
+  @@index([expiresAt])
+  @@map("orderImage")
+}
+
 model Invoice {
-  id                  String   @id
-  invoiceNumber       String   @unique @db.VarChar(64)
-  orderId             String?  @unique
-  order               Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  orderNumberSnapshot Int?
-  customerNameSnapshot String  @db.VarChar(300)
-  company             String   @default("") @db.VarChar(191)
-  customerStreet      String   @default("") @db.VarChar(191)
-  customerPostalCity  String   @default("") @db.VarChar(191)
-  invoiceDate         DateTime
-  taxPercent          Decimal  @default(19) @db.Decimal(5, 2)
-  text                String   @db.Text
-  entries             Json
-  dueDates            Json
-  archivedAt          DateTime?
-  purgeAt             DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                   String          @id
+  invoiceNumber        String          @unique @db.VarChar(64)
+  orderId              String?         @unique
+  order                Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderNumberSnapshot  Int?
+  customerNameSnapshot String          @db.VarChar(300)
+  company              String          @default("") @db.VarChar(191)
+  customerStreet       String          @default("") @db.VarChar(191)
+  customerPostalCity   String          @default("") @db.VarChar(191)
+  invoiceDate          DateTime
+  taxPercent           Decimal         @default(19) @db.Decimal(5, 2)
+  text                 String          @db.Text
+  entries              Json
+  dueDates             Json
+  archivedAt           DateTime?
+  purgeAt              DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  creditNote           CreditNote?
+  reminders            ReminderEvent[]
 
   @@index([orderNumberSnapshot])
   @@index([customerNameSnapshot])
@@ -155,11 +225,82 @@ model Invoice {
   @@map("invoice")
 }
 
+model CreditNote {
+  id                    String    @id
+  creditNumber          String    @unique @db.VarChar(64)
+  invoiceId             String?   @unique
+  invoice               Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceNumberSnapshot String    @db.VarChar(64)
+  orderNumberSnapshot   Int?
+  customerNameSnapshot  String    @db.VarChar(300)
+  company               String    @db.VarChar(191)
+  customerStreet        String    @db.VarChar(191)
+  customerPostalCity    String    @db.VarChar(191)
+  creditDate            DateTime
+  taxPercent            Decimal   @db.Decimal(5, 2)
+  text                  String    @db.Text
+  entries               Json
+  archivedAt            DateTime?
+  purgeAt               DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([invoiceNumberSnapshot])
+  @@index([orderNumberSnapshot])
+  @@index([customerNameSnapshot])
+  @@index([archivedAt, purgeAt])
+  @@map("creditNote")
+}
+
+model ReminderEvent {
+  id                    String    @id
+  invoiceId             String?
+  invoice               Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceNumberSnapshot String    @db.VarChar(64)
+  orderNumberSnapshot   Int?
+  customerNameSnapshot  String    @db.VarChar(300)
+  level                 Int
+  dueDate               DateTime
+  outstandingAmount     Decimal   @db.Decimal(12, 2)
+  fee                   Decimal   @db.Decimal(12, 2)
+  text                  String    @db.Text
+  actorName             String    @db.VarChar(191)
+  sentAt                DateTime?
+  archivedAt            DateTime?
+  purgeAt               DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([invoiceId, level])
+  @@index([invoiceNumberSnapshot])
+  @@index([orderNumberSnapshot])
+  @@index([customerNameSnapshot])
+  @@index([archivedAt, purgeAt])
+  @@map("reminderEvent")
+}
+
 model InvoiceNumberSequence {
   id        Int @id
   nextValue Int
 
   @@map("invoiceNumberSequence")
+}
+
+model AppSettings {
+  id               Int      @id
+  revision         Int      @default(0)
+  boxCbm           Decimal? @db.Decimal(10, 4)
+  kleiderboxCbm    Decimal? @db.Decimal(10, 4)
+  origin           String?  @db.VarChar(300)
+  dataPrivacyUrl   String?  @db.VarChar(2048)
+  successUrl       String?  @db.VarChar(2048)
+  boxCalculatorUrl String?  @db.VarChar(2048)
+  companyEmail     String?  @db.VarChar(254)
+  emailFromName    String?  @db.VarChar(191)
+  emailFromAddress String?  @db.VarChar(254)
+  updatedAt        DateTime @updatedAt
+
+  @@map("appSettings")
 }
 
 model OrderActivityEvent {
@@ -175,24 +316,24 @@ model OrderActivityEvent {
 }
 
 model EmailOutbox {
-  id             String    @id
+  id             String       @id
   orderId        String?
-  order          Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  kind           String    @db.VarChar(32)
+  order          Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind           String       @db.VarChar(32)
   recipients     Json
-  subject        String    @db.VarChar(998)
-  contentHtml    String    @db.LongText
+  subject        String       @db.VarChar(998)
+  contentHtml    String       @db.LongText
   attachments    Json?
-  actorName      String?   @db.VarChar(191)
-  idempotencyKey String    @unique @db.VarChar(191)
-  status         String    @default("PENDING") @db.VarChar(16)
-  attempts       Int       @default(0)
+  actorName      String?      @db.VarChar(191)
+  idempotencyKey String       @unique @db.VarChar(191)
+  status         String       @default("PENDING") @db.VarChar(16)
+  attempts       Int          @default(0)
   nextAttemptAt  DateTime
   lockedAt       DateTime?
   sentAt         DateTime?
-  lastErrorCode  String?   @db.VarChar(100)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  lastErrorCode  String?      @db.VarChar(100)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   events         EmailEvent[]
 
   @@index([status, nextAttemptAt])
@@ -203,9 +344,9 @@ model EmailOutbox {
 model EmailEvent {
   id        String      @id
   outboxId  String
-  outbox    EmailOutbox @relation(fields: [outboxId], references: [id], onDelete: Restrict)
+  outbox    EmailOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
   orderId   String?
-  order     Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order     Order?      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   kind      String      @db.VarChar(32)
   actorName String?     @db.VarChar(191)
   sentAt    DateTime
@@ -222,7 +363,7 @@ model PublicApiRateLimit {
   windowStartedAt DateTime
   count           Int      @default(0)
 
-  @@index([windowStartedAt])
+  @@index([windowStartedAt], map: "publicOrderRateLimit_windowStartedAt_idx")
   @@map("publicApiRateLimit")
 }
 
@@ -234,31 +375,31 @@ model OrderNumberSequence {
 }
 
 model CatalogCategory {
-  id          Int                       @id @default(autoincrement())
-  name        String                    @db.VarChar(191)
-  sort        Int                       @default(0)
-  furniture   CatalogFurnitureCategory[]
+  id        Int                        @id @default(autoincrement())
+  name      String                     @db.VarChar(191)
+  sort      Int                        @default(0)
+  furniture CatalogFurnitureCategory[]
 
   @@index([sort])
   @@map("catalogCategory")
 }
 
 model CatalogFurniture {
-  id               Int                       @id @default(autoincrement())
-  name             String                    @db.VarChar(191)
-  volume           Decimal                   @default(0) @db.Decimal(10, 2)
-  step             Int?
-  sortOrder        Int                       @default(0)
-  weight           String?                   @db.VarChar(64)
-  montagePrice     Decimal                   @default(0) @db.Decimal(10, 2)
-  extraPrice       Decimal                   @default(0) @db.Decimal(10, 2)
-  demontage        Boolean                   @default(false)
-  notDismountable  Boolean                   @default(false)
-  bulky            Boolean                   @default(false)
-  montage          Boolean                   @default(false)
-  m100             Boolean                   @default(false)
-  m150             Boolean                   @default(false)
-  categories       CatalogFurnitureCategory[]
+  id              Int                        @id @default(autoincrement())
+  name            String                     @db.VarChar(191)
+  volume          Decimal                    @default(0) @db.Decimal(10, 2)
+  step            Int?
+  sortOrder       Int                        @default(0)
+  weight          String?                    @db.VarChar(64)
+  montagePrice    Decimal                    @default(0) @db.Decimal(10, 2)
+  extraPrice      Decimal                    @default(0) @db.Decimal(10, 2)
+  demontage       Boolean                    @default(false)
+  notDismountable Boolean                    @default(false)
+  bulky           Boolean                    @default(false)
+  montage         Boolean                    @default(false)
+  m100            Boolean                    @default(false)
+  m150            Boolean                    @default(false)
+  categories      CatalogFurnitureCategory[]
 
   @@index([sortOrder])
   @@map("catalogFurniture")

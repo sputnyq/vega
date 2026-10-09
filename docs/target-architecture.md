@@ -52,6 +52,11 @@ WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend,
 - Mail Service: Hostinger API Adapter, Outbox, Retry/Failure Handling,
   Actor/Event Logs; Angebots-/Rechnungs-Versanddialoge bleiben offen.
 - Upload Service: GCS URL-Signierung, Upload-Verifikation und Zuordnung von Bildreferenzen.
+- Settings Service: versionierter Singleton für die sechs aktiven
+  Legacy-Optionen (`boxCbm`, `kleiderboxCbm`, `origin`, `dataPrivacyUrl`,
+  `successUrl`, `boxCalculatorUrl`) und freigegebene Mailwerte
+  (`companyEmail`, `emailFromName`, `emailFromAddress`). Änderung nur durch
+  Admins, Konfliktschutz über Revision; leere Werte bleiben unkonfiguriert.
 - PDF Service: Rechnungen werden serverseitig aus aktuellen DB-Daten im
   übernommenen Legacy-Layout erzeugt; Angebots-, Gutschrift- und Mahn-PDFs
   bleiben offen.
@@ -84,13 +89,22 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - Trusted Origins werden exakt aus Runtime-Konfiguration abgeleitet. Der Public-Form-Origin ist CORS-Origin, aber nicht automatisch Auth-Origin. Kein Wildcard-Origin, keine deaktivierte CSRF-/Origin-Prüfung und keine Cross-Subdomain-Cookies, da Login und Admin auf derselben Vega-Origin liegen.
 - HTTPS, `Secure`, `HttpOnly` und `SameSite=Lax` Cookies. Proxy-IP-Header nur dann vertrauen, wenn der Hostinger-Reverse-Proxy verifiziert ist.
 - Better-Auth-Rate-Limits bleiben aktiviert; Login, Reset und 2FA bekommen strengere endpoint-spezifische Limits mit persistenter Speicherung statt nur In-Memory-Countern. Proxy-IP-Header werden nur nach Verifikation der Hostinger-Proxykette vertraut.
-- Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden. Admins legen Konten an, können auch die Rolle `Admin` vergeben und Passwort-Reset-Mails auslösen. Sessions haben eine absolute Höchstdauer von 30 Tagen; spätestens dann ist eine erneute Anmeldung erforderlich. Re-Authentifizierung bei sicherheitskritischen Kontoänderungen bleibt noch zu entscheiden.
+- Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden. Admins legen Konten an, können auch die Rolle `Admin` vergeben und Passwort-Reset-Mails auslösen. Sessions haben eine absolute Höchstdauer von 30 Tagen; spätestens dann ist eine erneute Anmeldung erforderlich. Anlage, Sperrung/Entsperrung, Rollenwechsel, Passwort-Reset-Mail und 2FA-Reset erfordern jeweils serverseitig das aktuelle Admin-Passwort (ADR 0002).
+- Kontoaktionen laufen ausschließlich über Admin-only Vega-Endpunkte. Sperrung, Rollenwechsel und 2FA-Reset widerrufen Sitzungen/Challenges; Sperrung verhindert neue Sitzungen. Selbst-Lockout und Verlust des letzten aktiven Admins sind geschützt. Der einzige Admin erhält einen ausdrücklich bestätigten serverseitigen TOTP-Recovery-Pfad, keinen erneuten Bootstrap. Identität und Sicherung sind vorher außerhalb der App zu prüfen.
 - Der Initial-Admin `root_user` wird einmalig per Prisma-Seed aus `INITIAL_ADMIN_EMAIL`/`INITIAL_ADMIN_PASSWORD` provisioniert; keine Bootstrap-Secrets im Client oder in Logs. Erstzugriff bleibt bis Passwortwechsel und TOTP-Verifizierung gesperrt.
 
 ## Datenmodell – fachliche Beziehungen
 
 - `Order` speichert Kunden-/Adressdaten direkt, kein `Customer`-Stamm.
 - `Order.orderNumber` ist eindeutige Geschäftsnummer; DB-PK separat.
+- `OrderAddress` hält Straße/PLZ/Ort pro eindeutiger Adressrolle relational,
+  optionale validierte Adressdetails bleiben JSON. `OrderPosition` hält
+  Möbel-, Service- und Verpackungspositionen mit Reihenfolge, Menge und
+  Volumensnapshot. Katalog-IDs sind historische Referenzwerte, keine
+  Löschkaskaden auf Auftragspositionen. Bei Anlage, Änderung und Kopie werden
+  Beziehungen transaktional geschrieben; API-Reads und Rechnungsadressen
+  verwenden die relationalen Werte. Der validierte Formularsnapshot bleibt
+  für die übrigen Details erhalten.
 - Der Intake-Endpunkt `POST /api/orders` ist öffentlich und für abgeschlossene
   Staff-Sessions verwendbar. Er speichert validierte Kunden-, Mehrfachadress-,
   Umzugsgut-, Zusatzleistungs-, Termin- und Konditionsdaten, vergibt die Nummer
@@ -116,13 +130,21 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   Beim Order-Purge gilt `SET NULL` statt Cascade; Snapshots bleiben zum Suchen
   bis Invoice-Purge.
 - Rechnungsnummer ist von DB-ID und Auftragsnummer getrennt; einstellbarer Nummernkreis, editierbar, DB-seitig eindeutig.
-- `CreditNote` ist separater optionaler Beleg (höchstens einer je Rechnung; Nummerierungsverhalten wie bisher); `ReminderEvent` hält Versandereignisse zur Rechnung fest.
+- `CreditNote` ist separater optionaler Beleg (höchstens einer je Rechnung;
+  eindeutige frei gesetzte Geschäftsnummer wie im Bestand, kein erfundener
+  initialer Gutschriftennummernwert). `ReminderEvent` hält Mahnungsdaten und
+  einen erst bei erfolgreichem Versand zu setzenden `sentAt` fest. Beide
+  Tabellen enthalten Rechnungsnummer-/Kunden-/Auftragsnummer-Snapshots;
+  Rechnungs-Purge setzt ihre FK-Bezüge auf NULL, ohne sie vor ihrer eigenen
+  Aufbewahrungsfrist zu löschen. Use-Cases und UI folgen unter A7.
 - `Invoice`, `CreditNote` und `ReminderEvent` haben jeweils eigene Archiv-/Purge-Felder. Admins archivieren die Finanzdatensätze; Purge erfolgt einheitlich nach 30 Tagen, Restore ist bis dahin möglich.
 - `OrderActivityEvent` enthält nur Objekt, Aktion, Zeitstempel und Benutzername;
   keine Feld-Diffs. Öffentliche Anfragen verwenden als Akteur `-`. Derzeitige
   Aktionen umfassen Anlage, Bearbeitung, Kopie, Archivierung, Wiederherstellung
   und Rechnungs-PDF-Export. Order-Purge entfernt seine Events.
 - `EmailOutbox`/`EmailEvent` hält Retry-Zustand und erfolgreichen Versand inkl. Benutzer/Aktion/Zeitpunkt.
+- Auftragseigene Outbox-Inhalte und Mailereignisse werden beim Order-Purge
+  ebenfalls gelöscht. Nicht auftragsgebundene Auth-Mails sind davon unabhängig.
 - Katalog-/Preisstammdaten werden initial manuell gepflegt.
 
 ## API-Sicherheitsgrenze
@@ -143,6 +165,13 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - Die WordPress-Seite behält einen Script-Mountpoint/Loader; kein iframe.
 - Der Loader auf Vega stellt absolute CSS-/JS-/API-Pfade zur Verfügung.
 - Der Formular-Build wird aus `apps/customer-form` erzeugt und vom Node-App-Deployment ausgeliefert.
+- Der eingebettete Möbel-/Volumenrechner ist seit der ausdrücklichen Freigabe
+  vom 2026-10-09 Teil des langen Formulars, kein eigenständiger neuer Flow.
+- Formularoptionen stammen aus einer expliziten Safe-Projektion, nicht aus
+  einem generischen öffentlichen Optionsendpunkt. Möbelvolumen wird beim
+  Kundeneingang aus Katalog und gespeicherten Kartonvolumina serverseitig
+  normalisiert. Fehlende Kartonvolumina werden als unvollständiges Volumen
+  gekennzeichnet, nicht als vollständig berechnete Nullwerte dargestellt.
 - Loader-Basis und Hostnamen werden zur Laufzeit aufgelöst. Kein Hostname in Vite-Variablen, die in Clientassets gebündelt werden.
 - CORS erlaubt nur die konfigurierte produktive WordPress-Origin und explizite nichtproduktive Test-Origin.
 - Das WordPress-Plugin soll keine alten öffentlichen Order-/Options-REST-Routen in der neuen Integration weiterverwenden.

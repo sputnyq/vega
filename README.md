@@ -16,7 +16,7 @@ TOTP. WordPress bleibt CMS und Einbettungsfläche.
 cp .env.example .env
 # BETTER_AUTH_SECRET mit `openssl rand -base64 32` erzeugen und in .env setzen.
 # INITIAL_ADMIN_EMAIL und INITIAL_ADMIN_PASSWORD nur für den einmaligen Seed setzen.
-npm install
+npm ci
 npm run db:up
 npm run db:migrate:dev
 npm run db:seed
@@ -35,6 +35,40 @@ Authenticator einrichten/verifizieren. Erst danach werden Admin-APIs
 freigeschaltet. Mitarbeiter-E-Mail-Adressen werden nicht verifiziert; eine
 öffentliche Registrierung ist deaktiviert. Sessions laufen absolut nach 30
 Tagen ab und werden bei Aktivität nicht verlängert.
+
+Unter `/settings/users` verwalten Admins Mitarbeiterkonten: Suche, Anlage,
+Rollenwechsel, Sperrung/Entsperrung, Passwort-Reset-Mail und 2FA-Reset.
+**Jede Aktion verlangt das aktuelle Passwort des ausführenden Admins.**
+Das Initialpasswort eines neuen Kontos separat sicher übergeben, nicht per
+E-Mail versenden; der Mitarbeiter muss es wechseln und TOTP einrichten.
+Der Admin-2FA-Reset darf erst nach separat geprüfter Identität erfolgen und
+erzwingt neues Enrollment. Sperrung, Rollenwechsel und 2FA-Reset widerrufen
+Sitzungen und offene Reset-/2FA-Challenges. Das eigene Konto kann hier nicht
+gesperrt, herabgestuft oder per 2FA-Reset zurückgesetzt werden.
+
+### Recovery bei Verlust des einzigen Admin-Authenticators
+
+Nur ein autorisierter Betreiber mit serverseitigem DB-/Runtime-Zugang darf
+diesen Pfad verwenden. Identität über einen bereits bekannten unabhängigen
+Kontakt und eine aktuelle geschützte Datenbanksicherung **vorher** prüfen.
+Wenn ein weiterer aktiver Admin existiert, dessen Mitarbeiterverwaltung
+verwenden; der CLI-Pfad verweigert dann die Wiederherstellung.
+
+Die User-ID auf dem Server bestimmen, ohne Passwörter/Faktoren auszugeben:
+`SELECT id FROM user WHERE role = 'Admin' AND blocked = false;`
+Anschließend aus dem Vega-Root mit der serverseitigen Runtime-Konfiguration:
+
+```sh
+npm run auth:recover-admin -- <user-id> --confirm-identity-and-backup
+```
+
+Der Befehl widerruft alle Sitzungen, offenen Reset-/2FA-Challenges,
+Authenticator und Recovery-Codes dieses einzigen aktiven Admins. Er ändert
+weder Passwort noch Rolle und gibt keine Zugangsdaten aus. Danach mit dem
+bestehenden Passwort anmelden, TOTP neu einrichten/verifizieren und die neuen
+Recovery-Codes sicher außerhalb der App aufbewahren. Bei ebenfalls verlorenem
+Passwort den normalen kurzlebigen Mailreset verwenden; ohne funktionsfähigen
+Mailversand ist dies ein Betriebsblocker, kein Anlass für einen neuen Seed.
 
 Jedes neu gesetzte Passwort benötigt mindestens 8 Zeichen und muss mindestens
 einen Großbuchstaben, einen Kleinbuchstaben und eine Zahl enthalten.
@@ -85,8 +119,9 @@ abgeschlossene Admin-Session.
 Legacy-Aufbau (Kunde, Adressen, Umzugsgut, Extras, Basis, Konditionen,
 Buchhaltung). Jeweils eine zweite Be-/Entladestelle lässt sich ergänzen und mit
 der ersten tauschen; Speichern sitzt wie früher rechts oben in der Navigation.
-Das Formular sendet `POST /api/orders`; derselbe Endpunkt ist für das
-Kundenformular ohne Login offen. Anonyme Einreichungen sind serverseitig
+Das Adminformular sendet `POST /api/orders`; das Kundenformular verwendet
+`POST /api/public/orders` mit zusätzlicher Formular-/Datenschutzvalidierung.
+Anonyme Einreichungen sind serverseitig
 rate-limitiert und können keine Preise setzen. Der Server validiert die Daten,
 vergibt die Auftragsnummer ab 1000 und antwortet nur mit dieser Nummer.
 Angemeldete Mitarbeiter können auch unvollständige Entwürfe speichern, wie im
@@ -101,8 +136,8 @@ Blanco-Rechnungen unter `/blanco` bzw. `/invoices/new`, Rechnungen mit optionale
 `/invoices` und `/invoices/archived`. Rechnungs-PDFs werden serverseitig aus dem
 aktuellen Stand erzeugt und nicht gespeichert.
 
-Kartenintegration, Uploads, Gutschriften, Mahnungen, Rechnungsversand und die
-vollständige autoritative Angebotsberechnung sind weiterhin offen. Für alle
+Gutschriften, Mahnungen, Rechnungsversand, reale Google-/GCS-Provider-Proofs und
+die vollständige autoritative Angebotsberechnung sind weiterhin offen. Für alle
 Tabellen müssen die versionierten Migrationen ausgerollt werden
 (`npm run db:migrate:deploy`).
 
@@ -118,10 +153,40 @@ Produktions-Build und Start:
 
 ```sh
 npm run typecheck
+npm run lint
 npm test
 npm run build
+npm run test:deployment
 npm start
 ```
+
+Der CI-Workflow `.github/workflows/ci.yml` nutzt Node 24 und eine separate
+MariaDB 10.11.19. Er prüft zusätzlich frische Migrationen und
+`npm run db:check-schema` auf Drift. `npm run lint` verwendet Oxlint für
+Korrektheitsregeln; ungenutzte Deklarationen und bewusst verwendete
+Steuerzeichen-RegEx sind nicht Teil dieses Gates. TypeScript-Typprüfung bleibt
+ein eigener obligatorischer Schritt.
+
+`npm run test:deployment` benötigt zuvor `npm run build`. Der Test startet einen
+kurzlebigen kompilierten Express-Prozess auf einem freien lokalen Port und
+prüft beide Frontends, Healthcheck und Loader. Synthetische Providerwerte dienen
+nur der Startkonfiguration; der Test sendet keine Providerrequests.
+
+Für echte Datenbanktests eine **separate leere Datenbank** mit einem Namen
+endend auf `_test` anlegen; `DATABASE_URL` für den Migrationslauf und
+`TEST_DATABASE_URL` für `npm run test:database` auf diese DB setzen. Niemals
+die laufende App-Datenbank dafür verwenden. Der Testbefehl lehnt fehlende
+oder nicht entsprechend benannte Ziele ab. Die Tests prüfen FK-Löschregeln,
+Nummern-/Beziehungs-Eindeutigkeit, atomare Nummernvergabe, Snapshot-Überführung
+und relationale Order-Operationen. Es werden keine Legacy-Daten importiert.
+
+Auftragadressen und Möbel-/Service-/Verpackungspositionen werden relational
+gespeichert und für Reads verwendet; übrige validierte Formularinformationen
+bleiben im JSON-Snapshot. Die neue Migration führt bereits angelegte
+Vega-Entwürfe additiv über. Die Tabellen für Gutschriften und Mahnungsereignisse
+sind vorbereitet, ihre Fachoberflächen, PDF-/Mail-Flows und Purge aber noch
+nicht implementiert. Rechnungs-Purge löscht diese Belege nicht kaskadierend;
+sie behalten Snapshots und eigene Aufbewahrungszeiten.
 
 Der Server benötigt `APP_BASE_URL`, `BETTER_AUTH_URL`, ein starkes
 `BETTER_AUTH_SECRET` (mindestens 32 Zeichen) und
@@ -136,6 +201,62 @@ Server-Runtime-Secrets zu setzen. Ein leerer optionaler
 `HOSTINGER_MAIL_API_BASE_URL` verwendet den Standard
 `https://api.mail.hostinger.com`.
 
+## Optionen und Kundenformular
+
+`/settings` speichert ausschließlich nicht geheime, Admin-bearbeitbare
+Geschäftsoptionen. Alle neun Werte beginnen unkonfiguriert; es werden keine
+Legacy-Werte oder Dummywerte übernommen.
+
+| Gruppe | Werte und Verwendung |
+|---|---|
+| Kartonvolumen | `boxCbm`, `kleiderboxCbm`: Möbelrechner und serverseitige Volumenberechnung |
+| Standort | `origin`: Betriebsadresse für Depot → Be-/Entladestellen → Depot |
+| Formularlinks | `dataPrivacyUrl`, `successUrl`, `boxCalculatorUrl`: Datenschutzerklärung, optionale Erfolgsweiterleitung und Kartonrechner |
+| Mail | `companyEmail`, `emailFromName`, `emailFromAddress`: Firmenbenachrichtigung, Anzeigename und Prüfung gegen die authentifizierte Hostinger-Mailbox |
+| Globale Preise | Bestehende elf Leistungsraten; derselbe Editor wie unter Leistungen |
+| Nummernkreis | Separat gespeicherte nächste `R-`-Rechnungsnummer mit Konflikt- und Belegprüfung |
+
+Optionen werden revisionsgeschützt gespeichert. Eine zwischenzeitliche
+Änderung erfordert Neuladen statt stilles Überschreiben. Ein
+Gutschriftennummernkreis bleibt bis zur Umsetzung dieses Fachmoduls offen;
+ungenutzte Legacy-Konstanten werden nicht als funktionslose Felder angezeigt.
+
+Das lange Kundenformular enthält die fünf Legacy-Schritte und den ausdrücklich
+freigegebenen eingebetteten Möbel-/Volumenrechner. Ohne Datenschutz-URL bleibt
+das Absenden gesperrt. Fehlende Kartonvolumina erzeugen eine Warnung für die
+unvollständige Volumenberechnung; sie werden nicht als konfiguriert angenommen.
+Die Öffentlichkeit erhält nur die Formularlinks, Kartonvolumina und
+Provider-Verfügbarkeitsflags unter `/api/customer-form/config`, keine
+internen Standort-, Mail- oder Zugangsdaten.
+
+Google Places und die auf Benutzeraktion gestartete Admin-Streckenberechnung
+benötigen `GOOGLE_PLACES_API_KEY` bzw. `GOOGLE_ROUTES_API_KEY` ausschließlich
+in der Server-Runtime. Die Google-Aufrufe erfolgen serverseitig; manuelle
+Adresseingabe und manuelle Streckenangabe bleiben ohne Provider möglich.
+
+Für Bilder `GCS_BUCKET`, optional `GOOGLE_CLOUD_PROJECT` und externe
+Application Default Credentials konfigurieren. `GOOGLE_APPLICATION_CREDENTIALS`
+kann auf eine außerhalb des Repositorys verwaltete Credential-Datei zeigen.
+Der Bucket muss in einer zugelassenen EU-Region liegen, Uniform Bucket-Level
+Access und erzwungene Public Access Prevention nutzen sowie genau eine
+unbedingte Delete-Lifecycle-Regel nach 180 Tagen besitzen. Die CORS-Konfiguration
+muss den Upload von den tatsächlich erlaubten Formular-Origins zulassen.
+Ohne diese Konfiguration wird kein Ersatzspeicher verwendet.
+
+Der Browser komprimiert zu JPEG (höchstens 2000 Pixel je Kante und 10 MiB) und
+lädt über eine 15 Minuten gültige Signed-POST-Policy. Der Server prüft die
+tatsächlichen Bytes und fixiert eine unveränderliche finale Objektgeneration.
+24 Stunden gültige Claims werden atomar beim Anlegen der Anfrage verbraucht.
+Auftragskopien behalten eigene Referenzen auf dieselben privaten Objekte;
+Orderlöschung entfernt keine GCS-Objekte. Mitarbeitende erhalten kurzlebige
+Leselinks. Reale GCS-/CORS-Nachweise sind noch erforderlich.
+
+Für WordPress nach dem Produktionsbuild das von Vega ausgelieferte Script
+`/customer-form/loader.js` von der tatsächlichen `APP_BASE_URL` einbinden.
+Der Loader erzeugt den Mountpoint und absolute Asset-/API-Pfade ohne iframe.
+Den tatsächlichen WordPress-Origin in die Runtime-Allowlist aufnehmen und
+Einbettung, Styles und CSP dort prüfen; keine Domains in Vite einbrennen.
+
 ## Struktur
 
 ```text
@@ -143,10 +264,10 @@ apps/server/         Express 5, Better Auth, Prisma, Laufzeitkonfiguration
 apps/admin/          React 19 / Vite / MUI Login, Passwortwechsel und TOTP
 apps/customer-form/  React 19 / Vite Kundenformular
 packages/domain/     Geteilte fachliche Typen und DTOs
-prisma/              Better-Auth-Schema und versionierte MySQL-Migrationen
+prisma/              Auth-/Fachschema und versionierte MySQL-Migrationen
 docs/                Architektur, ADRs und Umsetzungsplan
 ```
 
 Der aktuelle Funktions- und Restarbeitsstand steht verbindlich in
 `docs/implementation-status.md`. Hostinger-Cron, Provider-End-to-End-Proofs,
-GCS und die noch offenen Fachbereiche bleiben nachgelagerte Arbeitspakete.
+der reale GCS-Proof und die noch offenen Fachbereiche bleiben nachgelagerte Arbeitspakete.

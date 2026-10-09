@@ -3,6 +3,7 @@ import { Alert, Box, Grid, IconButton, Paper, Stack, TextField, Tooltip, Typogra
 import type { OrderDetailsInput } from "@vega/domain";
 import { AddressFields } from "./AddressFields.js";
 import { createEmptyAddress, type OrderFormValue } from "./order-form-types.js";
+import { RouteDistance } from "./RouteDistance.js";
 
 interface AddressesTabProps {
   value: OrderFormValue;
@@ -53,7 +54,7 @@ export function AddressesTab({ value, update, onDetailsChange }: AddressesTabPro
             onChange={(event) => onDetailsChange({ ...details, distanceKm: Math.max(0, Number(event.target.value)) })}
             slotProps={{ htmlInput: { min: 0, max: 10000, step: 1 } }}
           />
-          <Alert severity="info">Die automatische Karten- und Routenberechnung wird erst mit dem freigegebenen Vega-Kartendienst angebunden.</Alert>
+          <RouteDistance value={value} onDistance={(distanceKm) => onDetailsChange({ ...details, distanceKm })} />
         </Stack>
       </Paper>
       <Grid container spacing={2} sx={{ alignItems: "stretch" }}>

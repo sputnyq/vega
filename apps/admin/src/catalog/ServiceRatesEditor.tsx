@@ -33,12 +33,16 @@ export function ServiceRatesEditor() {
   const [savingKey, setSavingKey] = useState<ServiceRateKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [savedValues, setSavedValues] = useState<Partial<Record<ServiceRateKey, string>>>({});
 
   useEffect(() => {
     let active = true;
     catalogRequest<CatalogServiceRateDto[]>("/api/admin/catalog/service-rates")
       .then((rates) => {
-        if (active) setValues(Object.fromEntries(rates.map((rate) => [rate.key, String(rate.price)])));
+        if (active) {
+          const next = Object.fromEntries(rates.map((rate) => [rate.key, String(rate.price)]));
+          setValues(next); setSavedValues(next);
+        }
       })
       .catch((cause: unknown) => {
         if (active) setError(cause instanceof Error ? cause.message : "Preise konnten nicht geladen werden.");
@@ -48,13 +52,16 @@ export function ServiceRatesEditor() {
   }, []);
 
   async function save(key: ServiceRateKey) {
-    const price = Number(values[key] ?? "0");
+    if (values[key] === savedValues[key]) return;
+    if (!values[key]?.trim()) { setError("Ein leerer Preis wird nicht als 0 gespeichert. Bitte geben Sie den Preis ausdrücklich ein."); return; }
+    const price = Number(values[key]);
     setSavingKey(key);
     setError(null);
     setMessage(null);
     try {
       const saved = await catalogRequest<CatalogServiceRateDto>(`/api/admin/catalog/service-rates/${key}`, "PUT", { price });
       setValues((current) => ({ ...current, [key]: String(saved.price) }));
+      setSavedValues((current) => ({ ...current, [key]: String(saved.price) }));
       setMessage("Preis gespeichert.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Der Preis konnte nicht gespeichert werden.");

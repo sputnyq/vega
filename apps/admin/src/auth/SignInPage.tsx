@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Box, Button, CircularProgress, Stack, TextField, Typography } from "@mui/material";
 import { authClient } from "../auth-client.js";
-import type { PendingInitialPassword, StaffUser } from "../types.js";
+import type { PendingInitialPassword } from "../types.js";
 import { AuthCard } from "./AuthCard.js";
 import { PasswordField } from "./PasswordField.js";
 
@@ -50,7 +50,7 @@ export function SignInPage({
         return;
       }
 
-      const user = result.data?.user as unknown as StaffUser | undefined;
+      const user = result.data?.user;
       if (user?.mustChangePassword) {
         onInitialPassword({ currentPassword: password });
       } else if (user?.twoFactorEnabled !== true) {
@@ -111,7 +111,7 @@ export function SignInPage({
               inputMode={useBackupCode ? "text" : "numeric"}
               value={code}
               onChange={(event) => setCode(useBackupCode
-                ? event.target.value.toUpperCase().trim().slice(0, 64)
+                ? event.target.value.trim().slice(0, 64)
                 : event.target.value.replace(/\D/g, "").slice(0, 6))}
               required
             />

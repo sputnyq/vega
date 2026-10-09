@@ -145,7 +145,7 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber 
           <AddressesTab value={value} update={update} onDetailsChange={updateDetails} />
         </div>
         <div role="tabpanel" id="order-tabpanel-2" aria-labelledby="order-tab-2" hidden={activeTab !== 2}>
-          <FurnitureTab value={value} update={update} onFurnitureChange={(furniture) => updateDetails({ ...value.details, furniture })} />
+          <FurnitureTab value={value} update={update} onFurnitureChange={(furniture) => updateDetails({ ...value.details, furniture })} {...(orderNumber === undefined ? {} : { orderNumber })} />
         </div>
         <div role="tabpanel" id="order-tabpanel-3" aria-labelledby="order-tab-3" hidden={activeTab !== 3}>
           <ExtrasTab value={value} onExtrasChange={(extras) => updateDetails({ ...value.details, extras })} />

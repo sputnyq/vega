@@ -28,3 +28,10 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
   Rechnungs-PDF-Export fest. Öffentliche Anfragen verwenden als Akteur `-`;
   Feld-Diffs werden nicht gespeichert.
 - Der tägliche 60-Tage-Purge bleibt bis zum gesicherten Hostinger-Cron offen.
+- Adress- und Positionskerne liegen in `OrderAddress`/`OrderPosition`;
+  Anlage, Änderung, Kopie und Read verwenden diese Beziehungen transaktional.
+  Bestehende Vega-Snapshots werden additiv übernommen; keine Legacy-Daten.
+- Datenbanktests prüfen die Unabhängigkeit der Kopien und erhaltene Rechnungen.
+  Auftragseigene Mail-Outbox-Inhalte und Mailereignisse werden ebenso wie das
+  Aktionsjournal mit dem Auftrag gelöscht, nicht als personenbezogene Waisen
+  weiter aufbewahrt.

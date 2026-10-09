@@ -1,5 +1,6 @@
 import { htmlToPlainText, passwordResetEmail, renderEmailLayout } from "./email-template.js";
 import type { MailAttachment, OutgoingMail } from "./hostinger-mail-client.js";
+import type { AppSettingsDto } from "@vega/domain";
 
 export type EmailKind = "INQUIRY_RECEIVED" | "OFFER" | "INVOICE" | "INQUIRY_DECLINED" | "PASSWORD_RESET";
 
@@ -8,6 +9,7 @@ export interface SendMailInput {
   to: string[];
   subject: string;
   contentHtml: string;
+  text?: string;
   attachments?: MailAttachment[];
   displayName?: string;
 }
@@ -17,7 +19,7 @@ export interface MailTransport {
 }
 
 export class MailService {
-  constructor(private readonly transport: MailTransport) {}
+  constructor(private readonly transport: MailTransport, private readonly settingsProvider?: () => Promise<AppSettingsDto>) {}
 
   async send(input: SendMailInput): Promise<void> {
     const recipients = [...new Set(input.to.map((address) => address.trim().toLowerCase()))];
@@ -27,12 +29,15 @@ export class MailService {
     if (!input.subject.trim() || input.subject.length > 998 || !input.contentHtml.trim()) {
       throw new Error("INVALID_EMAIL_CONTENT");
     }
+    const settings = await this.settingsProvider?.();
+    const displayName = input.displayName ?? settings?.emailFromName;
     const message: OutgoingMail = {
       to: recipients,
       subject: input.subject.trim(),
       html: renderEmailLayout(input.contentHtml),
-      text: htmlToPlainText(input.contentHtml),
-      ...(input.displayName ? { displayName: input.displayName } : {}),
+      text: input.text ?? htmlToPlainText(input.contentHtml),
+      ...(displayName ? { displayName } : {}),
+      ...(settings?.emailFromAddress ? { expectedFromAddress: settings.emailFromAddress } : {}),
       ...(input.attachments ? { attachments: input.attachments } : {}),
     };
     await this.transport.send(message);

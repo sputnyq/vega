@@ -4,6 +4,7 @@ import { Router, type Response } from "express";
 import { prisma } from "../prisma.js";
 import { validateOrderCreateInput } from "./order-input.js";
 import { normalizeOrderCatalogInput } from "./order-service.js";
+import { orderDataWithRelations, orderRelationCreates, orderRelations } from "./order-relations.js";
 
 const PAGE_SIZE_MAX = 100;
 const ARCHIVE_RETENTION_DAYS = 60;
@@ -70,14 +71,19 @@ export function createAdminOrderRouter() {
       if (orderNumber === null) return notFound(res);
       const actorName = String(res.locals.staffUser.name);
       const copy = await prisma.$transaction(async (tx) => {
-        const source = await tx.order.findFirst({ where: { orderNumber, archivedAt: null } });
+        const source = await tx.order.findFirst({ where: { orderNumber, archivedAt: null }, include: orderRelations });
         if (!source) throw new Error("ORDER_NOT_FOUND");
         const sequence = await tx.orderNumberSequence.update({ where: { id: 1 }, data: { nextValue: { increment: 1 } }, select: { nextValue: true } });
         const copied = await tx.order.create({ data: {
           id: randomUUID(), orderNumber: sequence.nextValue - 1, customerName: source.customerName,
           customerEmail: source.customerEmail, customerPhone: source.customerPhone, source: source.source,
           data: source.data as Prisma.InputJsonValue, edited: true, originOrderId: source.originOrderId ?? source.id,
+          ...orderRelationCreates(orderDataWithRelations(source)),
         }, select: { id: true, orderNumber: true } });
+        const images = await tx.orderImage.findMany({ where: { orderId: source.id } });
+        if (images.length) await tx.orderImage.createMany({ data: images.map((image) => ({
+          ...image, id: randomUUID(), orderId: copied.id, tokenHash: "",
+        })) });
         await tx.orderActivityEvent.create({ data: { id: randomUUID(), orderId: copied.id, action: "COPIED", actorName } });
         return copied;
       }).catch((error: unknown) => error instanceof Error && error.message === "ORDER_NOT_FOUND" ? null : Promise.reject(error));
@@ -92,6 +98,7 @@ export function createAdminOrderRouter() {
       if (orderNumber === null) return notFound(res);
       const validation = validateOrderCreateInput(req.body, { allowStaffPricing: true, allowIncomplete: true });
       if (!validation.ok) return invalidOrder(res, validation.issues);
+      if (validation.value.imageClaims?.length) return invalidOrder(res, [{ field: "imageClaims", message: "Bilder können nur bei der Anfrageanlage zugeordnet werden." }]);
       let normalized;
       try { normalized = await normalizeOrderCatalogInput(validation.value); }
       catch (error) {
@@ -108,9 +115,12 @@ export function createAdminOrderRouter() {
           const existing = await tx.order.findUnique({ where: { orderNumber }, select: { id: true, archivedAt: true } });
           if (!existing) throw new Error("ORDER_NOT_FOUND");
           if (existing.archivedAt) throw new Error("ORDER_ARCHIVED");
+          const relations = orderRelationCreates(normalized);
           const updated = await tx.order.update({ where: { id: existing.id }, data: {
             customerName, customerEmail: normalized.customer.email || null, customerPhone: normalized.customer.phone,
             source: normalized.orderSource ?? "individuelle", data: JSON.parse(JSON.stringify(normalized)) as Prisma.InputJsonValue, edited: true,
+            addresses: { deleteMany: {}, ...relations.addresses },
+            positions: { deleteMany: {}, ...relations.positions },
           }, select: orderDetailSelect });
           await tx.orderActivityEvent.create({ data: { id: randomUUID(), orderId: updated.id, action: "UPDATED", actorName } });
           return updated;
@@ -167,11 +177,11 @@ export function createAdminOrderRouter() {
   return router;
 }
 
-const orderListSelect = { orderNumber: true, customerName: true, source: true, createdAt: true, updatedAt: true, edited: true, archivedAt: true, purgeAt: true, originOrderId: true, data: true } satisfies Prisma.OrderSelect;
+const orderListSelect = { orderNumber: true, customerName: true, source: true, createdAt: true, updatedAt: true, edited: true, archivedAt: true, purgeAt: true, originOrderId: true, data: true, ...orderRelations } satisfies Prisma.OrderSelect;
 const orderDetailSelect = { id: true, ...orderListSelect, data: true, originOrderId: true } satisfies Prisma.OrderSelect;
 
 function toOrderListItem(order: Prisma.OrderGetPayload<{ select: typeof orderListSelect }>) {
-  const data = asRecord(order.data);
+  const data = asRecord(orderDataWithRelations(order));
   const from = asRecord(data?.from);
   const to = asRecord(data?.to);
   const basis = asRecord(asRecord(data?.details)?.basis);
@@ -188,7 +198,8 @@ function toOrderListItem(order: Prisma.OrderGetPayload<{ select: typeof orderLis
   };
 }
 function toOrderDetail(order: Prisma.OrderGetPayload<{ select: typeof orderDetailSelect }>) {
-  return { ...order, data: order.data as unknown };
+  const { addresses: _addresses, positions: _positions, ...detail } = order;
+  return { ...detail, data: orderDataWithRelations(order) };
 }
 function parsePositiveInteger(value: unknown): number | null { return typeof value === "string" && /^\d+$/u.test(value) && Number(value) > 0 ? Number(value) : null; }
 function parseOrderNumber(value: unknown): number | null { const parsed = parsePositiveInteger(value); return parsed && parsed <= 2_147_483_647 ? parsed : null; }

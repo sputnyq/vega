@@ -13,6 +13,7 @@ export interface OutgoingMail {
   html: string;
   text: string;
   displayName?: string;
+  expectedFromAddress?: string;
   attachments?: MailAttachment[];
 }
 
@@ -35,6 +36,18 @@ export class HostingerMailClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
+      if (message.expectedFromAddress) {
+        const accountResponse = await this.fetchImpl(new URL("/api/v1/me", this.config.apiBaseUrl), {
+          headers: { Authorization: `Bearer ${this.config.apiToken}`, Accept: "application/json" },
+          signal: controller.signal,
+        });
+        if (!accountResponse.ok) throw new MailDeliveryError(await responseCode(accountResponse), accountResponse.status === 429 || accountResponse.status >= 500, accountResponse.status);
+        const account = await accountResponse.json() as { data?: { mailboxes?: Array<{ resourceId: string; address: string }> } };
+        const mailbox = account.data?.mailboxes?.find((item) => item.resourceId === this.config.mailboxResourceId);
+        if (!mailbox || mailbox.address.toLowerCase() !== message.expectedFromAddress.toLowerCase()) {
+          throw new MailDeliveryError("MAIL_SENDER_ADDRESS_MISMATCH", false);
+        }
+      }
       const response = await this.fetchImpl(endpoint, {
         method: "POST",
         headers: {

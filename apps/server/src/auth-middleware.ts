@@ -18,6 +18,10 @@ export function requireCompletedStaff(auth: AuthInstance): RequestHandler {
       }
 
       const user = session.user;
+      if (user.blocked) {
+        reject(res, 403, "ACCOUNT_BLOCKED", "Dieses Konto ist gesperrt.");
+        return;
+      }
       if (user.mustChangePassword) {
         reject(res, 403, "PASSWORD_CHANGE_REQUIRED", "Bitte ändern Sie zuerst Ihr Passwort.");
         return;

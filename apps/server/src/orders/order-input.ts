@@ -169,6 +169,7 @@ function validateDetails(value: unknown, issues: OrderInputIssue[], allowStaffPr
   if (!isRecord(rawFurniture)) issues.push({ field: "details.furniture", message: "Ungültige Möbelliste." });
   else {
     const volume = numeric(rawFurniture, "volume", "details.furniture.volume", issues, { required: true, max: 100000 });
+    const volumeComplete = bool(rawFurniture, "volumeComplete", "details.furniture.volumeComplete", issues);
     const boxes = numeric(rawFurniture, "boxes", "details.furniture.boxes", issues, { required: true, max: 100000 });
     const wardrobeBoxes = numeric(rawFurniture, "wardrobeBoxes", "details.furniture.wardrobeBoxes", issues, { required: true, max: 100000 });
     const ownItems = text(rawFurniture, "ownItems", "details.furniture.ownItems", issues, { max: 10000 });
@@ -186,10 +187,10 @@ function validateDetails(value: unknown, issues: OrderInputIssue[], allowStaffPr
         issues.push({ field: `details.furniture.items.${index}`, message: "Ungültige Möbelposition." });
         return;
       }
-      const name = text(rawItem, "name", `details.furniture.items.${index}.name`, issues, { required: true, max: 160 });
+      const name = text(rawItem, "name", `details.furniture.items.${index}.name`, issues, { required: true, max: 191 });
       const quantity = numeric(rawItem, "quantity", `details.furniture.items.${index}.quantity`, issues, { required: true, max: 100000 });
       const itemVolume = numeric(rawItem, "volume", `details.furniture.items.${index}.volume`, issues, { max: 100000 });
-      const category = text(rawItem, "category", `details.furniture.items.${index}.category`, issues, { max: 100 });
+      const category = text(rawItem, "category", `details.furniture.items.${index}.category`, issues, { max: 191 });
       const catalogId = rawItem.catalogId === undefined ? undefined : numeric(rawItem, "catalogId", `details.furniture.items.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
       if (name !== undefined && quantity !== undefined) items.push({
         name,
@@ -200,7 +201,9 @@ function validateDetails(value: unknown, issues: OrderInputIssue[], allowStaffPr
       });
     });
     if (volume !== undefined && boxes !== undefined && wardrobeBoxes !== undefined && ownItems !== undefined && expensiveText !== undefined && heavyText !== undefined && bulkyText !== undefined && expensive !== undefined && heavy !== undefined && bulky !== undefined) {
-      furniture = { volume, boxes, wardrobeBoxes, ownItems, items, expensive, expensiveText, heavy, heavyText, bulky, bulkyText };
+      furniture = { volume, boxes, wardrobeBoxes, ownItems, items, expensive, expensiveText, heavy, heavyText, bulky, bulkyText,
+        ...(volumeComplete !== undefined ? { volumeComplete } : {}),
+      };
     }
   }
 
@@ -215,7 +218,7 @@ function validateDetails(value: unknown, issues: OrderInputIssue[], allowStaffPr
         issues.push({ field: `details.extras.services.${index}`, message: "Ungültige Leistung." });
         return;
       }
-      const name = text(rawService, "name", `details.extras.services.${index}.name`, issues, { required: true, max: 160 });
+      const name = text(rawService, "name", `details.extras.services.${index}.name`, issues, { required: true, max: 191 });
       const quantity = numeric(rawService, "quantity", `details.extras.services.${index}.quantity`, issues, { required: true, max: 100000 });
       const kind = rawService.kind;
       const catalogId = rawService.catalogId === undefined ? undefined : numeric(rawService, "catalogId", `details.extras.services.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
@@ -293,6 +296,7 @@ export function validateOrderCreateInput(body: unknown, {
     if (rawSalutation === "Herr" || rawSalutation === "Frau" || rawSalutation === "Divers" || rawSalutation === "") salutation = rawSalutation;
     else issues.push({ field: "customer.salutation", message: "Ungültige Anrede." });
   }
+
   if (email && !EMAIL_PATTERN.test(email)) issues.push({ field: "customer.email", message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." });
   if (phone && !/[0-9]{3}/u.test(phone)) issues.push({ field: "customer.phone", message: "Bitte geben Sie eine gültige Telefonnummer ein." });
 
@@ -312,6 +316,19 @@ export function validateOrderCreateInput(body: unknown, {
   const note = text(body, "note", "note", issues, { max: 5000 });
   const costsAssumption = bool(body, "costsAssumption", "costsAssumption", issues);
   const details = validateDetails(body.details, issues, allowStaffPricing, allowIncomplete);
+  const privacyAccepted = bool(body, "privacyAccepted", "privacyAccepted", issues);
+  const visitWanted = bool(body, "visitWanted", "visitWanted", issues);
+  let imageClaims: CreateOrderInput["imageClaims"];
+  if (body.imageClaims !== undefined) {
+    if (!Array.isArray(body.imageClaims) || body.imageClaims.some((claim) => !isRecord(claim)
+      || typeof claim.id !== "string" || !/^[a-f0-9-]{36}$/.test(claim.id)
+      || typeof claim.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(claim.token))) {
+      issues.push({ field: "imageClaims", message: "Ungültige Bildreferenzen." });
+    } else {
+      imageClaims = body.imageClaims.map((claim: { id: string; token: string }) => ({ id: claim.id, token: claim.token }));
+      if (new Set(imageClaims.map((claim) => claim.id)).size !== imageClaims.length) issues.push({ field: "imageClaims", message: "Doppelte Bildreferenzen." });
+    }
+  }
 
   if (movingDate) validDate(movingDate, "movingDate", issues);
   if (dateFrom) validDate(dateFrom, "dateFrom", issues);
@@ -342,6 +359,9 @@ export function validateOrderCreateInput(body: unknown, {
       from,
       to,
       movingDate: normalizedMovingDate,
+      ...(privacyAccepted !== undefined ? { privacyAccepted } : {}),
+      ...(visitWanted !== undefined ? { visitWanted } : {}),
+      ...(imageClaims !== undefined ? { imageClaims } : {}),
       ...(movingTime !== undefined ? { movingTime } : {}),
       ...(dateFrom !== undefined ? { dateFrom } : {}),
       ...(dateTo !== undefined ? { dateTo } : {}),
@@ -352,4 +372,35 @@ export function validateOrderCreateInput(body: unknown, {
       ...(details !== undefined ? { details } : {}),
     },
   };
+}
+
+export function validateCustomerFormInput(input: CreateOrderInput): OrderInputIssue[] {
+  const issues: OrderInputIssue[] = [];
+  if (!input.customer.email) issues.push({ field: "customer.email", message: "Die E-Mail-Adresse ist erforderlich." });
+  if (input.privacyAccepted !== true) issues.push({ field: "privacyAccepted", message: "Bitte bestätigen Sie die Datenschutzerklärung." });
+  if (typeof input.dateFixed !== "boolean" || (input.dateFixed === false && (!input.dateFrom || !input.dateTo))) {
+    issues.push({ field: "dateFixed", message: "Bitte geben Sie den festen Termin oder den vollständigen Zeitraum ein." });
+  }
+  if (!input.details) issues.push({ field: "details", message: "Die Angaben zu Umzugsgut und Leistungen fehlen." });
+  for (const key of ["from", "to"] as const) {
+    const address = input[key];
+    if (!/.{1,50}\d.{0,5}/u.test(address.street)) issues.push({ field: `${key}.street`, message: "Straße und Hausnummer sind unvollständig." });
+    if (!address.movementObject || !BUILDING_TYPES.includes(address.movementObject)) issues.push({ field: `${key}.movementObject`, message: "Bitte wählen Sie die Objektart." });
+    if (!/^(?:10|20|30|40|50|60|70|80|90|100) m\.$/u.test(address.runningDistance ?? "")) issues.push({ field: `${key}.runningDistance`, message: "Bitte wählen Sie die Entfernung vom Parkplatz." });
+    if (address.movementObject !== "Haus") {
+      if (!/^(?:UG|EG|[1-8]\. Etage|9\+ Etage)$/u.test(address.floor ?? "")) issues.push({ field: `${key}.floor`, message: "Bitte wählen Sie das Stockwerk." });
+      if (!address.liftType || !LIFT_TYPES.includes(address.liftType as typeof LIFT_TYPES[number])) issues.push({ field: `${key}.liftType`, message: "Bitte wählen Sie den Fahrstuhl." });
+    } else if (address.stockwerke?.some((floor) => !["UG", "EG", "1.OG", "2.OG"].includes(floor))) {
+      issues.push({ field: `${key}.stockwerke`, message: "Ungültige Stockwerke." });
+    }
+  }
+  if (!input.from.roomsNumber || !Number.isFinite(Number(input.from.roomsNumber)) || Number(input.from.roomsNumber) <= 0 || Number(input.from.roomsNumber) > 100) {
+    issues.push({ field: "from.roomsNumber", message: "Bitte geben Sie eine Zimmeranzahl zwischen 1 und 100 ein." });
+  }
+  if (!/^(?:[1-9]0|1[0-5]0) m²$/u.test(input.from.area ?? "")) issues.push({ field: "from.area", message: "Bitte wählen Sie die Wohnfläche." });
+  if (input.details?.furniture.items.some((item) => item.catalogId === undefined)
+    || input.details?.extras.services.some((item) => item.catalogId === undefined)) {
+    issues.push({ field: "details", message: "Bitte verwenden Sie ausschließlich freigegebene Katalogpositionen." });
+  }
+  return issues;
 }

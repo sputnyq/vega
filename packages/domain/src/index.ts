@@ -1,6 +1,17 @@
 /** Anwendungsrollen; Berechtigungen werden serverseitig durchgesetzt. */
 export type UserRole = "Admin" | "Kundenberater";
 
+export interface StaffAccountDto {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  blocked: boolean;
+  mustChangePassword: boolean;
+  twoFactorEnabled: boolean | null;
+  createdAt: string;
+}
+
 /** Minimaler öffentlicher Statusvertrag des Express-Healthchecks. */
 export interface HealthStatus {
   status: "ok";
@@ -61,6 +72,7 @@ export interface OrderDetailsInput {
   distanceKm: number;
   furniture: {
     volume: number;
+    volumeComplete?: boolean;
     boxes: number;
     wardrobeBoxes: number;
     ownItems: string;
@@ -89,6 +101,9 @@ export interface OrderDetailsInput {
 
 /** Customer-submitted or staff-entered order data. Prices are deliberately absent. */
 export interface CreateOrderInput {
+  privacyAccepted?: boolean;
+  visitWanted?: boolean;
+  imageClaims?: Array<{ id: string; token: string }>;
   customer: {
     company?: string;
     salutation?: "Herr" | "Frau" | "Divers" | "";
@@ -113,6 +128,30 @@ export interface CreateOrderInput {
 export interface CreateOrderResult {
   orderNumber: number;
 }
+
+export interface CustomerFormConfig {
+  privacyUrl: string | null;
+  boxCalculatorUrl: string | null;
+  successUrl: string | null;
+  boxVolume: number | null;
+  wardrobeBoxVolume: number | null;
+  uploadsAvailable: boolean;
+  placesAvailable: boolean;
+}
+
+export interface AppSettingsDto {
+  revision: number;
+  boxCbm: number | null;
+  kleiderboxCbm: number | null;
+  origin: string | null;
+  dataPrivacyUrl: string | null;
+  successUrl: string | null;
+  boxCalculatorUrl: string | null;
+  companyEmail: string | null;
+  emailFromName: string | null;
+  emailFromAddress: string | null;
+}
+export type AppSettingsInput = Omit<AppSettingsDto, "revision">;
 
 /** Staff-only order representation. Never expose this DTO from public routes. */
 export interface AdminOrderListItem {

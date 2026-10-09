@@ -56,15 +56,22 @@ export function htmlToPlainText(html: string): string {
     .trim();
 }
 
-export function passwordResetEmail(url: string): { subject: string; contentHtml: string } {
+export function passwordResetEmail(url: string): { subject: string; contentHtml: string; text: string } {
   const safeUrl = escapeHtml(url);
   return {
     subject: "Passwort zurücksetzen",
+    text: `Sie haben angefordert, Ihr Passwort zurückzusetzen.\n\nPasswort zurücksetzen: ${url}\n\nFalls Sie diese Anfrage nicht gestellt haben, können Sie diese E-Mail ignorieren.`,
     contentHtml: `<p>Sie haben angefordert, Ihr Passwort zurückzusetzen.</p><p><a href="${safeUrl}">Passwort zurücksetzen</a></p><p>Falls Sie diese Anfrage nicht gestellt haben, können Sie diese E-Mail ignorieren.</p>`,
   };
 }
 
 export const emailDefaults = {
+  inquiryNotification(customerName: string, orderNumber: number) {
+    return {
+      subject: `Neue Umzugsanfrage ${orderNumber}`,
+      contentHtml: `<p>Eine neue Umzugsanfrage von ${escapeHtml(customerName)} wurde gespeichert.</p><p>Auftragsnummer: ${orderNumber}. Bitte prüfen Sie die vollständigen Angaben in der Vega-Admin-Oberfläche.</p>`,
+    };
+  },
   inquiryReceived(customerName: string, orderNumber: number) {
     return {
       subject: `Wir haben Ihre Umzugsanfrage ${orderNumber} erhalten`,

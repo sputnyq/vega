@@ -8,6 +8,9 @@ export interface AppConfig {
   nodeEnv: string;
   port: number;
   mail: HostingerMailConfig | null;
+  gcs?: { bucket: string; projectId?: string };
+  googlePlacesKey?: string;
+  googleRoutesKey?: string;
 }
 
 export interface HostingerMailConfig {
@@ -154,5 +157,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     nodeEnv,
     port,
     mail,
+    ...(env.GCS_BUCKET?.trim() ? { gcs: {
+      bucket: env.GCS_BUCKET.trim(),
+      ...(env.GOOGLE_CLOUD_PROJECT?.trim() ? { projectId: env.GOOGLE_CLOUD_PROJECT.trim() } : {}),
+    } } : {}),
+    ...(env.GOOGLE_PLACES_API_KEY?.trim() ? { googlePlacesKey: env.GOOGLE_PLACES_API_KEY.trim() } : {}),
+    ...(env.GOOGLE_ROUTES_API_KEY?.trim() ? { googleRoutesKey: env.GOOGLE_ROUTES_API_KEY.trim() } : {}),
   };
 }

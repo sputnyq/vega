@@ -1,8 +1,10 @@
 # Umzug Ruck Zuck – Umsetzungsplan
 
 **Status:** abgestimmte Zielplanung für die Umsetzung durch Agents  
-**Stand:** 2026-10-05  
-**Wichtig:** Dieser Plan beschreibt Zielarchitektur und Arbeitspakete. Er nimmt noch keine Codeänderungen vor.
+**Stand:** 2026-10-09
+
+**Wichtig:** Dieser Plan beschreibt Zielarchitektur, Arbeitspakete und lokale
+Teilstände. Lokale Nachweise ersetzen keine externen Freigabe-Gates.
 
 ## 1. Ziel
 
@@ -25,7 +27,8 @@ Die neue App startet mit einer **frischen Hostinger-MySQL-Datenbank**. Stammdate
 
 - Eigenständiges Expressformular.
 - Eigenständige Möbellisten-Seite.
-- Möbel-/Volumenrechner, auch innerhalb des umfangreichen Formulars.
+- Eigenständiger Möbel-/Volumenrechner. Der im langen Formular eingebettete
+  Rechner gehört seit der ausdrücklichen Freigabe vom 2026-10-09 zum Umfang.
 - Kundenkonten oder ein globales Kundenprofil.
 - Übernahme alter Aufträge, Kunden, Bilder, Rechnungen oder sonstiger Altdaten.
 - Betrieb mehrerer separater Node-/Mail-Services.
@@ -64,7 +67,7 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 - Erneute Anmeldung ist spätestens alle 30 Tage erforderlich (absolute Session-Höchstdauer; Aktivität verlängert die Session nicht).
 - Erster Admin: einmaliger, serverseitiger Bootstrap, danach deaktiviert. Kein öffentliches Setup.
 - Erstadmin wird über einen einmaligen Prisma-Seed als `root_user` angelegt. `INITIAL_ADMIN_EMAIL` und `INITIAL_ADMIN_PASSWORD` sind serverseitige Runtime-Variablen und nach dem Seed zu entfernen. Beim ersten Login ist Passwortwechsel plus erfolgreiches TOTP-Enrollment erforderlich, bevor geschützte Admin-Funktionen zugänglich sind.
-- Wiederherstellungscodes bei 2FA-Einrichtung; Admin-Reset für andere Accounts; dokumentierter serverseitiger Recovery-Pfad für den einzigen Admin. Ob sicherheitskritische Kontoänderungen zusätzlich Re-Authentifizierung verlangen, bleibt offen.
+- Wiederherstellungscodes bei 2FA-Einrichtung; Admin-Reset für andere Accounts; dokumentierter serverseitiger Recovery-Pfad für den einzigen Admin. Anlage, Sperrung/Entsperrung, Rollenwechsel, Passwort-Reset-Mail und 2FA-Reset verlangen jeweils das aktuelle Admin-Passwort (Fachentscheidung 2026-10-09, ADR 0002).
 - Admin darf alle Bereiche bedienen, darunter Mitarbeiterkonten, globale Preise, Kataloge und Buchhaltung.
 - Kundenberater dürfen Anfragen/Aufträge bearbeiten, Einzelangebote erstellen/kopieren/anpassen/archivieren, individuelle Einzelangebotspreise ändern, E-Mails mit PDF versenden und Aufträge archivieren/wiederherstellen.
 - Kundenberater ändern keine globalen Preisvorgaben, Möbel-/Service-/Kategorie-Stammdaten oder Benutzer und bearbeiten keine Rechnungen/Buchhaltung.
@@ -168,6 +171,15 @@ Prüfen: Hostinger Node 24/Build-/Start-/Cron-Verhalten; TypeScript 7/Prisma/Bet
 **Abhängigkeit:** A0.  
 Root npm workspace, feste Engines/Lockfile, TypeScript-Konfiguration, Lint/Test/Build, Express-Startpunkt und Hostinger Healthcheck. Frontends als getrennte Vite-Builds, ein Node-Prozess.
 
+**Lokaler Abschluss:** Lockfile-Installation, Oxlint-Korrektheitsprüfung,
+Typecheck und Tests sind als Root-Befehle vorhanden. `.github/workflows/ci.yml`
+führt sie mit Node 24 und MariaDB 10.11.19 aus, einschließlich frischem
+Migrationslauf, Schema-Drift-Prüfung und Produktionsbuild. Der
+Deployment-Smoke-Test startet den tatsächlich kompilierten Server als einen
+Prozess und prüft Healthcheck, beide Frontends, Assets, Loader-Runtime-Pfade
+und die öffentliche/geschützte API-Grenze. Der tatsächliche GitHub-CI-Lauf und
+das nichtproduktive Hostinger-Deployment sind separat nachzuweisen.
+
 **Abnahme:** sauberer CI-Build; ein Deployment startet API und liefert Admin-/Formularassets aus.
 
 ### A2 – Prisma-Schema und Migrationen
@@ -175,12 +187,42 @@ Root npm workspace, feste Engines/Lockfile, TypeScript-Konfiguration, Lint/Test/
 **Abhängigkeit:** A1.  
 Fresh MySQL schema für Auth, Rollen, Aufträge/Kopien, Kataloge/Preisvorgaben, Bilderreferenzen, Events, Rechnungen, Gutschriften und Mahnungen. Uniqueness, FK-Regeln ohne unerwünschte Kaskaden, Indexe für Suchfelder, Nummernkreise, Archivfelder und `edited` definieren.
 
+**Lokaler Abschluss:** 13 versionierte Migrationen bauen eine leere
+MariaDB vollständig auf. `OrderAddress` und `OrderPosition` speichern die
+Adress-/Positionskerne relational; Anlage, Bearbeitung, Kopie, Detail-/Listenread
+und Rechnungsadressübernahme verwenden diese Beziehungen. Das validierte
+Order-JSON bleibt ein kompatibler Formularsnapshot für weitere, nicht
+suchkritische Details. Die additive Migration übernimmt ausschließlich bereits
+in Vega angelegte Entwürfe, keine Legacy-Daten.
+
+`CreditNote` und `ReminderEvent` enthalten eigene Geschäfts-/Snapshotfelder,
+Archiv-/Purge-Zeiten und indizierte Suchbezüge. Je Rechnung ist höchstens eine
+Gutschrift möglich; Geschäftsnummern sind eindeutig und von IDs getrennt.
+Beim Rechnungs-Purge werden Bezüge gelöst, nicht andere Finanzdatensätze
+kaskadierend gelöscht. Auftragseigene Adressen, Positionen, Bildreferenzen,
+Journal und Mailinhalte/-ereignisse werden dagegen mit dem Auftrag entfernt.
+Tests gegen eine explizit getrennte Testdatenbank prüfen diese FK-Regeln,
+Migration der Vega-Snapshots, atomaren Rollback und parallele Nummernvergabe.
+Gutschriften-/Mahnungs-Use-Cases, PDFs, Mail und Purge bleiben A7/A10-Arbeit.
+
 **Abnahme:** Migrationen bauen eine leere DB vollständig auf; Löschtests belegen, dass Auftrag/Kopie keine Geschwister oder Rechnungen kaskadierend entfernen.
 
 ### A3 – Better Auth und Rollen
 
 **Abhängigkeit:** A2.  
 Better Auth Version pinnen; Prisma-Schema mit der passenden Better-Auth-CLI-Version und aktivierten Plugins generieren/aktualisieren. E-Mail/Passwort, Reset-Mail, TOTP-Plugin plus Client-Plugin, verschlüsselte Recovery-Codes, Admin-Einladung/-Sperrung, zwei Rollen, Berechtigungs-Middleware und einmaliger First-Admin-Bootstrap.
+
+**Lokaler Stand (2026-10-09):** Vollständig implementiert. Better Auth und CLI
+sind auf `1.7.7` gepinnt; das generierte Auth-/Plugin-Schema wurde separat
+abgeglichen und die additive Sperrungs-Migration ergänzt. `/settings/users`
+nutzt Admin-only Safe DTOs und Passwortbestätigung für jede Mutation.
+Lifecycle-Änderungen widerrufen Sitzungen/Challenges; Selbst-Lockout und der
+Verlust des letzten aktiven Admins sind verhindert. TOTP bleibt verpflichtend,
+inklusive nach 2FA-Reset; OTP-Enrollment und Trusted-Device-Bypass sind gesperrt.
+Der serverseitige Recovery-Befehl für den einzigen Admin ist dokumentiert.
+DB-/HTTP-Tests prüfen Enrollment, einmalige verschlüsselte Recovery-Codes,
+Rollen-/Origin-Grenzen, Kontoaktionen, Reset-Mails und persistente Auth-Limits.
+Echter Hostinger-Mailversand und Zielhosting-Abnahme bleiben externe Gates.
 
 **Abnahme:** kein öffentlicher Signup; Admin/Kundenberater-Matrix serverseitig getestet; Bootstrap nach Einrichtung nicht erneut nutzbar; 2FA ist vor Zugriff auf Kundendaten aktiviert; CSRF/Origin-Checks und Auth-Rate-Limits bleiben aktiv.
 
@@ -196,20 +238,32 @@ gespeichert werden; anonyme Aufrufe sind rate-limitiert und können keine
 Preisfelder setzen. Abgeschlossene Staff-Sessions dürfen wie im Legacy-Flow auch
 unvollständige Auftragsentwürfe speichern; öffentliche Anfragen müssen vollständig
 sein. Staff-Preisfelder werden serverseitig auf Typ und Wertebereich geprüft.
-Dies schließt A2/A4 nicht ab; Katalog-CRUD und öffentliche Safe-GET-Projektionen
+Dies schließt A4 nicht ab; Katalog-CRUD und öffentliche Safe-GET-Projektionen
 sind inzwischen implementiert. Geschützte Admin-Auftragsliste/-suche,
 Einzelansicht/-bearbeitung sowie Archivierung und Wiederherstellung sind
 umgesetzt; sie setzen das Bearbeitungskennzeichen und schreiben minimale
-Aktionsereignisse. Vollständige autoritative Orderpreisberechnung,
-Angebotskopien, Finanzbeleg-API, Upload-Sitzungen und der tägliche Purge bleiben
-offen.
+Aktionsereignisse. Angebotskopien, Rechnungs-API und Upload-Sitzungen sind
+ebenfalls implementiert. Vollständige autoritative Orderpreisberechnung,
+Gutschriften-/Mahnungs-API und der tägliche Purge bleiben offen.
 
 **Abnahme:** kein öffentlicher Order-Read; Manipulation von Browserpreisen wird abgewiesen/neu berechnet; Kopien und Archive wirken nur auf den jeweiligen Datensatz.
 
 ### A5 – Kundenformular und WordPress-Loader
 
 **Abhängigkeit:** A0 und A4 API-Vertrag.  
-Nur langes deutsches Umzugsformular portieren; Möbel-/Volumenrechner, Express und eigenständige Möbelliste nicht portieren. Bestehende Nutzerführung weitgehend bewahren. Loader auf Vega stellt alle absoluten Pfade bereit; Formbundle enthält keine fest codierten Domains.
+Nur langes deutsches Umzugsformular portieren. Auf ausdrückliche Freigabe vom
+2026-10-09 wird auch der darin eingebettete Möbel-/Volumenrechner übernommen;
+Express und eigenständige Möbelliste bleiben ausgeschlossen. Gestaltung,
+Felder und die fünf Schritte Kontakt, Auszug, Einzug, Verpackung und Fertig
+aus dem Legacy-Formular bewahren. Loader auf Vega stellt alle absoluten Pfade
+bereit; Formbundle enthält keine fest codierten API-/Provider-Domains.
+
+**Lokaler Teilstatus:** Der lange Flow, Rechner, Safe-Kataloganbindung,
+`POST /api/public/orders`, Consent-/Fehler-/Dankeseiten und
+`/customer-form/loader.js` sind implementiert. Nicht geheime Optionen kommen
+aus den gespeicherten Admin-Einstellungen, nicht aus Vite-Variablen oder
+Bestandsdaten. Ohne hinterlegte Datenschutz-URL bleibt das Absenden gesperrt.
+Der reale WordPress-/Hostinger-Proof bleibt offen.
 
 **Abnahme:** WordPress-Seite lädt den Loader; Formular liest nur benötigte freigegebene Daten und speichert Anfrage ohne Login; Privacy Consent und Success/Failure UX bleiben funktionsfähig.
 
@@ -240,6 +294,15 @@ der 30-Tage-Finanz-Purge bleiben offen.
 
 **Abhängigkeit:** A0/A4/A5.  
 Clientkomprimierung, private EU-Bucket, Signed URLs, Serververifikation, Bildreferenzen am Auftrag und 180-Tage-Lifecycle. Kein Count-Limit pro Auftrag.
+
+**Lokaler Teilstatus:** JPEG-Komprimierung, begrenzte Signed-POST-Policies,
+private/EU-/Lifecycle-Prüfung, echte serverseitige JPEG-Dekodierung,
+tokengebundene Upload-Claims und transaktionale Orderzuordnung sind
+implementiert. Der Server kopiert bestätigte Staging-Generationen in einen
+nicht vom Browser überschreibbaren finalen Objektpfad. Admins und
+Kundenberater erhalten nur kurzlebige Leselinks; Kopien behalten eigene
+Bildreferenzen. Ohne GCS-Runtime-Konfiguration bleibt der Upload ausdrücklich
+nicht verfügbar. Der reale Provider-/CORS-Proof bleibt offen.
 
 **Abnahme:** keine GCS-Credentials im Browser; Bilddateien werden geprüft; Hard-Delete eines Auftrags löst kein GCS-Delete aus; Lifecycle und Ablauf sind nachweisbar getestet.
 
@@ -292,7 +355,7 @@ Nicht geheime Mailwerte (Firmenempfänger, Absendername, Absenderadresse) sind A
 3. **Node-/Paketkompatibilität:** Hostinger unterstützt Node 24.x. TypeScript 7, Prisma, Better Auth und MUI-Versionen sind vor Implementierung gemeinsam in CI zu verifizieren.
 4. **Cron:** Die 60-Tage-Order-Bereinigung, 30-Tage-Finanzbeleg-Bereinigung und Mail-Retries benötigen einen verlässlichen Hostinger-Scheduler. A0 muss nachweisen, wie der Managed-Node-Tarif den täglichen Task sicher startet.
 5. **WordPress-Loader:** Sicherstellen, dass WordPress nur den Loader enthält und die Formbuild-URLs zur Laufzeit absolut aufgelöst werden; die Domains dürfen nicht in Vite-Builds fest codiert sein.
-6. **Better Auth-Konfiguration:** Mitarbeiter-E-Mail-Verifikation ist nicht erforderlich; Admins legen Konten an und können Passwort-Reset-Mails auslösen. Sessions laufen spätestens nach 30 Tagen absolut ab. Adapter-/Plugin-Schema muss zur exakt gepinnten Better-Auth-Version passen. Re-Authentifizierung für sicherheitskritische Kontoänderungen bleibt vor deren Implementierung zu entscheiden.
+6. **Better Auth-Konfiguration:** Mitarbeiter-E-Mail-Verifikation ist nicht erforderlich; Admins legen Konten an und können Passwort-Reset-Mails auslösen. Sessions laufen spätestens nach 30 Tagen absolut ab. Adapter-/Plugin-Schema muss zur exakt gepinnten Better-Auth-Version passen. Das aktuelle Admin-Passwort ist bei jeder Anlage, Sperrung/Entsperrung, Rollenänderung, Passwort-Reset-Mail und jedem 2FA-Reset erforderlich (ADR 0002).
 7. **Finanzbeleg-Purge:** Die einheitliche 30-Tage-Frist für Rechnungen, Gutschriften und Mahnungen ist entschieden; der Betreiber stellt benötigte technische Archivkonfiguration bei Bedarf als Runtime-Umgebungsvariablen bereit. Die tatsächliche externe Aufbewahrung der gesetzlich erforderlichen Belege muss vor Produktivbetrieb dennoch bestätigt sein.
 
 ## 10. Verifikation / Referenzen

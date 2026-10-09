@@ -28,6 +28,8 @@ export function CustomerTab({ value, update }: CustomerTabProps) {
             label="Kostenübernahme durch Arbeitsamt"
           />
           {value.costsAssumption && <Alert severity="info">Für die Kostenübernahme wird meist ein Festpreisangebot benötigt.</Alert>}
+          {value.visitWanted && <Alert severity="info">Der Kunde möchte wegen eines kostenlosen Besichtigungstermins kontaktiert werden.</Alert>}
+          {value.privacyAccepted && <Typography variant="body2" color="text.secondary">Datenschutzerklärung bei der Anfrage bestätigt.</Typography>}
         </Stack>
       </Paper>
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 760 }}>

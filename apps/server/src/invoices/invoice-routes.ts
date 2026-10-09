@@ -4,6 +4,7 @@ import { Router, type Response } from "express";
 import type { InvoiceInput } from "@vega/domain";
 import { prisma } from "../prisma.js";
 import { generateInvoicePdf, invoicePdfFilename } from "../pdf/invoice-pdf.js";
+import { orderDataWithRelations, orderRelations } from "../orders/order-relations.js";
 
 const RETENTION_DAYS = 30;
 
@@ -42,12 +43,12 @@ export function createInvoiceRouter() {
   router.post("/from-order/:orderNumber", async (req, res, next) => {
     try {
       const orderNumber = Number(req.params.orderNumber); if (!Number.isInteger(orderNumber) || orderNumber < 1) return notFound(res);
-      const order = await prisma.order.findUnique({ where: { orderNumber } }); if (!order) return notFound(res);
+      const order = await prisma.order.findUnique({ where: { orderNumber }, include: orderRelations }); if (!order) return notFound(res);
       const existing = await prisma.invoice.findUnique({ where: { orderId: order.id } });
       if (existing) { res.status(409).json({ error: { code: "INVOICE_ALREADY_EXISTS", message: "Für diesen Auftrag existiert bereits eine Rechnung." } }); return; }
-      const data = order.data as Record<string, unknown>;
-      const customer = data.customer as Record<string, unknown> | undefined;
-      const destination = data.to as Record<string, unknown> | undefined;
+      const data = orderDataWithRelations(order);
+      const customer = data.customer;
+      const destination = data.to;
       const input: InvoiceInput = { invoiceDate: new Date().toISOString().slice(0, 10), company: stringValue(customer?.company), customerName: order.customerName, customerStreet: stringValue(destination?.street), customerPostalCity: [stringValue(destination?.postalCode), stringValue(destination?.city)].filter(Boolean).join(" "), taxPercent: 19, text: "", entries: [], dueDates: [] };
       const invoice = await createInvoice(input, order);
       res.status(201).json({ data: toDto(invoice) });

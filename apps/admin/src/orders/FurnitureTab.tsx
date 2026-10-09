@@ -4,14 +4,16 @@ import { Alert, Button, FormControlLabel, Grid, MenuItem, Paper, Stack, Switch, 
 import type { CatalogFurnitureDto, OrderFurnitureInput } from "@vega/domain";
 import { catalogRequest } from "../catalog/catalog-api.js";
 import type { OrderFormValue } from "./order-form-types.js";
+import { OrderImages } from "./OrderImages.js";
 
 interface FurnitureTabProps {
   value: OrderFormValue;
   update: (patch: Partial<OrderFormValue>) => void;
   onFurnitureChange: (furniture: OrderFormValue["details"]["furniture"]) => void;
+  orderNumber?: number;
 }
 
-export function FurnitureTab({ value, update, onFurnitureChange }: FurnitureTabProps) {
+export function FurnitureTab({ value, update, onFurnitureChange, orderNumber }: FurnitureTabProps) {
   const [listTab, setListTab] = useState(0);
   const [catalogFurniture, setCatalogFurniture] = useState<CatalogFurnitureDto[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export function FurnitureTab({ value, update, onFurnitureChange }: FurnitureTabP
 
   return (
     <Stack spacing={2}>
+      {orderNumber !== undefined && <OrderImages orderNumber={orderNumber} />}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
           <Paper variant="outlined" sx={{ p: 2.5, height: "100%" }}>
@@ -88,8 +91,9 @@ export function FurnitureTab({ value, update, onFurnitureChange }: FurnitureTabP
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={1.5}>
           <Typography component="h2" variant="h6">Möbelliste</Typography>
+          {furniture.volumeComplete === false && <Alert severity="warning">Das übertragene Volumen ist unvollständig: Die Kartonanzahl wurde erfasst, aber die Kartonvolumina waren noch nicht konfiguriert.</Alert>}
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-            <TextField type="number" label="Berechnetes Umzugsvolumen (m³)" value={furniture.volume} onChange={(event) => updateFurniture({ volume: Number(event.target.value) })} />
+            <TextField type="number" label="Berechnetes Umzugsvolumen (m³)" value={furniture.volume} onChange={(event) => updateFurniture({ volume: Number(event.target.value), volumeComplete: true })} />
             <Button disabled startIcon={<AddOutlined />}>Anhänge</Button>
           </Stack>
           <Tabs value={listTab} onChange={(_, next: number) => setListTab(next)} variant="scrollable" allowScrollButtonsMobile>

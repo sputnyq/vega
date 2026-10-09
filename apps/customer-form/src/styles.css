@@ -1,0 +1,9 @@
+.vega-customer-form a {
+  color: #1774bf;
+}
+.vega-customer-form button {
+  font-family: inherit;
+}
+.vega-customer-form .MuiPickersDay-root:hover {
+  color: #000 !important;
+}

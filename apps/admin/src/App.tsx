@@ -124,7 +124,10 @@ export function App() {
     );
   }
 
-  const user = session.user as unknown as StaffUser;
+  const user = session.user;
+  if (user.blocked) {
+    return <AuthCard><Alert severity="error">Dieses Konto ist gesperrt.</Alert></AuthCard>;
+  }
   if (user.mustChangePassword) {
     return <InitialPasswordChangePage onChanged={(password) => setTotpPassword(password)} />;
   }
@@ -134,12 +137,13 @@ export function App() {
   if (user.role !== "Admin" && user.role !== "Kundenberater") {
     return <AuthCard><Alert severity="error">Dieses Konto ist für die Vega-Verwaltung nicht freigeschaltet.</Alert></AuthCard>;
   }
+  const staffUser: StaffUser = { ...user, twoFactorEnabled: true };
   if (!route) return <NotFoundPage onHome={() => replacePath("/")} />;
 
   const page = route.adminOnly && user.role !== "Admin"
     ? <Alert severity="error">Diese Route ist nur für Admins freigeschaltet.</Alert>
     : route.profile
-      ? <ProfilePage user={user} />
+      ? <ProfilePage user={staffUser} />
       : route.path === "/"
         ? <OrdersPage navigate={navigatePath} />
         : route.path === "/orders/archived"
@@ -163,11 +167,11 @@ export function App() {
                 <ContentManagementPage route={route} navigate={navigatePath} />
               </Suspense>
             : route.settingsArea === "users"
-              ? <UserManagementPage />
+              ? <UserManagementPage currentUserId={user.id} />
               : <RoutePlaceholderPage route={route} />;
 
   return (
-    <AdminShell user={user} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty}>
+    <AdminShell user={staffUser} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty}>
       {page}
     </AdminShell>
   );

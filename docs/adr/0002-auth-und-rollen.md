@@ -27,16 +27,39 @@ Rollen sind `Admin` und `Kundenberater`. Berechtigungen werden serverseitig auf 
 - Rollenänderung oder Account-Sperre wirkt auf API-Zugriff, nicht nur auf sichtbare Menüs.
 - Passwortreset versendet generische Antworten, nutzt kurzlebige Einmal-Token und widerruft bestehende Sessions.
 - Eine Anmeldung ist spätestens alle 30 Tage erforderlich. Die absolute Sessiondauer beträgt höchstens 30 Tage und wird durch laufende Aktivität nicht verlängert.
-- Re-Authentifizierung bei sicherheitskritischen Kontoänderungen ist noch nicht entschieden und bleibt vor deren Implementierung zu klären.
+- Fachentscheidung vom 2026-10-09: Anlage, Sperrung/Entsperrung, Rollenwechsel,
+  Passwort-Reset-Mail und 2FA-Reset verlangen jeweils das aktuelle Passwort des
+  ausführenden Admins. Die Bestätigung wird serverseitig geprüft und persistent
+  auf fünf Versuche je Admin und Minute begrenzt.
 
 ## Umsetzungsstand (2026-10-09)
 
 - Der Self-Service-Passwortreset nutzt den serverseitigen Hostinger-Mailadapter,
   gibt für bekannte und unbekannte E-Mail-Adressen dieselbe Antwort und widerruft
   nach erfolgreichem Reset Sitzungen.
-- Profil-E-Mail-Änderungen verlangen aktuell eine Passwortbestätigung und
-  widerrufen andere Sessions. Die weitergehende Entscheidung zu
-  Re-Authentifizierung bei allen sicherheitskritischen Kontoänderungen bleibt
-  dennoch offen.
-- Benutzeranlage, Sperrung, Rollenwechsel und der Admin-initiierte Reset für
-  andere Mitarbeiter sind weiterhin offen.
+- Profil-E-Mail-Änderungen verlangen eine Passwortbestätigung und widerrufen
+  andere Sessions.
+- `/settings/users` und `/api/admin/staff` bieten Suche/Paginierung, Anlage,
+  Sperrung/Entsperrung, Rollenwechsel, Passwort-Reset-Mail und 2FA-Reset. Neue
+  Accounts benötigen ein sicher separat übergebenes Initialpasswort,
+  Passwortwechsel und erfolgreiches TOTP-Enrollment.
+- Rollenwechsel, Sperrung und 2FA-Reset widerrufen alle Sitzungen sowie offene
+  Reset-/2FA-Challenges. Entsperrung stellt keine alten Sitzungen wieder her.
+  Sperrung verhindert auch neue Better-Auth-Sitzungen. Die Lifecycle-Transaktion
+  prüft den ausführenden Admin erneut und schützt vor Selbstsperrung,
+  Selbstherabstufung und Verlust des letzten aktiven Admins.
+- TOTP kann nicht deaktiviert, durch OTP-Enrollment ersetzt oder per
+  `trustDevice` umgangen werden. Recovery-Codes bleiben case-sensitiv,
+  verschlüsselt und einmalig verwendbar. Ein Admin-2FA-Reset löscht Faktoren und
+  Codes; die erneute Anmeldung erfordert danach frisches Enrollment.
+- Der einzige aktive Admin kann mit dem ausdrücklich bestätigten,
+  serverseitigen `auth:recover-admin`-Befehl wiederhergestellt werden. Identität
+  und Datenbanksicherung müssen vorab außerhalb der App geprüft werden;
+  Anleitung in `README.md`. Der Befehl ändert kein Passwort und ist kein
+  erneuter Bootstrap.
+- Der Admin-Mailpfad meldet Erfolg erst nach bestätigtem Hostinger-Versand;
+  Better Auths generische Self-Service-Antwort bleibt unverändert. Reset-Links
+  stehen sowohl im HTML- als auch im Textteil der Mail.
+- Isolierte DB-/HTTP-Tests decken Kontoaktionen, Passwort-/TOTP-Gates,
+  Rollenmatrix, Recovery, Mailerfolg/-fehler, Origin-Checks und persistente
+  Auth-Rate-Limits ab. Ein tatsächlicher Hostinger-/Mail-Proof bleibt extern.
