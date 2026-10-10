@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../src/generated/prisma/client.js";
 import { attachUploadClaims, hashUploadToken, MAX_IMAGE_BYTES, UploadError, validateUploadRequest, verifyBucketPolicy, verifyJpeg } from "../src/uploads/upload-service.js";
 import { validateOrderCreateInput } from "../src/orders/order-input.js";
 

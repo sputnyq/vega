@@ -26,7 +26,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
-    "db:check-schema": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
+    "db:check-schema": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
     "db:seed": "prisma db seed",
     "auth:generate-schema": "auth generate --config apps/server/src/auth.ts --adapter prisma --output prisma/schema.prisma",
     "auth:recover-admin": "tsx prisma/recover-admin.ts",
@@ -36,28 +36,31 @@
     "build:frontends": "npm run build --workspace @vega/admin && npm run build --workspace @vega/customer-form",
     "typecheck": "npm run build --workspace @vega/domain && npm run typecheck --workspace @vega/server && npm run typecheck --workspace @vega/admin && npm run typecheck --workspace @vega/customer-form && tsc --noEmit -p prisma/tsconfig.json",
     "lint": "oxlint --deny correctness --allow no-unused-vars --allow no-control-regex apps packages prisma",
-    "test": "tsx --test apps/server/test/*.test.ts apps/admin/test/*.test.ts apps/customer-form/test/*.test.ts",
-    "test:database": "tsx --test apps/server/test/database/*.test.ts",
+    "test": "tsx --import ./apps/server/test/setup.ts --test apps/server/test/*.test.ts apps/admin/test/*.test.ts apps/customer-form/test/*.test.ts",
+    "test:database": "tsx --test --test-concurrency=1 apps/server/test/database/*.test.ts",
     "test:deployment": "tsx --test apps/server/test/deployment/*.test.ts",
     "start": "npm run start --workspace @vega/server"
   },
   "devDependencies": {
     "auth": "1.7.7",
     "concurrently": "9.2.4",
+    "dotenv": "16.6.1",
     "oxlint": "1.87.0",
-    "prisma": "6.19.3",
+    "prisma": "7.10.0",
     "tsx": "4.20.6",
     "typescript": "7.0.2"
   },
   "overrides": {
     "deepmerge-ts": "8.0.2",
+    "@prisma/adapter-mariadb": {
+      "mariadb": "3.5.4"
+    },
     "mysql2": "3.24.5",
     "shell-quote": "1.12.0"
   },
   "allowScripts": {
     "esbuild@0.25.12": true,
-    "@prisma/client@6.19.3": true,
-    "prisma@6.19.3": true,
-    "@prisma/engines@6.19.3": true
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true
   }
 }

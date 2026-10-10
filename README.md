@@ -17,6 +17,7 @@ cp .env.example .env
 # BETTER_AUTH_SECRET mit `openssl rand -base64 32` erzeugen und in .env setzen.
 # INITIAL_ADMIN_EMAIL und INITIAL_ADMIN_PASSWORD nur für den einmaligen Seed setzen.
 npm ci
+npm run db:generate
 npm run db:up
 npm run db:migrate:dev
 npm run db:seed
@@ -146,8 +147,42 @@ Produktion verwendet ausschließlich bereits geprüfte Migrationen:
 
 ```sh
 npm run db:migrate:dev -- --name describe_change
+npm run db:generate
 npm run db:migrate:deploy
 ```
+
+Prisma CLI, Client und MariaDB-Adapter sind auf `7.10.0` gepinnt.
+`prisma-client` erzeugt ESM-TypeScript ausschließlich unter
+`apps/server/src/generated/prisma/`; die Dateien sind nicht versioniert und
+werden im Serverbuild nach `apps/server/dist/` kompiliert. Nach `npm ci`
+und nach Schemaänderungen `npm run db:generate` explizit ausführen.
+Migrationen generieren den Client nicht mehr automatisch und führen den
+Admin-Seed nicht automatisch aus; dafür bleibt `npm run db:seed` zuständig.
+
+`DATABASE_URL` bleibt die serverseitige MySQL-URL für CLI und Runtime.
+Die CLI liest sie aus `prisma.config.ts`, der Server konfiguriert daraus
+`PrismaMariaDb`. Generate und Build benötigen keine DB-Zugangsdaten; Start
+und Datenbankbefehle ohne URL scheitern ausdrücklich.
+
+| URL-Option | Runtime-Verhalten |
+|---|---|
+| `connection_limit` | Positive Anzahl, Standard: 5 Verbindungen |
+| `connect_timeout` | Positive Sekunden, Standard: 5 |
+| `pool_timeout` | Positive Sekunden, Standard: 10 |
+| `sslaccept=strict` | TLS mit Zertifikatsprüfung über die vertrauenswürdigen CAs |
+| `sslcert` | Pfad zur CA-Datei; aktiviert TLS mit Zertifikatsprüfung |
+
+Der Pool gibt ungenutzte Verbindungen nach 300 Sekunden frei, hält keine
+Mindestzahl offener Verbindungen und verwendet UTC. Credentials in der URL
+müssen korrekt prozentkodiert sein. Doppelte, unbekannte URL-Optionen,
+unbegrenzte Timeouts (`0`) und `sslaccept=accept_invalid_certs` werden
+abgewiesen statt still ignoriert. Ohne TLS-Option ist TLS nicht aktiviert;
+die tatsächliche Hostinger-Verbindungs-/CA-Konfiguration bleibt im
+nichtproduktiven Zieltarif nachzuweisen.
+
+Der Adapter pinnt upstream noch `mariadb@3.4.5`. Ein gezielter Override auf
+`3.5.4` behebt die bekannten Treiber-Advisories; Hintergrund und geprüfte
+Regressionen stehen in `docs/proof-01-integration-compatibility.md`.
 
 Produktions-Build und Start:
 
@@ -178,7 +213,10 @@ endend auf `_test` anlegen; `DATABASE_URL` für den Migrationslauf und
 die laufende App-Datenbank dafür verwenden. Der Testbefehl lehnt fehlende
 oder nicht entsprechend benannte Ziele ab. Die Tests prüfen FK-Löschregeln,
 Nummern-/Beziehungs-Eindeutigkeit, atomare Nummernvergabe, Snapshot-Überführung
-und relationale Order-Operationen. Es werden keine Legacy-Daten importiert.
+und relationale Order-Operationen. Zusätzlich werden Datentyp-Roundtrips,
+idempotentes Admin-Seeding und der Recovery-CLI-Pfad geprüft. DB-Testdateien
+laufen seriell, damit Bootstrap und Sole-Admin-Recovery nicht mit anderen
+Auth-Fixtures konkurrieren. Es werden keine Legacy-Daten importiert.
 
 Auftragadressen und Möbel-/Service-/Verpackungspositionen werden relational
 gespeichert und für Reads verwendet; übrige validierte Formularinformationen

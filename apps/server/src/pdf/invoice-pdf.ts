@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import PDFDocument from "pdfkit";
-import type { Invoice } from "@prisma/client";
+import type { Invoice } from "../generated/prisma/client.js";
 import { LEGACY_RZ24_LOGO } from "./legacy-logo.js";
 
 /** Server-side rendering of the established legacy InvoicePdf layout. */

@@ -180,6 +180,12 @@ Prozess und prüft Healthcheck, beide Frontends, Assets, Loader-Runtime-Pfade
 und die öffentliche/geschützte API-Grenze. Der tatsächliche GitHub-CI-Lauf und
 das nichtproduktive Hostinger-Deployment sind separat nachzuweisen.
 
+**ORM-Upgrade (2026-10-10):** Prisma CLI, Client und MariaDB-Adapter sind
+auf `7.10.0` gepinnt. CI generiert den serverseitigen ESM-Client explizit
+nach `npm ci`; Migrationsbefehle erzeugen ihn nicht mehr automatisch.
+Der gezielte `mariadb@3.5.4`-Override und der lokale Node-24-Proof sind
+in `docs/proof-01-integration-compatibility.md` dokumentiert.
+
 **Abnahme:** sauberer CI-Build; ein Deployment startet API und liefert Admin-/Formularassets aus.
 
 ### A2 – Prisma-Schema und Migrationen
@@ -187,7 +193,7 @@ das nichtproduktive Hostinger-Deployment sind separat nachzuweisen.
 **Abhängigkeit:** A1.  
 Fresh MySQL schema für Auth, Rollen, Aufträge/Kopien, Kataloge/Preisvorgaben, Bilderreferenzen, Events, Rechnungen, Gutschriften und Mahnungen. Uniqueness, FK-Regeln ohne unerwünschte Kaskaden, Indexe für Suchfelder, Nummernkreise, Archivfelder und `edited` definieren.
 
-**Lokaler Abschluss:** 13 versionierte Migrationen bauen eine leere
+**Lokaler Abschluss:** 14 versionierte Migrationen bauen eine leere
 MariaDB vollständig auf. `OrderAddress` und `OrderPosition` speichern die
 Adress-/Positionskerne relational; Anlage, Bearbeitung, Kopie, Detail-/Listenread
 und Rechnungsadressübernahme verwenden diese Beziehungen. Das validierte
@@ -204,6 +210,12 @@ Journal und Mailinhalte/-ereignisse werden dagegen mit dem Auftrag entfernt.
 Tests gegen eine explizit getrennte Testdatenbank prüfen diese FK-Regeln,
 Migration der Vega-Snapshots, atomaren Rollback und parallele Nummernvergabe.
 Gutschriften-/Mahnungs-Use-Cases, PDFs, Mail und Purge bleiben A7/A10-Arbeit.
+
+Der Prisma-7-Upgrade-Proof verwendet dieselben 14 SQL-Migrationen ohne
+Änderungen am Fachschema. Frische Migrationen und Drift-Prüfung sowie
+DB-/Auth-/Seed-/Recovery-Regressionen bestehen lokal auf MariaDB 10.11.19.
+Seeding bleibt ein expliziter Betreiberbefehl, keine Nebenwirkung einer
+Migration. Das ist kein Nachweis für den tatsächlichen Hostinger-Tarif.
 
 **Abnahme:** Migrationen bauen eine leere DB vollständig auf; Löschtests belegen, dass Auftrag/Kopie keine Geschwister oder Rechnungen kaskadierend entfernen.
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../generated/prisma/client.js";
 import { Router, type Response } from "express";
 import type { InvoiceInput } from "@vega/domain";
 import { prisma } from "../prisma.js";
