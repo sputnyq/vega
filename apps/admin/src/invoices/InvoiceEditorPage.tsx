@@ -6,6 +6,10 @@ import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type AdminInvoiceDt
 
 const emptyInvoice = (): InvoiceInput => ({ invoiceDate: new Date().toISOString().slice(0, 10), company: "", customerName: "", customerStreet: "", customerPostalCity: "", taxPercent: 19, text: "", entries: [], dueDates: [] });
 
+export function initializeInvoiceNumber(input: InvoiceInput, invoiceNumber: string | undefined): InvoiceInput {
+  return input.invoiceNumber?.trim() || !invoiceNumber ? input : { ...input, invoiceNumber };
+}
+
 export function InvoiceNumberField({ invoiceNumber, nextValue, editing, onChange }: { invoiceNumber?: string | undefined; nextValue?: number | undefined; editing: boolean; onChange: (value: string | undefined) => void }) {
   const manualNumber = invoiceNumber?.trim().slice(0, 64);
   const manualNext = manualInvoiceNextValue(manualNumber);
@@ -38,7 +42,10 @@ export function InvoiceEditorPage({ id, orderNumber, navigate }: { id?: string; 
       if (!response.ok || typeof number !== "number" || !Number.isSafeInteger(number) || number < 1 || number > MAX_INVOICE_SEQUENCE_VALUE) {
         setError(body.error?.message ?? "Rechnungsnummer konnte nicht geladen werden.");
         setLoadFailed(true);
-      } else setNextValue(number);
+      } else {
+        setNextValue(number);
+        setValue((current) => initializeInvoiceNumber(current, `R-${number}`));
+      }
     }).catch(() => { if (!cancelled) { setError("Rechnungsnummer konnte nicht geladen werden."); setLoadFailed(true); } }).finally(() => { if (!cancelled) setNumberLoading(false); });
     return () => { cancelled = true; };
   }, [id, orderNumber]);
@@ -51,7 +58,10 @@ export function InvoiceEditorPage({ id, orderNumber, navigate }: { id?: string; 
       if (!response.ok || !body.data) {
         setError(body.error?.message ?? "Rechnung konnte nicht geladen werden.");
         setLoadFailed(true);
-      } else setValue(body.data);
+      } else {
+        const loaded = body.data;
+        setValue((current) => id ? loaded : initializeInvoiceNumber(loaded, current.invoiceNumber));
+      }
     }).catch(() => { if (!cancelled) { setError("Rechnung konnte nicht geladen werden."); setLoadFailed(true); } }).finally(() => { if (!cancelled) { setBusy(false); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id, orderNumber]);

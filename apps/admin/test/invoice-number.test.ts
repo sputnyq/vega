@@ -3,7 +3,8 @@ import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
-import { InvoiceEditorPage, InvoiceNumberField } from "../src/invoices/InvoiceEditorPage.js";
+import { initializeInvoiceNumber, InvoiceEditorPage, InvoiceNumberField } from "../src/invoices/InvoiceEditorPage.js";
+import type { InvoiceInput } from "@vega/domain";
 
 function render(element: React.ReactElement) {
   const previous = Reflect.get(globalThis, "React");
@@ -19,7 +20,19 @@ function field(invoiceNumber: string | undefined, nextValue = 10, editing = fals
   return render(createElement(InvoiceNumberField, { invoiceNumber, nextValue, editing, onChange: () => {} }));
 }
 
-test("new invoice field visibly previews the number used without submitting it as a manual number", () => {
+test("new invoice field displays the initialized number as an editable input value", () => {
+  const input: InvoiceInput = { invoiceDate: "2026-10-10", company: "", customerName: "", customerStreet: "", customerPostalCity: "", taxPercent: 19, text: "", entries: [], dueDates: [] };
+  const initialized = initializeInvoiceNumber(input, "R-25");
+  assert.equal(initialized.invoiceNumber, "R-25");
+  assert.match(field(initialized.invoiceNumber, 25), /value="R-25"/u);
+  assert.match(field(initialized.invoiceNumber, 25), /Nächste automatische Nummer: R-26/u);
+  assert.equal(JSON.parse(JSON.stringify(initialized)).invoiceNumber, "R-25");
+  assert.equal(initializeInvoiceNumber({ ...input, invoiceNumber: "R-42" }, "R-25").invoiceNumber, "R-42");
+  assert.equal(initializeInvoiceNumber(input, initialized.invoiceNumber).invoiceNumber, "R-25");
+  assert.equal(initializeInvoiceNumber(input, undefined), input);
+});
+
+test("number field keeps automatic fallback and shows the next number for manual input", () => {
   const html = field(undefined);
   assert.match(html, /Verwendete Rechnungsnummer: R-10/u);
   assert.match(html, /placeholder="R-10"/u);

@@ -18,7 +18,10 @@
   Fehlgeschlagene Anlagen rollen auch die Nummernkreisänderung zurück.
   Spätere Änderungen einer Rechnung verändern den Nummernkreis nicht.
 - Der neue Rechnungseditor zeigt die verwendete Nummer und bei manuellen
-  `R-<Nummer>` zusätzlich die nächste automatische Nummer. Der Admin-only
+  `R-<Nummer>` zusätzlich die nächste automatische Nummer. Der
+  Editor trägt die geladene nächste Nummer initial als überschreibbaren
+  TextField-Eingabewert ein und sendet diesen Wert beim Speichern mit.
+  Der Admin-only
   Vorschau-GET `/api/admin/invoices/next-number` liest nur `nextValue`,
   ohne Reservierung oder Datenänderung (`Cache-Control: no-store`).
   Bei paralleler Anlage kann sich die automatische Vorschau bis zum Speichern

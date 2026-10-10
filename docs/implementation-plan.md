@@ -306,7 +306,10 @@ Auftrags-Toolbar-Button kann zunächst eine ungespeicherte, vorausgefüllte Vorl
 geöffnet werden; erst explizites Speichern im Rechnungseditor legt den Beleg an
 und vergibt die Rechnungsnummer gemäß ADR 0005. Der Vorlagen-GET verändert keine Daten.
 Der neue Editor zeigt die verwendete Nummer und bei manueller positiver
-ganzzahliger `R-<Nummer>` die nächste automatische Nummer. Ein Admin-only
+ganzzahliger `R-<Nummer>` die nächste automatische Nummer. Die geladene nächste
+Nummer steht initial als überschreibbarer TextField-Eingabewert im neuen
+Blanco- oder auftragsbezogenen Entwurf und wird beim Speichern mitgesendet.
+Ein Admin-only
 GET `/api/admin/invoices/next-number` liefert ausschließlich `nextValue`
 mit `Cache-Control: no-store`; die Vorschau reserviert keine Nummer und kann
 sich bei paralleler Anlage bis zum Speichern ändern. Manuelle sequenzwirksame
