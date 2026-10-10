@@ -233,7 +233,13 @@ test("order create, copy, edit, read and invoice address projection use independ
   const withoutSecondary = orderDataWithRelations(await prisma.order.findUniqueOrThrow({ where: { id: copied.id }, include: orderRelations }));
   assert.equal(withoutSecondary.details?.secondaryTo, undefined);
   await prisma.orderAddress.update({ where: { orderId_role: { orderId: copied.id, role: "TO" } }, data: { street: "Relationales Testziel 10" } });
-  const invoiceResponse = await fetch(`http://127.0.0.1:${address.port}/invoices/from-order/${copiedNumber}`, { method: "POST" });
+  const templateResponse = await fetch(`http://127.0.0.1:${address.port}/invoices/from-order/${copiedNumber}`);
+  assert.equal(templateResponse.status, 200);
+  const template = await responseData(templateResponse);
+  assert.equal(template.customerStreet, "Relationales Testziel 10");
+  const invoiceResponse = await fetch(`http://127.0.0.1:${address.port}/invoices/from-order/${copiedNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(template),
+  });
   assert.equal(invoiceResponse.status, 201);
   const invoice = await responseData(invoiceResponse);
   assert.ok(typeof invoice.id === "string");
@@ -264,15 +270,40 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
 
   const order = await createOrder(orderFixture(), "admin", "Test Admin");
   orderNumbers.push(order.orderNumber);
-  const createdResponse = await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" });
+  const countBefore = await prisma.invoice.count();
+  const templateResponse = await fetch(`${base}/from-order/${order.orderNumber}`);
+  assert.equal(templateResponse.status, 200);
+  assert.equal(templateResponse.headers.get("Cache-Control"), "no-store");
+  const template = await responseData(templateResponse);
+  assert.equal(template.id, undefined);
+  assert.equal(template.invoiceNumber, undefined);
+  assert.equal(template.customerName, (await prisma.order.findUniqueOrThrow({ where: { orderNumber: order.orderNumber } })).customerName);
+  assert.equal(await prisma.invoice.count(), countBefore);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" })).status, 400);
+  assert.equal(await prisma.invoice.count(), countBefore);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...template, customerName: "" }),
+  })).status, 400);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue);
+  const editedTemplate = { ...template, customerName: "Manuell geänderter Rechnungskunde", text: "Bearbeiteter Entwurf." };
+  const createdResponse = await fetch(`${base}/from-order/${order.orderNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editedTemplate),
+  });
   assert.equal(createdResponse.status, 201);
   const created = await responseData(createdResponse);
   const createdInvoiceNumber = stringValue(created.invoiceNumber);
   const createdInvoiceDate = stringValue(created.invoiceDate);
   assert.equal(createdInvoiceNumber, `R-${sequenceBefore.nextValue}`);
   assert.equal(created.orderNumber, order.orderNumber);
+  assert.equal(created.customerName, editedTemplate.customerName);
+  assert.equal(created.text, editedTemplate.text);
   assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 1);
-  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" })).status, 409);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editedTemplate),
+  })).status, 409);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`)).status, 409);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 1);
   assert.equal((await fetch(`${base}/missing-invoice`)).status, 404);
 
   const invoiceId = stringValue(created.id);

@@ -153,10 +153,12 @@ export function App() {
           ? <InvoicesPage navigate={navigatePath} />
         : route.path === "/invoices/archived"
           ? <InvoicesPage archived navigate={navigatePath} />
+        : route.sourceOrderNumber !== undefined
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} orderNumber={route.sourceOrderNumber} />
         : route.path === "/invoices/new" || route.path === "/blanco"
-          ? <InvoiceEditorPage navigate={navigatePath} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} />
         : route.path.startsWith("/invoices/")
-          ? <InvoiceEditorPage navigate={navigatePath} id={route.path.slice("/invoices/".length)} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} id={route.path.slice("/invoices/".length)} />
         : route.path.startsWith("/edit/")
         ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
             <OrderCreatePage key={route.path} navigate={navigatePath} onSaved={() => setOrderSaved(true)} onDirtyChange={setOrderDirty} onBusyChange={setOrderBusy} dirty={orderDirty} {...(route.path === "/edit/-1" ? {} : { orderNumber: Number(route.path.slice("/edit/".length)) })} />

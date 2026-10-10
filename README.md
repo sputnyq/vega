@@ -126,7 +126,12 @@ abgeschlossene Admin-Session.
 Die Toolbar gruppiert Speichern, Angebotskopie, PDF und E-Mail gemeinsam;
 vertikale Trenner mit seitlichem Abstand trennen Archivieren und den
 Admin-only-Button „Rechnung aus Auftrag anlegen“. Dieser speichert offene
-Änderungen vor der Rechnungserstellung und öffnet anschließend den Beleg.
+Änderungen am Auftrag und öffnet anschließend einen ungespeicherten,
+vorausgefüllten Rechnungsentwurf. Erst „Speichern“ im Rechnungseditor legt
+den Beleg samt Auftragsbezug an und vergibt eine Rechnungsnummer.
+`GET /api/admin/invoices/from-order/:orderNumber` liefert nur die Vorlage;
+`POST` auf derselben Route speichert die vom Admin geprüften Rechnungsdaten.
+Abbrechen oder Verlassen des Entwurfs erzeugt keinen Datenbankeintrag.
 
 Der PDF-Button im Auftragseditor lädt das vollständige Angebots-/Auftrags-/
 Abrechnungsdokument im bisherigen `umzugruckzuck24`-Layout herunter. Änderungen

@@ -10,7 +10,6 @@ import { FurnitureTab } from "./FurnitureTab.js";
 import { JournalTab } from "./JournalTab.js";
 import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
 import { downloadOrderPdf, saveAndFetchOrderPdf } from "./order-pdf-download.js";
-import { apiRequest } from "../api/api-request.js";
 
 const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Journal"];
 
@@ -128,8 +127,7 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
         if (file) downloadOrderPdf(file);
       } else if (createInvoice && orderNumber !== undefined) {
         if (dirty && !await save()) return;
-        const invoice = await apiRequest<{ id: string }>(`/api/admin/invoices/from-order/${orderNumber}`, "POST");
-        navigate(`/invoices/${invoice.id}`);
+        navigate(`/invoices/new/from-order/${orderNumber}`);
       } else {
         await save();
       }
