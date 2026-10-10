@@ -34,14 +34,16 @@ test("new invoice field displays the initialized number as an editable input val
 
 test("number field keeps automatic fallback and shows the next number for manual input", () => {
   const html = field(undefined);
-  assert.match(html, /Verwendete Rechnungsnummer: R-10/u);
   assert.match(html, /placeholder="R-10"/u);
   assert.match(html, /value=""/u);
-  assert.match(field(" R-0042 "), /Verwendete Rechnungsnummer: R-0042\. Nächste automatische Nummer: R-43/u);
+  assert.match(field(" R-0042 "), /Nächste automatische Nummer: R-43/u);
   assert.match(field("R-4"), /Nächste automatische Nummer: R-10/u);
-  assert.match(field("custom"), /Verwendete Rechnungsnummer: custom/u);
+  assert.match(field("custom"), /value="custom"/u);
   assert.doesNotMatch(field("custom"), /Nächste automatische Nummer/u);
   assert.doesNotMatch(field("R-0"), /Nächste automatische Nummer/u);
+  for (const number of [undefined, "R-25", "custom", "R-0"]) {
+    assert.doesNotMatch(field(number), /Leer lassen für automatische Nummer|Verwendete Rechnungsnummer/u);
+  }
 });
 
 test("sequence limits show an error only on creation, and editing never previews a sequence advance", () => {

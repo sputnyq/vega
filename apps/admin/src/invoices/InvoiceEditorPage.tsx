@@ -14,11 +14,10 @@ export function InvoiceNumberField({ invoiceNumber, nextValue, editing, onChange
   const manualNumber = invoiceNumber?.trim().slice(0, 64);
   const manualNext = manualInvoiceNextValue(manualNumber);
   const invalid = !editing && manualNext !== undefined && (!Number.isSafeInteger(manualNext) || manualNext > MAX_INVOICE_SEQUENCE_VALUE);
-  const usedNumber = manualNumber || (nextValue === undefined ? undefined : `R-${nextValue}`);
   const helperText = editing ? "Leer lassen, um die bisherige Nummer beizubehalten."
     : invalid ? "Rechnungsnummer überschreitet den unterstützten Nummernkreis (maximal R-2147483646)."
-    : usedNumber ? `Verwendete Rechnungsnummer: ${usedNumber}.${manualNext !== undefined && nextValue !== undefined ? ` Nächste automatische Nummer: R-${Math.max(nextValue, manualNext)}.` : ""}`
-    : "Automatische Rechnungsnummer wird geladen.";
+    : manualNext !== undefined && nextValue !== undefined ? `Nächste automatische Nummer: R-${Math.max(nextValue, manualNext)}.`
+    : undefined;
   return <TextField label="Rechnungsnummer" value={invoiceNumber ?? ""} placeholder={!editing && nextValue !== undefined ? `R-${nextValue}` : undefined} onChange={(e) => onChange(e.target.value || undefined)} error={invalid} helperText={helperText} />;
 }
 
