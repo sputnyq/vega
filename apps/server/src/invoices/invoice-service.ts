@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { InvoiceInput } from "@vega/domain";
+import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type InvoiceInput } from "@vega/domain";
 import { prisma } from "../prisma.js";
 import { invoiceData } from "./invoice-input.js";
 
@@ -7,12 +7,26 @@ const RETENTION_DAYS = 30;
 
 export async function createInvoice(input: InvoiceInput, order?: { id: string; orderNumber: number }) {
   return prisma.$transaction(async (tx) => {
-    const sequence = await tx.invoiceNumberSequence.update({
-      where: { id: 1 },
-      data: { nextValue: { increment: 1 } },
-      select: { nextValue: true },
-    });
-    const invoiceNumber = input.invoiceNumber || `R-${sequence.nextValue - 1}`;
+    let invoiceNumber = input.invoiceNumber;
+    if (invoiceNumber) {
+      const nextValue = manualInvoiceNextValue(invoiceNumber);
+      if (nextValue !== undefined) {
+        if (!Number.isSafeInteger(nextValue) || nextValue > MAX_INVOICE_SEQUENCE_VALUE) {
+          throw new RangeError("Rechnungsnummer überschreitet den unterstützten Nummernkreis.");
+        }
+        await tx.invoiceNumberSequence.updateMany({
+          where: { id: 1, nextValue: { lt: nextValue } },
+          data: { nextValue },
+        });
+      }
+    } else {
+      const sequence = await tx.invoiceNumberSequence.update({
+        where: { id: 1 },
+        data: { nextValue: { increment: 1 } },
+        select: { nextValue: true },
+      });
+      invoiceNumber = `R-${sequence.nextValue - 1}`;
+    }
     return tx.invoice.create({
       data: {
         id: randomUUID(),

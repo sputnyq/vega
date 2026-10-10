@@ -271,6 +271,11 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   const order = await createOrder(orderFixture(), "admin", "Test Admin");
   orderNumbers.push(order.orderNumber);
   const countBefore = await prisma.invoice.count();
+  const numberPreview = await fetch(`${base}/next-number`);
+  assert.equal(numberPreview.status, 200);
+  assert.equal(numberPreview.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(await responseData(numberPreview), { nextValue: sequenceBefore.nextValue });
+  assert.equal(await prisma.invoice.count(), countBefore);
   const templateResponse = await fetch(`${base}/from-order/${order.orderNumber}`);
   assert.equal(templateResponse.status, 200);
   assert.equal(templateResponse.headers.get("Cache-Control"), "no-store");
@@ -341,7 +346,7 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   assert.equal(manual.invoiceNumber, manualNumber);
   const manualId = stringValue(manual.id);
   invoiceIds.push(manualId);
-  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 3);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 2);
   const sequenceBeforeFailure = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
   await assert.rejects(persistInvoice({ ...invoiceInput, invoiceNumber: manualNumber }), uniqueFailure);
   assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBeforeFailure.nextValue);
@@ -412,6 +417,50 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   assert.match(pdfResponse.headers.get("content-disposition") ?? "", /filename\*=UTF-8''/u);
   assert.equal((await pdfResponse.arrayBuffer()).byteLength > 0, true);
   assert.equal(await prisma.orderActivityEvent.count({ where: { orderId: (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).orderId!, action: "PDF_EXPORTED" } }), 1);
+});
+
+test("manual invoice creation advances only upwards, rolls back conflicts, and serializes concurrent allocations", async (context) => {
+  const original = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
+  const invoiceIds: string[] = [];
+  context.after(async () => {
+    await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+    await prisma.invoiceNumberSequence.update({ where: { id: 1 }, data: { nextValue: original.nextValue } });
+  });
+  const base = original.nextValue + 100;
+  await prisma.invoiceNumberSequence.update({ where: { id: 1 }, data: { nextValue: base } });
+  const input: InvoiceInput = {
+    invoiceDate: "2026-10-10", company: "", customerName: "Nummernkreis Test",
+    customerStreet: "", customerPostalCity: "", taxPercent: 19, text: "", entries: [], dueDates: [],
+  };
+  const currentNext = async () => (await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue;
+  const persist = async (invoiceNumber?: string) => {
+    const invoice = await persistInvoice({ ...input, ...(invoiceNumber ? { invoiceNumber } : {}) });
+    invoiceIds.push(invoice.id);
+    return invoice;
+  };
+  for (const number of [`R-${base - 1}`, `R-${base - 2}`, `custom-${randomUUID()}`]) {
+    assert.equal((await persist(number)).invoiceNumber, number);
+    assert.equal(await currentNext(), base);
+  }
+  assert.equal((await persist(`R-00${base + 20}`)).invoiceNumber, `R-00${base + 20}`);
+  assert.equal(await currentNext(), base + 21);
+  assert.equal((await persist()).invoiceNumber, `R-${base + 21}`);
+
+  const concurrent = await Promise.all([persist(`R-${base + 100}`), persist(`R-${base + 200}`), persist(), persist()]);
+  assert.equal(new Set(concurrent.map((invoice) => invoice.invoiceNumber)).size, 4);
+  assert.equal(await currentNext(), Math.max(...concurrent.map((invoice) => Number(invoice.invoiceNumber.slice(2)))) + 1);
+
+  const beforeFailure = await currentNext();
+  const duplicate = await prisma.invoice.create({ data: {
+    id: randomUUID(), invoiceNumber: `R-${base + 1000}`, invoiceDate: new Date("2026-10-10"),
+    customerNameSnapshot: input.customerName, text: "", entries: [], dueDates: [],
+  } });
+  invoiceIds.push(duplicate.id);
+  await assert.rejects(persistInvoice({ ...input, invoiceNumber: duplicate.invoiceNumber }), uniqueFailure);
+  assert.equal(await currentNext(), beforeFailure);
+  const { updateInvoice } = await import("../../src/invoices/invoice-service.js");
+  await updateInvoice(duplicate.id, { ...input, invoiceNumber: `R-${base + 2000}` }, duplicate.invoiceNumber);
+  assert.equal(await currentNext(), beforeFailure);
 });
 
 test("failed order transactions consume no number and concurrent creation assigns unique consecutive numbers", async (context) => {

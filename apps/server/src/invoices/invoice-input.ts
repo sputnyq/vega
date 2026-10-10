@@ -1,7 +1,7 @@
 import type { Prisma } from "../generated/prisma/client.js";
-import type { InvoiceInput } from "@vega/domain";
+import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type InvoiceInput } from "@vega/domain";
 
-export function validateInvoice(value: unknown): { ok: true; value: InvoiceInput } | { ok: false; message: string } {
+export function validateInvoice(value: unknown, creating = false): { ok: true; value: InvoiceInput } | { ok: false; message: string } {
   if (!isRecord(value)) return { ok: false, message: "Ungültige Rechnungsdaten." };
   const strings = ["invoiceDate", "company", "customerName", "customerStreet", "customerPostalCity", "text"] as const;
   if (strings.some((key) => typeof value[key] !== "string") || typeof value.taxPercent !== "number" || !Number.isFinite(value.taxPercent) || value.taxPercent < 0 || value.taxPercent > 100 || !Array.isArray(value.entries) || !Array.isArray(value.dueDates)) return { ok: false, message: "Bitte prüfen Sie die Rechnungsdaten." };
@@ -11,6 +11,8 @@ export function validateInvoice(value: unknown): { ok: true; value: InvoiceInput
   const dueDates = value.dueDates as unknown[];
   if (dueDates.length > 20 || dueDates.some((entry) => !isRecord(entry) || typeof entry.date !== "string" || typeof entry.amount !== "number" || typeof entry.text !== "string" || entry.amount < 0)) return { ok: false, message: "Ungültige Fälligkeiten." };
   const invoiceNumber = typeof value.invoiceNumber === "string" && value.invoiceNumber.trim() ? value.invoiceNumber.trim().slice(0, 64) : undefined;
+  const nextValue = manualInvoiceNextValue(invoiceNumber);
+  if (creating && nextValue !== undefined && (!Number.isSafeInteger(nextValue) || nextValue > MAX_INVOICE_SEQUENCE_VALUE)) return { ok: false, message: "Rechnungsnummer überschreitet den unterstützten Nummernkreis (maximal R-2147483646)." };
   return { ok: true, value: { ...(invoiceNumber ? { invoiceNumber } : {}), invoiceDate: value.invoiceDate as string, company: (value.company as string).trim().slice(0, 191), customerName: (value.customerName as string).trim().slice(0, 300), customerStreet: (value.customerStreet as string).trim().slice(0, 191), customerPostalCity: (value.customerPostalCity as string).trim().slice(0, 191), taxPercent: value.taxPercent as number, text: (value.text as string).slice(0, 10000), entries: entries as InvoiceInput["entries"], dueDates: dueDates as InvoiceInput["dueDates"] } };
 }
 
