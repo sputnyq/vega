@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Paper, Snackbar, Stack, Tab, Tabs } from "@mui/material";
 import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
-import { AccountingTab } from "./AccountingTab.js";
 import { AddressesTab } from "./AddressesTab.js";
 import { BasisTab } from "./BasisTab.js";
 import { ConditionsTab } from "./ConditionsTab.js";
@@ -10,13 +9,17 @@ import { ExtrasTab } from "./ExtrasTab.js";
 import { FurnitureTab } from "./FurnitureTab.js";
 import { JournalTab } from "./JournalTab.js";
 import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
+import { downloadOrderPdf, saveAndFetchOrderPdf } from "./order-pdf-download.js";
+import { apiRequest } from "../api/api-request.js";
 
-const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Buchhaltung", "Journal"];
+const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Journal"];
 
 interface OrderCreatePageProps {
   navigate: (path: string) => void;
   onSaved: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  onBusyChange: (busy: boolean) => void;
+  dirty: boolean;
   orderNumber?: number;
 }
 
@@ -27,7 +30,7 @@ interface ApiErrorResponse {
   };
 }
 
-export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber }: OrderCreatePageProps) {
+export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange, dirty, orderNumber }: OrderCreatePageProps) {
   const [value, setValue] = useState(createEmptyOrder);
   const [activeTab, setActiveTab] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -35,6 +38,11 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber 
   const [saved, setSaved] = useState<CreateOrderResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loading, setLoading] = useState(orderNumber !== undefined);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    onBusyChange(loading || busy || loadFailed);
+  }, [loading, busy, loadFailed, onBusyChange]);
 
   useEffect(() => {
     if (orderNumber === undefined) return;
@@ -43,7 +51,7 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber 
       .then(async (response) => ({ response, body: await response.json() as { data?: AdminOrderDetail; error?: { message?: string } } }))
       .then(({ response, body }) => {
         if (cancelled) return;
-        if (!response.ok || !body.data) { setError(body.error?.message ?? "Auftrag konnte nicht geladen werden."); return; }
+        if (!response.ok || !body.data) { setError(body.error?.message ?? "Auftrag konnte nicht geladen werden."); setLoadFailed(true); return; }
         const base = createEmptyOrder();
         const data = body.data.data;
         setValue({
@@ -56,7 +64,7 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber 
         });
         onDirtyChange(false);
       })
-      .catch(() => { if (!cancelled) setError("Auftrag konnte nicht geladen werden."); })
+      .catch(() => { if (!cancelled) { setError("Auftrag konnte nicht geladen werden."); setLoadFailed(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [onDirtyChange, orderNumber]);
@@ -71,41 +79,64 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber 
     onDirtyChange(true);
   }
 
+  async function save(): Promise<boolean> {
+    const response = await fetch(orderNumber === undefined ? "/api/orders" : `/api/admin/orders/${orderNumber}`, {
+      method: orderNumber === undefined ? "POST" : "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(value),
+    });
+    const body = await response.json() as { data?: CreateOrderResult | AdminOrderDetail } & ApiErrorResponse;
+    if (!response.ok || !body.data) {
+      const issues = body.error?.issues ?? [];
+      const fieldErrors = issues.map((issue) => `${issue.field}: ${issue.message}`);
+      const firstField = issues[0]?.field ?? "";
+      if (firstField.startsWith("customer")) setActiveTab(0);
+      else if (firstField === "from" || firstField === "to" || firstField.startsWith("details.secondaryFrom") || firstField.startsWith("details.secondaryTo")) setActiveTab(1);
+      else if (firstField.startsWith("details.furniture")) setActiveTab(2);
+      else if (firstField.startsWith("details.extras")) setActiveTab(3);
+      else if (firstField === "movingDate" || firstField === "movingTime" || firstField.startsWith("date") || firstField.startsWith("details.basis")) setActiveTab(4);
+      else if (firstField.startsWith("details.conditions")) setActiveTab(5);
+      setError(fieldErrors.length > 0 ? fieldErrors.join(" · ") : body.error?.message ?? "Der Auftrag konnte nicht gespeichert werden.");
+      return false;
+    }
+    if (orderNumber === undefined) {
+      setSaved({ orderNumber: body.data.orderNumber });
+      onSaved();
+    } else {
+      onDirtyChange(false);
+      setSaveSuccess(true);
+    }
+    return true;
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || loading || loadFailed) return;
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const exportPdf = submitter instanceof HTMLButtonElement && submitter.value === "pdf";
+    const createInvoice = submitter instanceof HTMLButtonElement && submitter.value === "invoice";
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(orderNumber === undefined ? "/api/orders" : `/api/admin/orders/${orderNumber}`, {
-        method: orderNumber === undefined ? "POST" : "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(value),
-      });
-      const body = await response.json() as { data?: CreateOrderResult | AdminOrderDetail } & ApiErrorResponse;
-      if (!response.ok || !body.data) {
-        const issues = body.error?.issues ?? [];
-        const fieldErrors = issues.map((issue) => `${issue.field}: ${issue.message}`);
-        const firstField = issues[0]?.field ?? "";
-        if (firstField.startsWith("customer")) setActiveTab(0);
-        else if (firstField === "from" || firstField === "to" || firstField.startsWith("details.secondaryFrom") || firstField.startsWith("details.secondaryTo")) setActiveTab(1);
-        else if (firstField.startsWith("details.furniture")) setActiveTab(2);
-        else if (firstField.startsWith("details.extras")) setActiveTab(3);
-        else if (firstField === "movingDate" || firstField === "movingTime" || firstField.startsWith("date") || firstField.startsWith("details.basis")) setActiveTab(4);
-        else if (firstField.startsWith("details.conditions")) setActiveTab(5);
-        setError(fieldErrors.length > 0 ? fieldErrors.join(" · ") : body.error?.message ?? "Der Auftrag konnte nicht gespeichert werden.");
-        return;
-      }
-      if (orderNumber === undefined) {
-        setSaved({ orderNumber: body.data.orderNumber });
-        onSaved();
+      if (exportPdf && orderNumber !== undefined) {
+        if ((value.from.parkingSlot || value.to.parkingSlot)
+          && !value.details.conditions.some((condition) => condition.description.toUpperCase().includes("HALTEVERBOT"))) {
+          window.alert("Halteverbotzone(n) wurde(n) ausgewählt!\nBitte entweder die HVZ entfernen oder als Kondition aufnehmen.");
+        }
+        const file = await saveAndFetchOrderPdf(orderNumber, () => dirty ? save() : Promise.resolve(true));
+        if (file) downloadOrderPdf(file);
+      } else if (createInvoice && orderNumber !== undefined) {
+        if (dirty && !await save()) return;
+        const invoice = await apiRequest<{ id: string }>(`/api/admin/invoices/from-order/${orderNumber}`, "POST");
+        navigate(`/invoices/${invoice.id}`);
       } else {
-        onDirtyChange(false);
-        setSaveSuccess(true);
+        await save();
       }
-    } catch {
-      setError("Der Server ist derzeit nicht erreichbar. Bitte versuchen Sie es erneut.");
+    } catch (error) {
+      setError(error instanceof Error && !(error instanceof TypeError)
+        ? error.message
+        : "Der Server ist derzeit nicht erreichbar. Bitte versuchen Sie es erneut.");
     } finally {
       setBusy(false);
     }
@@ -157,10 +188,7 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, orderNumber 
           <ConditionsTab value={value} onConditionsChange={(conditions) => updateDetails({ ...value.details, conditions })} />
         </div>
         <div role="tabpanel" id="order-tabpanel-6" aria-labelledby="order-tab-6" hidden={activeTab !== 6}>
-          <AccountingTab navigate={navigate} {...(orderNumber === undefined ? {} : { orderNumber })} />
-        </div>
-        <div role="tabpanel" id="order-tabpanel-7" aria-labelledby="order-tab-7" hidden={activeTab !== 7}>
-          {activeTab === 7 && <JournalTab {...(orderNumber === undefined ? {} : { orderNumber })} />}
+          {activeTab === 6 && <JournalTab {...(orderNumber === undefined ? {} : { orderNumber })} />}
         </div>
       </fieldset>
       {busy && <Alert severity="info" role="status">Auftrag wird gespeichert …</Alert>}

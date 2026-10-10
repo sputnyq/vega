@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "predev": "npm run db:generate --prefix ../..",
+    "dev": "cd ../.. && tsx watch apps/server/src/main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.foundation-tests.json"
@@ -19,6 +20,8 @@
     "dotenv": "16.6.1",
     "express": "5.2.1",
     "helmet": "8.3.0",
+    "jspdf": "4.2.1",
+    "jspdf-autotable": "5.0.8",
     "pdfkit": "^0.17.2",
     "pino-http": "11.0.0",
     "sharp": "0.35.5"

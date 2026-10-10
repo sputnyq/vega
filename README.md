@@ -99,6 +99,13 @@ Lokale URLs:
 - Admin-SPA: <http://127.0.0.1:5173/> (unauthenticated users are redirected to `/login`; TOTP challenges use `/two-factor`; unknown paths show the 404 page)
 - Kundenformular: <http://127.0.0.1:5174/customer-form/>
 
+Die lokalen Allowlisten in `.env.example` erlauben auch `localhost` auf den
+Frontend-Ports. `localhost` und `127.0.0.1` sind unterschiedliche Origins;
+bei eigenen Dev-Ports den genauen Admin-Origin in
+`BETTER_AUTH_TRUSTED_ORIGINS` und `CORS_ALLOWED_ORIGINS` ergänzen. Nach
+Änderungen an `.env` den Dev-Server neu starten. Der Kundenformular-Origin
+gehört nur in die CORS-Liste, nicht in die Auth-Liste.
+
 Admin-Routen übernehmen den Legacy-Pfadbestand (`/`, `/edit/:id`, `/blanco`,
 `/settings/*`, `/email-text/:id`) und ergänzen `/invoices`,
 `/invoices/archived`, `/orders/archived` und `/profile`. Einstellungen sind in
@@ -116,9 +123,30 @@ Verpackungen und Leistungen (`show=false`) sind öffentlich nicht enthalten.
 Änderungen laufen ausschließlich über `/api/admin/catalog/*` und erfordern eine
 abgeschlossene Admin-Session.
 
-`/edit/-1` enthält die modulare, siebenteilige Auftragserfassung nach dem
-Legacy-Aufbau (Kunde, Adressen, Umzugsgut, Extras, Basis, Konditionen,
-Buchhaltung). Jeweils eine zweite Be-/Entladestelle lässt sich ergänzen und mit
+Die Toolbar gruppiert Speichern, Angebotskopie, PDF und E-Mail gemeinsam;
+vertikale Trenner mit seitlichem Abstand trennen Archivieren und den
+Admin-only-Button „Rechnung aus Auftrag anlegen“. Dieser speichert offene
+Änderungen vor der Rechnungserstellung und öffnet anschließend den Beleg.
+
+Der PDF-Button im Auftragseditor lädt das vollständige Angebots-/Auftrags-/
+Abrechnungsdokument im bisherigen `umzugruckzuck24`-Layout herunter. Änderungen
+werden vor dem Export gespeichert; bei Speicher- oder PDF-Fehlern gibt es keinen
+Download. Admins und Kundenberater mit abgeschlossener Anmeldung können das PDF
+über `GET /api/admin/orders/:orderNumber/pdf` abrufen. Jeder erfolgreiche Export
+wird im Auftragsjournal protokolliert; PDF-Dateien werden nur für die Antwort
+erzeugt, nicht auf dem Server gespeichert. Logo, AGB, Bankdaten, feste Texte,
+Seitennummerierung und Dateinamenskonvention entsprechen der Legacy-Vorlage.
+Die Konditionssumme stammt ausschließlich aus gespeicherten Staff-Eingaben;
+der Export ergänzt keine automatische Preiskalkulation. Die Zusatzpreisliste
+verwendet die aktuellen Vega-Katalogpreise. Freitextpositionen bleiben ohne
+erfundene Preise sichtbar; Angaben zu besonderen Möbeln verwenden die in Vega
+gespeicherten Texte, ohne nicht erfasste Maße oder Gewichte zu ergänzen.
+
+`/edit/-1` enthält die modulare Auftragserfassung nach dem
+Legacy-Aufbau (Kunde, Adressen, Umzugsgut, Extras, Basis, Konditionen)
+und das Journal. Buchhaltung hat keinen eigenen Auftragsreiter;
+Rechnungen werden über den Admin-Button in der Toolbar angelegt.
+Jeweils eine zweite Be-/Entladestelle lässt sich ergänzen und mit
 der ersten tauschen; Speichern sitzt wie früher rechts oben in der Navigation.
 Das Adminformular sendet `POST /api/orders`; das Kundenformular verwendet
 `POST /api/public/orders` mit zusätzlicher Formular-/Datenschutzvalidierung.
@@ -133,7 +161,7 @@ paginiert mit zehn Einträgen. Mitarbeitende können Aufträge suchen, bearbeite
 archivieren/wiederherstellen und Angebotskopien erstellen. Der Editor zeigt ein
 minimalistisches Journal ohne Feld-Diffs. Die Rechnungsverwaltung ist Admin-only:
 Blanco-Rechnungen unter `/blanco` bzw. `/invoices/new`, Rechnungen mit optionalem
-1:1-Auftragsbezug aus dem Buchhaltungsreiter sowie Übersicht/Archiv unter
+1:1-Auftragsbezug über die Auftrags-Toolbar sowie Übersicht/Archiv unter
 `/invoices` und `/invoices/archived`. Rechnungs-PDFs werden serverseitig aus dem
 aktuellen Stand erzeugt und nicht gespeichert.
 
@@ -154,8 +182,11 @@ npm run db:migrate:deploy
 Prisma CLI, Client und MariaDB-Adapter sind auf `7.10.0` gepinnt.
 `prisma-client` erzeugt ESM-TypeScript ausschließlich unter
 `apps/server/src/generated/prisma/`; die Dateien sind nicht versioniert und
-werden im Serverbuild nach `apps/server/dist/` kompiliert. Nach `npm ci`
-und nach Schemaänderungen `npm run db:generate` explizit ausführen.
+werden im Serverbuild nach `apps/server/dist/` kompiliert. `npm run dev`,
+`npm run dev:server` und der Dev-Befehl im Server-Workspace generieren den
+Client automatisch vor dem Serverstart; ebenso generiert `npm run build`
+ihn vor dem Build. Für andere Befehle nach `npm ci` und nach Schemaänderungen
+`npm run db:generate` explizit ausführen.
 Migrationen generieren den Client nicht mehr automatisch und führen den
 Admin-Seed nicht automatisch aus; dafür bleibt `npm run db:seed` zuständig.
 

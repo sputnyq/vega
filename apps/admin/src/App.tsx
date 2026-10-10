@@ -52,6 +52,7 @@ export function App() {
   const [initialPassword, setInitialPassword] = useState<PendingInitialPassword | null>(null);
   const [orderSaved, setOrderSaved] = useState(false);
   const [orderDirty, setOrderDirty] = useState(false);
+  const [orderBusy, setOrderBusy] = useState(true);
   const [totpPassword, setTotpPassword] = useState<string | undefined>();
   const [twoFactorRequired, setTwoFactorRequired] = useState(() => window.location.pathname === "/two-factor");
   const route = resolveAdminRoute(pathname);
@@ -158,7 +159,7 @@ export function App() {
           ? <InvoiceEditorPage navigate={navigatePath} id={route.path.slice("/invoices/".length)} />
         : route.path.startsWith("/edit/")
         ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
-            <OrderCreatePage navigate={navigatePath} onSaved={() => setOrderSaved(true)} onDirtyChange={setOrderDirty} {...(route.path === "/edit/-1" ? {} : { orderNumber: Number(route.path.slice("/edit/".length)) })} />
+            <OrderCreatePage key={route.path} navigate={navigatePath} onSaved={() => setOrderSaved(true)} onDirtyChange={setOrderDirty} onBusyChange={setOrderBusy} dirty={orderDirty} {...(route.path === "/edit/-1" ? {} : { orderNumber: Number(route.path.slice("/edit/".length)) })} />
           </Suspense>
         : route.settingsArea === "options"
           ? <OptionsPage />
@@ -171,7 +172,7 @@ export function App() {
               : <RoutePlaceholderPage route={route} />;
 
   return (
-    <AdminShell user={staffUser} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty}>
+    <AdminShell user={staffUser} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty} orderBusy={orderBusy}>
       {page}
     </AdminShell>
   );
