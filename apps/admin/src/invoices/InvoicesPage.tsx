@@ -3,6 +3,14 @@ import SearchIcon from "@mui/icons-material/Search";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
 import type { AdminInvoiceDto } from "@vega/domain";
+
+const currencyFormatter = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
+
+export function invoiceTotal(invoice: Pick<AdminInvoiceDto, "entries" | "taxPercent">): number {
+  const net = invoice.entries.reduce((sum, entry) => sum + entry.quantity * entry.unitPrice, 0);
+  return net + net * invoice.taxPercent / 100;
+}
+
 export function InvoicesPage({ archived = false, navigate }: { archived?: boolean; navigate: (path: string) => void }) {
   const [items, setItems] = useState<AdminInvoiceDto[]>([]);
   const [search, setSearch] = useState("");
@@ -83,6 +91,23 @@ export function InvoicesPage({ archived = false, navigate }: { archived?: boolea
       )}
     </Stack>
     {error && <Alert severity="error">{error}</Alert>}
-    <Paper variant="outlined"><Table size="small"><TableHead><TableRow><TableCell>Nummer</TableCell><TableCell>Kunde</TableCell><TableCell>Auftrag</TableCell><TableCell>Datum</TableCell><TableCell /></TableRow></TableHead><TableBody>{items.map((invoice) => <TableRow key={invoice.id}><TableCell><Button onClick={() => navigate(`/invoices/${invoice.id}`)}>{invoice.invoiceNumber}</Button></TableCell><TableCell>{invoice.customerName}</TableCell><TableCell>{invoice.orderNumber ?? "–"}</TableCell><TableCell>{new Date(`${invoice.invoiceDate}T00:00:00`).toLocaleDateString("de-DE")}</TableCell><TableCell><Button size="small" onClick={() => void archive(invoice.id)}>{archived ? "Wiederherstellen" : "Archivieren"}</Button></TableCell></TableRow>)}{items.length === 0 && <TableRow><TableCell colSpan={5} align="center">Keine Rechnungen vorhanden.</TableCell></TableRow>}</TableBody></Table></Paper>
+    <Paper variant="outlined">
+      <Table size="small">
+        <TableHead><TableRow><TableCell>Nummer</TableCell><TableCell>Kunde</TableCell><TableCell>Auftragsnummer</TableCell><TableCell>Datum</TableCell><TableCell>Rechnungssumme</TableCell>{archived && <TableCell />}</TableRow></TableHead>
+        <TableBody>
+          {items.map((invoice) => (
+            <TableRow key={invoice.id}>
+              <TableCell><Button onClick={() => navigate(`/invoices/${invoice.id}`)}>{invoice.invoiceNumber}</Button></TableCell>
+              <TableCell>{invoice.customerName}</TableCell>
+              <TableCell>{invoice.orderNumber ?? "–"}</TableCell>
+              <TableCell>{new Date(`${invoice.invoiceDate}T00:00:00`).toLocaleDateString("de-DE")}</TableCell>
+              <TableCell>{currencyFormatter.format(invoiceTotal(invoice))}</TableCell>
+              {archived && <TableCell><Button size="small" onClick={() => void archive(invoice.id)}>Wiederherstellen</Button></TableCell>}
+            </TableRow>
+          ))}
+          {items.length === 0 && <TableRow><TableCell colSpan={archived ? 6 : 5} align="center">Keine Rechnungen vorhanden.</TableCell></TableRow>}
+        </TableBody>
+      </Table>
+    </Paper>
   </Stack>;
 }

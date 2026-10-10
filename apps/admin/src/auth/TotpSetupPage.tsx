@@ -109,7 +109,7 @@ export function TotpSetupPage({ initialPassword, onComplete }: TotpSetupPageProp
             <Typography color="text.secondary" align="center">
               Scannen Sie den QR-Code mit Ihrer Authenticator-App. Er wird lokal im Browser erzeugt.
             </Typography>
-            <Paper variant="outlined" sx={{ p: 2, bgcolor: "#fff" }}>
+            <Paper variant="outlined" sx={{ p: 2 }}>
               <QRCodeSVG value={totpURI} size={192} aria-label="TOTP-Einrichtungs-QR-Code" />
             </Paper>
             <TextField

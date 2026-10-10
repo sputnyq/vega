@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, CircularProgress, List, ListItem, ListItemText, Stack, Typography } from "@mui/material";
+import { Alert, Card, CircularProgress, List, ListItem, ListItemText, Stack, Typography } from "@mui/material";
 import type { AdminOrderJournalEntry } from "@vega/domain";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -31,10 +31,28 @@ export function JournalTab({ orderNumber }: { orderNumber?: number }) {
     return () => { cancelled = true; };
   }, [orderNumber]);
 
-  if (orderNumber === undefined) return <Typography color="text.secondary">Das Journal steht nach dem ersten Speichern des Auftrags zur Verfügung.</Typography>;
+  if (orderNumber === undefined) return <Card><List disablePadding><ListItem sx={{ px: 2, py: 1 }}><ListItemText primary={<Typography color="text.secondary">Das Journal steht nach dem ersten Speichern des Auftrags zur Verfügung.</Typography>} /></ListItem></List></Card>;
   if (loading) return <Stack sx={{ py: 4, alignItems: "center" }}><CircularProgress /></Stack>;
-  if (error) return <Alert severity="error">{error}</Alert>;
-  return <Stack spacing={1}><Typography color="text.secondary">Das Journal protokolliert Aktionen, Zeitpunkte und Akteure ohne Feld-Diffs.</Typography><List disablePadding>{items.map((entry) => <ListItem key={entry.id} divider><ListItemText primary={labelFor(entry.action)} secondary={`${new Date(entry.occurredAt).toLocaleString("de-DE")} · ${entry.actorName}`} /></ListItem>)}{items.length === 0 && <Typography color="text.secondary">Noch keine Ereignisse vorhanden.</Typography>}</List></Stack>;
+  if (error) return <Card sx={{ p: 2 }}><Alert severity="error">{error}</Alert></Card>;
+  return <Stack spacing={2}>
+    {items.length > 0 ? items.map((entry) => (
+      <Card key={entry.id}>
+        <List disablePadding>
+          <ListItem sx={{ px: 2, py: 1 }}>
+            <ListItemText primary={labelFor(entry.action)} secondary={`${new Date(entry.occurredAt).toLocaleString("de-DE")} · ${entry.actorName}`} />
+          </ListItem>
+        </List>
+      </Card>
+    )) : (
+      <Card>
+        <List disablePadding>
+          <ListItem sx={{ px: 2, py: 1 }}>
+            <ListItemText primary="Noch keine Ereignisse vorhanden." />
+          </ListItem>
+        </List>
+      </Card>
+    )}
+  </Stack>;
 }
 
 function labelFor(action: string): string {
