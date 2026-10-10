@@ -1,3 +1,5 @@
+export { meetsPasswordPolicy, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./password-policy.js";
+
 /** Anwendungsrollen; Berechtigungen werden serverseitig durchgesetzt. */
 export type UserRole = "Admin" | "Kundenberater";
 
