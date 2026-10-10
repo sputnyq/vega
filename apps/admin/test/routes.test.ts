@@ -18,16 +18,27 @@ test("legacy order and settings routes resolve to their existing sections", () =
   assert.equal(resolveAdminRoute("/email-text/42")?.title, "E-Mail-Text");
 });
 
-test("settings routes separate options, content management, and user management", () => {
+test("settings routes separate options, catalog sections, and user management", () => {
   assert.equal(resolveAdminRoute("/settings")?.settingsArea, "options");
-  assert.equal(resolveAdminRoute("/settings/content")?.contentSection, "overview");
-  assert.equal(resolveAdminRoute("/settings/content/furniture")?.contentSection, "furniture");
-  assert.equal(resolveAdminRoute("/settings/content/categories")?.contentSection, "categories");
-  assert.equal(resolveAdminRoute("/settings/content/offers")?.contentSection, "offers");
-  assert.equal(resolveAdminRoute("/settings/content/packings")?.contentSection, "packings");
-  assert.equal(resolveAdminRoute("/settings/content/services")?.contentSection, "services");
+  assert.deepEqual(resolveAdminRoute("/settings/content"), resolveAdminRoute("/settings/services"));
+  assert.equal(resolveAdminRoute("/settings/content")?.path, "/settings/services");
+  assert.equal(resolveAdminRoute("/settings/content")?.contentSection, "services");
+  assert.equal(resolveAdminRoute("/settings/content")?.adminOnly, true);
+  assert.equal(resolveAdminRoute("/settings/content/furniture")?.path, "/settings/furniture");
+  assert.equal(resolveAdminRoute("/settings/content/categories")?.path, "/settings/categories");
+  assert.equal(resolveAdminRoute("/settings/content/offers")?.path, "/settings/offers");
+  assert.equal(resolveAdminRoute("/settings/content/packings")?.path, "/settings/packings");
+  assert.equal(resolveAdminRoute("/settings/content/services")?.path, "/settings/services");
+  assert.equal(resolveAdminRoute("/settings/content/prices")?.path, "/settings/prices");
+  for (const section of ["offers", "prices", "packings", "services", "categories", "furniture"]) {
+    assert.equal(resolveAdminRoute(`/settings/${section}`)?.path, `/settings/${section}`);
+  }
+  assert.equal(resolveAdminRoute("/settings/prices")?.contentSection, "prices");
+  assert.equal(resolveAdminRoute("/settings/prices")?.adminOnly, true);
+  assert.equal(resolveAdminRoute("/settings/prices")?.title, "Preise");
   assert.equal(resolveAdminRoute("/settings/users")?.settingsArea, "users");
   assert.equal(resolveAdminRoute("/settings/users")?.adminOnly, true);
+  assert.equal(resolveAdminRoute("/settings/users")?.title, "Nutzer");
 });
 
 test("new archive, invoice, and profile routes are available with admin-only metadata", () => {

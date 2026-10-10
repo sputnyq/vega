@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Button, Paper, Snackbar, Stack, Tab, Tabs } from "@mui/material";
+import { Alert, Button, Paper, Snackbar, Stack } from "@mui/material";
 import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
+import { SectionTabs } from "../components/SectionTabs.js";
 import { AddressesTab } from "./AddressesTab.js";
 import { BasisTab } from "./BasisTab.js";
 import { ConditionsTab } from "./ConditionsTab.js";
@@ -155,17 +156,18 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
     <Stack component="form" id="order-create-form" spacing={2} onSubmit={submit} noValidate>
       {loading && <Alert severity="info">Auftrag wird geladen …</Alert>}
       {error && <Alert severity="error" role="alert">{error}</Alert>}
-      <Paper variant="outlined" sx={{ position: "sticky", top: 64, zIndex: 2 }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_, next: number) => setActiveTab(next)}
-          variant="scrollable"
-          allowScrollButtonsMobile
-          aria-label="Auftragsschritte"
-        >
-          {tabNames.map((label, index) => <Tab key={label} id={`order-tab-${index}`} aria-controls={`order-tabpanel-${index}`} label={label} />)}
-        </Tabs>
-      </Paper>
+      <SectionTabs
+        label="Auftragsschritte"
+        value={activeTab}
+        onChange={(next) => setActiveTab(Number(next))}
+        sticky
+        tabs={tabNames.map((label, index) => ({
+          label,
+          value: index,
+          id: `order-tab-${index}`,
+          ariaControls: `order-tabpanel-${index}`,
+        }))}
+      />
       <fieldset disabled={busy || loading} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div role="tabpanel" id="order-tabpanel-0" aria-labelledby="order-tab-0" hidden={activeTab !== 0}>
           <CustomerTab value={value} update={update} />

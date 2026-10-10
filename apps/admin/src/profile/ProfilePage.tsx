@@ -154,7 +154,6 @@ export function ProfilePage({ user }: { user: StaffUser }) {
     <Stack spacing={3} sx={{ maxWidth: 720 }}>
       <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 } }}>
         <Stack spacing={2}>
-          <Typography component="h1" variant="h4">Mein Profil</Typography>
           <Tabs value={tab} onChange={(_, value: number) => setTab(value)} aria-label="Profil-Einstellungen">
             <Tab label="Profil" id="profile-tab-0" aria-controls="profile-panel-0" />
             <Tab label="Passwort" id="profile-tab-1" aria-controls="profile-panel-1" />
