@@ -4,28 +4,37 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "predev": "npm run db:generate --prefix ../..",
+    "dev": "cd ../.. && tsx watch apps/server/src/main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.foundation-tests.json"
   },
   "dependencies": {
     "@google-cloud/storage": "8.4.0",
-    "@prisma/client": "6.19.3",
+    "@prisma/adapter-mariadb": "7.10.0",
+    "@prisma/client": "7.10.0",
     "@vega/domain": "0.1.0",
     "better-auth": "1.7.7",
-    "cors": "2.8.5",
+    "cors": "2.8.6",
     "dotenv": "16.6.1",
     "express": "5.2.1",
+    "express-rate-limit": "8.7.1",
     "helmet": "8.3.0",
+    "html-to-text": "10.0.1",
+    "jspdf": "4.2.1",
+    "jspdf-autotable": "5.0.8",
     "pdfkit": "^0.17.2",
     "pino-http": "11.0.0",
+    "sanitize-html": "2.18.0",
     "sharp": "0.35.5"
   },
   "devDependencies": {
     "@types/cors": "2.8.19",
-    "@types/express": "5.0.3",
+    "@types/express": "5.0.6",
+    "@types/html-to-text": "9.0.4",
     "@types/node": "24.10.0",
-    "@types/pdfkit": "^0.17.3"
+    "@types/pdfkit": "^0.17.3",
+    "@types/sanitize-html": "2.16.2"
   }
 }

@@ -22,6 +22,13 @@ export function createInvoiceRouter() {
       res.json({ data: { items: invoices.map(toInvoiceDto) } });
     } catch (error) { next(error); }
   });
+  router.get("/next-number", async (_req, res, next) => {
+    try {
+      const sequence = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 }, select: { nextValue: true } });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: { nextValue: sequence.nextValue } });
+    } catch (error) { next(error); }
+  });
   router.get("/:id", async (req, res, next) => {
     try { const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } }); if (!invoice) return notFound(res); res.json({ data: toInvoiceDto(invoice) }); } catch (error) { next(error); }
   });
@@ -39,14 +46,14 @@ export function createInvoiceRouter() {
   });
   router.post("/", async (req, res, next) => {
     try {
-      const input = validateInvoice(req.body); if (!input.ok) return invalid(res, input.message);
+      const input = validateInvoice(req.body, true); if (!input.ok) return invalid(res, input.message);
       const invoice = await createInvoice(input.value);
       res.status(201).json({ data: toInvoiceDto(invoice) });
-    } catch (error) { next(error); }
+    } catch (error) { if (isUnique(error)) { res.status(409).json({ error: { code: "INVOICE_NUMBER_IN_USE", message: "Diese Rechnungsnummer wird bereits verwendet." } }); return; } next(error); }
   });
-  router.post("/from-order/:orderNumber", async (req, res, next) => {
+  router.get("/from-order/:orderNumber", async (req, res, next) => {
     try {
-      const orderNumber = Number(req.params.orderNumber); if (!Number.isInteger(orderNumber) || orderNumber < 1) return notFound(res);
+      const orderNumber = Number(req.params.orderNumber); if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) return notFound(res);
       const order = await prisma.order.findUnique({ where: { orderNumber }, include: orderRelations }); if (!order) return notFound(res);
       const existing = await prisma.invoice.findUnique({ where: { orderId: order.id } });
       if (existing) { res.status(409).json({ error: { code: "INVOICE_ALREADY_EXISTS", message: "Für diesen Auftrag existiert bereits eine Rechnung." } }); return; }
@@ -54,9 +61,32 @@ export function createInvoiceRouter() {
       const customer = data.customer;
       const destination = data.to;
       const input: InvoiceInput = { invoiceDate: new Date().toISOString().slice(0, 10), company: stringValue(customer?.company), customerName: order.customerName, customerStreet: stringValue(destination?.street), customerPostalCity: [stringValue(destination?.postalCode), stringValue(destination?.city)].filter(Boolean).join(" "), taxPercent: 19, text: "", entries: [], dueDates: [] };
-      const invoice = await createInvoice(input, order);
-      res.status(201).json({ data: toInvoiceDto(invoice) });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: input });
     } catch (error) { next(error); }
+  });
+  router.post("/from-order/:orderNumber", async (req, res, next) => {
+    try {
+      const orderNumber = Number(req.params.orderNumber);
+      if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) return notFound(res);
+      const input = validateInvoice(req.body, true);
+      if (!input.ok) return invalid(res, input.message);
+      const order = await prisma.order.findUnique({ where: { orderNumber }, select: { id: true, orderNumber: true } });
+      if (!order) return notFound(res);
+      const existing = await prisma.invoice.findUnique({ where: { orderId: order.id } });
+      if (existing) {
+        res.status(409).json({ error: { code: "INVOICE_ALREADY_EXISTS", message: "Für diesen Auftrag existiert bereits eine Rechnung." } });
+        return;
+      }
+      const invoice = await createInvoice(input.value, order);
+      res.status(201).json({ data: toInvoiceDto(invoice) });
+    } catch (error) {
+      if (isUnique(error)) {
+        res.status(409).json({ error: { code: "INVOICE_CONFLICT", message: "Die Rechnungsnummer oder der Auftrag ist bereits einer Rechnung zugeordnet." } });
+        return;
+      }
+      next(error);
+    }
   });
   router.put("/:id", async (req, res, next) => {
     try {

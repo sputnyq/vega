@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { emailDefaults, passwordResetEmail, renderEmailLayout, sanitizeEmailHtml } from "../src/mail/email-template.js";
+import { emailDefaults, htmlToPlainText, passwordResetEmail, renderEmailLayout, sanitizeEmailHtml } from "../src/mail/email-template.js";
 import { HostingerMailClient, MailDeliveryError } from "../src/mail/hostinger-mail-client.js";
 import { MailService } from "../src/mail/mail-service.js";
 import { EMPTY_SETTINGS } from "../src/settings/settings-input.js";
@@ -30,7 +30,43 @@ test("password reset link is escaped in the retained email shell", () => {
 
 test("editable email content keeps basic formatting but removes executable and unsafe markup", () => {
   const html = sanitizeEmailHtml('<p onclick="alert(1)">Text <strong>fett</strong><script>alert(1)</script><a href="javascript:alert(1)">Link</a><a href="https://example.test">OK</a></p>');
-  assert.equal(html, '<p>Text <strong>fett</strong>alert(1)<a>Link</a><a href="https://example.test">OK</a></p>');
+  assert.equal(html, '<p>Text <strong>fett</strong><a>Link</a><a href="https://example.test">OK</a></p>');
+});
+
+test("editable email content resists nested tags, comments, encoded links, and event attributes", () => {
+  const html = sanitizeEmailHtml(
+    '<!-- geheim --><style>p{color:red}</style><scr<script>ipt>alert(1)</scr<script>ipt>' +
+    '<p style="color:red" onmouseover="x()">Text</p>' +
+    '<p><a href="JaVaScRiPt:alert(1)">bad</a>' +
+    '<a href="//evil.test/x">rel</a>' +
+    '<a href="https://example.test/?q=a&amp;b">OK</a></p>' +
+    '<iframe src="https://evil.test"></iframe><form><input value="x"></form>',
+  );
+  assert.doesNotMatch(html, /<!--/);
+  assert.doesNotMatch(html, /<script/i);
+  assert.doesNotMatch(html, /<style/i);
+  assert.doesNotMatch(html, /<iframe/i);
+  assert.doesNotMatch(html, /<form/i);
+  assert.doesNotMatch(html, /<input/i);
+  assert.doesNotMatch(html, /onclick|onmouseover/i);
+  assert.doesNotMatch(html, /javascript:/i);
+  assert.doesNotMatch(html, /evil\.test/);
+  // Nested-tag leftovers may survive only as escaped text, never as markup.
+  assert.doesNotMatch(html, /<[^>]*script/i);
+  assert.match(html, /<p>Text<\/p>/);
+  assert.match(html, /<a href="https:\/\/example\.test\/\?q=a&amp;b">OK<\/a>/);
+  const doubleEncoded = sanitizeEmailHtml('<p>&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;</p>');
+  assert.doesNotMatch(doubleEncoded, /<script/i);
+  assert.doesNotMatch(doubleEncoded, /alert\(1\)<\/script/i);
+});
+
+test("email plain text drops executable markup and contains no HTML tags", () => {
+  const text = htmlToPlainText('<script>alert(1)</script><!-- c --><p>Hello<br>World</p><p><a href="https://example.test">Link</a></p>');
+  assert.doesNotMatch(text, /</);
+  assert.doesNotMatch(text, />/);
+  assert.doesNotMatch(text, /alert\(1\)/);
+  assert.match(text, /Hello/);
+  assert.match(text, /World/);
 });
 
 test("Hostinger client uses the documented 204 send response and does not read its body", async () => {

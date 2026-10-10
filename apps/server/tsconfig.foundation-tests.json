@@ -5,6 +5,8 @@
     "noEmit": true
   },
   "include": [
+    "test/database-config.test.ts",
+    "test/setup.ts",
     "test/order-relations.test.ts",
     "test/database/**/*.ts",
     "test/deployment/**/*.ts"

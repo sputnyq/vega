@@ -4,6 +4,7 @@ import { APIError } from "better-auth/api";
 import type { createAuth } from "../auth-config.js";
 import type { AppConfig } from "../config.js";
 import { prisma } from "../prisma.js";
+import { createAdminRateLimit } from "../http-rate-limit.js";
 import { consumePublicApiRateLimit } from "../public-rate-limit.js";
 import { record, validateStaffAction, validateStaffCreate } from "./staff-input.js";
 import { changeStaff, createStaff, StaffError, staffResetTarget, staffSelect } from "./staff-service.js";
@@ -11,11 +12,14 @@ import { changeStaff, createStaff, StaffError, staffResetTarget, staffSelect } f
 export function createStaffRouter(auth: ReturnType<typeof createAuth>, config: AppConfig) {
   const router = Router();
   router.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+  // Standard per-staff limiter at the router boundary. The persistent
+  // Prisma-backed password-confirmation limit below stays in place.
+  router.use(createAdminRateLimit());
   router.get("/", async (req, res, next) => {
     try {
       const page = typeof req.query.page === "string" && /^\d{1,6}$/u.test(req.query.page) ? Math.max(1, Number(req.query.page)) : 1;
       const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 191) : "";
-      const where: import("@prisma/client").Prisma.UserWhereInput = search ? { OR: [{ name: { contains: search } }, { email: { contains: search } }] } : {};
+      const where: import("../generated/prisma/client.js").Prisma.UserWhereInput = search ? { OR: [{ name: { contains: search } }, { email: { contains: search } }] } : {};
       const [total, items] = await prisma.$transaction([
         prisma.user.count({ where }),
         prisma.user.findMany({ where, select: staffSelect, orderBy: [{ name: "asc" }, { id: "asc" }], take: 25, skip: (page - 1) * 25 }),

@@ -17,6 +17,7 @@ cp .env.example .env
 # BETTER_AUTH_SECRET mit `openssl rand -base64 32` erzeugen und in .env setzen.
 # INITIAL_ADMIN_EMAIL und INITIAL_ADMIN_PASSWORD nur für den einmaligen Seed setzen.
 npm ci
+npm run db:generate
 npm run db:up
 npm run db:migrate:dev
 npm run db:seed
@@ -98,6 +99,13 @@ Lokale URLs:
 - Admin-SPA: <http://127.0.0.1:5173/> (unauthenticated users are redirected to `/login`; TOTP challenges use `/two-factor`; unknown paths show the 404 page)
 - Kundenformular: <http://127.0.0.1:5174/customer-form/>
 
+Die lokalen Allowlisten in `.env.example` erlauben auch `localhost` auf den
+Frontend-Ports. `localhost` und `127.0.0.1` sind unterschiedliche Origins;
+bei eigenen Dev-Ports den genauen Admin-Origin in
+`BETTER_AUTH_TRUSTED_ORIGINS` und `CORS_ALLOWED_ORIGINS` ergänzen. Nach
+Änderungen an `.env` den Dev-Server neu starten. Der Kundenformular-Origin
+gehört nur in die CORS-Liste, nicht in die Auth-Liste.
+
 Admin-Routen übernehmen den Legacy-Pfadbestand (`/`, `/edit/:id`, `/blanco`,
 `/settings/*`, `/email-text/:id`) und ergänzen `/invoices`,
 `/invoices/archived`, `/orders/archived` und `/profile`. Einstellungen sind in
@@ -115,9 +123,35 @@ Verpackungen und Leistungen (`show=false`) sind öffentlich nicht enthalten.
 Änderungen laufen ausschließlich über `/api/admin/catalog/*` und erfordern eine
 abgeschlossene Admin-Session.
 
-`/edit/-1` enthält die modulare, siebenteilige Auftragserfassung nach dem
-Legacy-Aufbau (Kunde, Adressen, Umzugsgut, Extras, Basis, Konditionen,
-Buchhaltung). Jeweils eine zweite Be-/Entladestelle lässt sich ergänzen und mit
+Die Toolbar gruppiert Speichern, Angebotskopie, PDF und E-Mail gemeinsam;
+vertikale Trenner mit seitlichem Abstand trennen Archivieren und den
+Admin-only-Button „Rechnung aus Auftrag anlegen“. Dieser speichert offene
+Änderungen am Auftrag und öffnet anschließend einen ungespeicherten,
+vorausgefüllten Rechnungsentwurf. Erst „Speichern“ im Rechnungseditor legt
+den Beleg samt Auftragsbezug an und vergibt eine Rechnungsnummer.
+`GET /api/admin/invoices/from-order/:orderNumber` liefert nur die Vorlage;
+`POST` auf derselben Route speichert die vom Admin geprüften Rechnungsdaten.
+Abbrechen oder Verlassen des Entwurfs erzeugt keinen Datenbankeintrag.
+
+Der PDF-Button im Auftragseditor lädt das vollständige Angebots-/Auftrags-/
+Abrechnungsdokument im bisherigen `umzugruckzuck24`-Layout herunter. Änderungen
+werden vor dem Export gespeichert; bei Speicher- oder PDF-Fehlern gibt es keinen
+Download. Admins und Kundenberater mit abgeschlossener Anmeldung können das PDF
+über `GET /api/admin/orders/:orderNumber/pdf` abrufen. Jeder erfolgreiche Export
+wird im Auftragsjournal protokolliert; PDF-Dateien werden nur für die Antwort
+erzeugt, nicht auf dem Server gespeichert. Logo, AGB, Bankdaten, feste Texte,
+Seitennummerierung und Dateinamenskonvention entsprechen der Legacy-Vorlage.
+Die Konditionssumme stammt ausschließlich aus gespeicherten Staff-Eingaben;
+der Export ergänzt keine automatische Preiskalkulation. Die Zusatzpreisliste
+verwendet die aktuellen Vega-Katalogpreise. Freitextpositionen bleiben ohne
+erfundene Preise sichtbar; Angaben zu besonderen Möbeln verwenden die in Vega
+gespeicherten Texte, ohne nicht erfasste Maße oder Gewichte zu ergänzen.
+
+`/edit/-1` enthält die modulare Auftragserfassung nach dem
+Legacy-Aufbau (Kunde, Adressen, Umzugsgut, Extras, Basis, Konditionen)
+und das Journal. Buchhaltung hat keinen eigenen Auftragsreiter;
+Rechnungen werden über den Admin-Button in der Toolbar angelegt.
+Jeweils eine zweite Be-/Entladestelle lässt sich ergänzen und mit
 der ersten tauschen; Speichern sitzt wie früher rechts oben in der Navigation.
 Das Adminformular sendet `POST /api/orders`; das Kundenformular verwendet
 `POST /api/public/orders` mit zusätzlicher Formular-/Datenschutzvalidierung.
@@ -132,7 +166,7 @@ paginiert mit zehn Einträgen. Mitarbeitende können Aufträge suchen, bearbeite
 archivieren/wiederherstellen und Angebotskopien erstellen. Der Editor zeigt ein
 minimalistisches Journal ohne Feld-Diffs. Die Rechnungsverwaltung ist Admin-only:
 Blanco-Rechnungen unter `/blanco` bzw. `/invoices/new`, Rechnungen mit optionalem
-1:1-Auftragsbezug aus dem Buchhaltungsreiter sowie Übersicht/Archiv unter
+1:1-Auftragsbezug über die Auftrags-Toolbar sowie Übersicht/Archiv unter
 `/invoices` und `/invoices/archived`. Rechnungs-PDFs werden serverseitig aus dem
 aktuellen Stand erzeugt und nicht gespeichert.
 
@@ -146,8 +180,45 @@ Produktion verwendet ausschließlich bereits geprüfte Migrationen:
 
 ```sh
 npm run db:migrate:dev -- --name describe_change
+npm run db:generate
 npm run db:migrate:deploy
 ```
+
+Prisma CLI, Client und MariaDB-Adapter sind auf `7.10.0` gepinnt.
+`prisma-client` erzeugt ESM-TypeScript ausschließlich unter
+`apps/server/src/generated/prisma/`; die Dateien sind nicht versioniert und
+werden im Serverbuild nach `apps/server/dist/` kompiliert. `npm run dev`,
+`npm run dev:server` und der Dev-Befehl im Server-Workspace generieren den
+Client automatisch vor dem Serverstart; ebenso generiert `npm run build`
+ihn vor dem Build. Für andere Befehle nach `npm ci` und nach Schemaänderungen
+`npm run db:generate` explizit ausführen.
+Migrationen generieren den Client nicht mehr automatisch und führen den
+Admin-Seed nicht automatisch aus; dafür bleibt `npm run db:seed` zuständig.
+
+`DATABASE_URL` bleibt die serverseitige MySQL-URL für CLI und Runtime.
+Die CLI liest sie aus `prisma.config.ts`, der Server konfiguriert daraus
+`PrismaMariaDb`. Generate und Build benötigen keine DB-Zugangsdaten; Start
+und Datenbankbefehle ohne URL scheitern ausdrücklich.
+
+| URL-Option | Runtime-Verhalten |
+|---|---|
+| `connection_limit` | Positive Anzahl, Standard: 5 Verbindungen |
+| `connect_timeout` | Positive Sekunden, Standard: 5 |
+| `pool_timeout` | Positive Sekunden, Standard: 10 |
+| `sslaccept=strict` | TLS mit Zertifikatsprüfung über die vertrauenswürdigen CAs |
+| `sslcert` | Pfad zur CA-Datei; aktiviert TLS mit Zertifikatsprüfung |
+
+Der Pool gibt ungenutzte Verbindungen nach 300 Sekunden frei, hält keine
+Mindestzahl offener Verbindungen und verwendet UTC. Credentials in der URL
+müssen korrekt prozentkodiert sein. Doppelte, unbekannte URL-Optionen,
+unbegrenzte Timeouts (`0`) und `sslaccept=accept_invalid_certs` werden
+abgewiesen statt still ignoriert. Ohne TLS-Option ist TLS nicht aktiviert;
+die tatsächliche Hostinger-Verbindungs-/CA-Konfiguration bleibt im
+nichtproduktiven Zieltarif nachzuweisen.
+
+Der Adapter pinnt upstream noch `mariadb@3.4.5`. Ein gezielter Override auf
+`3.5.4` behebt die bekannten Treiber-Advisories; Hintergrund und geprüfte
+Regressionen stehen in `docs/proof-01-integration-compatibility.md`.
 
 Produktions-Build und Start:
 
@@ -178,7 +249,10 @@ endend auf `_test` anlegen; `DATABASE_URL` für den Migrationslauf und
 die laufende App-Datenbank dafür verwenden. Der Testbefehl lehnt fehlende
 oder nicht entsprechend benannte Ziele ab. Die Tests prüfen FK-Löschregeln,
 Nummern-/Beziehungs-Eindeutigkeit, atomare Nummernvergabe, Snapshot-Überführung
-und relationale Order-Operationen. Es werden keine Legacy-Daten importiert.
+und relationale Order-Operationen. Zusätzlich werden Datentyp-Roundtrips,
+idempotentes Admin-Seeding und der Recovery-CLI-Pfad geprüft. DB-Testdateien
+laufen seriell, damit Bootstrap und Sole-Admin-Recovery nicht mit anderen
+Auth-Fixtures konkurrieren. Es werden keine Legacy-Daten importiert.
 
 Auftragadressen und Möbel-/Service-/Verpackungspositionen werden relational
 gespeichert und für Reads verwendet; übrige validierte Formularinformationen

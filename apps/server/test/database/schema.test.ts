@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../../src/generated/prisma/client.js";
 import type { InvoiceInput } from "@vega/domain";
 import express from "express";
 import test, { after } from "node:test";
@@ -233,7 +233,13 @@ test("order create, copy, edit, read and invoice address projection use independ
   const withoutSecondary = orderDataWithRelations(await prisma.order.findUniqueOrThrow({ where: { id: copied.id }, include: orderRelations }));
   assert.equal(withoutSecondary.details?.secondaryTo, undefined);
   await prisma.orderAddress.update({ where: { orderId_role: { orderId: copied.id, role: "TO" } }, data: { street: "Relationales Testziel 10" } });
-  const invoiceResponse = await fetch(`http://127.0.0.1:${address.port}/invoices/from-order/${copiedNumber}`, { method: "POST" });
+  const templateResponse = await fetch(`http://127.0.0.1:${address.port}/invoices/from-order/${copiedNumber}`);
+  assert.equal(templateResponse.status, 200);
+  const template = await responseData(templateResponse);
+  assert.equal(template.customerStreet, "Relationales Testziel 10");
+  const invoiceResponse = await fetch(`http://127.0.0.1:${address.port}/invoices/from-order/${copiedNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(template),
+  });
   assert.equal(invoiceResponse.status, 201);
   const invoice = await responseData(invoiceResponse);
   assert.ok(typeof invoice.id === "string");
@@ -264,15 +270,45 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
 
   const order = await createOrder(orderFixture(), "admin", "Test Admin");
   orderNumbers.push(order.orderNumber);
-  const createdResponse = await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" });
+  const countBefore = await prisma.invoice.count();
+  const numberPreview = await fetch(`${base}/next-number`);
+  assert.equal(numberPreview.status, 200);
+  assert.equal(numberPreview.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(await responseData(numberPreview), { nextValue: sequenceBefore.nextValue });
+  assert.equal(await prisma.invoice.count(), countBefore);
+  const templateResponse = await fetch(`${base}/from-order/${order.orderNumber}`);
+  assert.equal(templateResponse.status, 200);
+  assert.equal(templateResponse.headers.get("Cache-Control"), "no-store");
+  const template = await responseData(templateResponse);
+  assert.equal(template.id, undefined);
+  assert.equal(template.invoiceNumber, undefined);
+  assert.equal(template.customerName, (await prisma.order.findUniqueOrThrow({ where: { orderNumber: order.orderNumber } })).customerName);
+  assert.equal(await prisma.invoice.count(), countBefore);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" })).status, 400);
+  assert.equal(await prisma.invoice.count(), countBefore);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...template, customerName: "" }),
+  })).status, 400);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue);
+  const editedTemplate = { ...template, customerName: "Manuell geänderter Rechnungskunde", text: "Bearbeiteter Entwurf." };
+  const createdResponse = await fetch(`${base}/from-order/${order.orderNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editedTemplate),
+  });
   assert.equal(createdResponse.status, 201);
   const created = await responseData(createdResponse);
   const createdInvoiceNumber = stringValue(created.invoiceNumber);
   const createdInvoiceDate = stringValue(created.invoiceDate);
   assert.equal(createdInvoiceNumber, `R-${sequenceBefore.nextValue}`);
   assert.equal(created.orderNumber, order.orderNumber);
+  assert.equal(created.customerName, editedTemplate.customerName);
+  assert.equal(created.text, editedTemplate.text);
   assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 1);
-  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" })).status, 409);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editedTemplate),
+  })).status, 409);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`)).status, 409);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 1);
   assert.equal((await fetch(`${base}/missing-invoice`)).status, 404);
 
   const invoiceId = stringValue(created.id);
@@ -310,7 +346,7 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   assert.equal(manual.invoiceNumber, manualNumber);
   const manualId = stringValue(manual.id);
   invoiceIds.push(manualId);
-  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 3);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 2);
   const sequenceBeforeFailure = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
   await assert.rejects(persistInvoice({ ...invoiceInput, invoiceNumber: manualNumber }), uniqueFailure);
   assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBeforeFailure.nextValue);
@@ -383,6 +419,50 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   assert.equal(await prisma.orderActivityEvent.count({ where: { orderId: (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).orderId!, action: "PDF_EXPORTED" } }), 1);
 });
 
+test("manual invoice creation advances only upwards, rolls back conflicts, and serializes concurrent allocations", async (context) => {
+  const original = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
+  const invoiceIds: string[] = [];
+  context.after(async () => {
+    await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+    await prisma.invoiceNumberSequence.update({ where: { id: 1 }, data: { nextValue: original.nextValue } });
+  });
+  const base = original.nextValue + 100;
+  await prisma.invoiceNumberSequence.update({ where: { id: 1 }, data: { nextValue: base } });
+  const input: InvoiceInput = {
+    invoiceDate: "2026-10-10", company: "", customerName: "Nummernkreis Test",
+    customerStreet: "", customerPostalCity: "", taxPercent: 19, text: "", entries: [], dueDates: [],
+  };
+  const currentNext = async () => (await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue;
+  const persist = async (invoiceNumber?: string) => {
+    const invoice = await persistInvoice({ ...input, ...(invoiceNumber ? { invoiceNumber } : {}) });
+    invoiceIds.push(invoice.id);
+    return invoice;
+  };
+  for (const number of [`R-${base - 1}`, `R-${base - 2}`, `custom-${randomUUID()}`]) {
+    assert.equal((await persist(number)).invoiceNumber, number);
+    assert.equal(await currentNext(), base);
+  }
+  assert.equal((await persist(`R-00${base + 20}`)).invoiceNumber, `R-00${base + 20}`);
+  assert.equal(await currentNext(), base + 21);
+  assert.equal((await persist()).invoiceNumber, `R-${base + 21}`);
+
+  const concurrent = await Promise.all([persist(`R-${base + 100}`), persist(`R-${base + 200}`), persist(), persist()]);
+  assert.equal(new Set(concurrent.map((invoice) => invoice.invoiceNumber)).size, 4);
+  assert.equal(await currentNext(), Math.max(...concurrent.map((invoice) => Number(invoice.invoiceNumber.slice(2)))) + 1);
+
+  const beforeFailure = await currentNext();
+  const duplicate = await prisma.invoice.create({ data: {
+    id: randomUUID(), invoiceNumber: `R-${base + 1000}`, invoiceDate: new Date("2026-10-10"),
+    customerNameSnapshot: input.customerName, text: "", entries: [], dueDates: [],
+  } });
+  invoiceIds.push(duplicate.id);
+  await assert.rejects(persistInvoice({ ...input, invoiceNumber: duplicate.invoiceNumber }), uniqueFailure);
+  assert.equal(await currentNext(), beforeFailure);
+  const { updateInvoice } = await import("../../src/invoices/invoice-service.js");
+  await updateInvoice(duplicate.id, { ...input, invoiceNumber: `R-${base + 2000}` }, duplicate.invoiceNumber);
+  assert.equal(await currentNext(), beforeFailure);
+});
+
 test("failed order transactions consume no number and concurrent creation assigns unique consecutive numbers", async (context) => {
   const before = await prisma.orderNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
   await assert.rejects(createOrder({
@@ -406,4 +486,29 @@ test("failed order transactions consume no number and concurrent creation assign
   assert.ok(results.every((result) => result.status === "fulfilled"));
   assert.deepEqual(numbers.sort((a, b) => a - b), Array.from({ length: 5 }, (_, index) => before.nextValue + index));
   assert.equal((await prisma.orderNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, before.nextValue + 5);
+});
+
+test("driver adapter preserves JSON, Decimal, UTC DateTime, BigInt and missing-record errors", async () => {
+  await rollback(async (tx) => {
+    const invoiceDate = new Date("2026-10-10T10:12:34.567Z");
+    const entries = { items: [{ name: "Prisma-Testmöbel", price: 12.34 }], optional: null, enabled: true };
+    const id = randomUUID();
+    await tx.invoice.create({ data: {
+      id, invoiceNumber: `R-${id}`, customerNameSnapshot: "Adapter-Test",
+      invoiceDate, taxPercent: "19.75", text: "", entries, dueDates: [],
+    } });
+    const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+    assert.deepEqual(invoice.entries, entries);
+    assert.deepEqual(invoice.dueDates, []);
+    assert.equal(invoice.taxPercent.toFixed(2), "19.75");
+    assert.equal(invoice.invoiceDate.toISOString(), invoiceDate.toISOString());
+    assert.equal(invoice.archivedAt, null);
+    const rate = await tx.rateLimit.create({ data: {
+      id: randomUUID(), key: randomUUID(), count: 1, lastRequest: 9_007_199_254_740_993n,
+    } });
+    assert.equal((await tx.rateLimit.findUniqueOrThrow({ where: { id: rate.id } })).lastRequest, 9_007_199_254_740_993n);
+    await assert.rejects(tx.invoice.findUniqueOrThrow({ where: { id: randomUUID() } }), (error: unknown) => {
+      return typeof error === "object" && error !== null && "code" in error && error.code === "P2025";
+    });
+  });
 });

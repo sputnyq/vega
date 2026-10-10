@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Alert, Box, Button, CircularProgress, Paper, Stack, TextField, Typography } from "@mui/material";
+import DownloadIcon from "@mui/icons-material/Download";
 import { QRCodeSVG } from "qrcode.react";
 import { authClient } from "../auth-client.js";
 import { AuthCard } from "./AuthCard.js";
+import { downloadBackupCodesFile } from "./backup-codes-file.js";
 import { PasswordField } from "./PasswordField.js";
 
 interface TotpSetupPageProps {
@@ -71,6 +73,9 @@ export function TotpSetupPage({ initialPassword, onComplete }: TotpSetupPageProp
             ))}
           </Stack>
         </Paper>
+        <Button variant="outlined" startIcon={<DownloadIcon />} onClick={() => downloadBackupCodesFile(backupCodes)}>
+          Als Textdatei herunterladen
+        </Button>
         <Button variant="contained" size="large" onClick={onComplete}>Weiter zur Verwaltung</Button>
       </AuthCard>
     );

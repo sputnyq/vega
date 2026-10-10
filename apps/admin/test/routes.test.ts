@@ -43,3 +43,13 @@ test("unknown and malformed legacy paths resolve to not found", () => {
   assert.equal(resolveAdminRoute("/edit/%E0%A4%A"), null);
   assert.equal(resolveAdminRoute("/email-text/%E0%A4%A"), null);
 });
+
+test("order invoice templates resolve to an admin-only unsaved editor", () => {
+  const route = resolveAdminRoute("/invoices/new/from-order/1004");
+  assert.equal(route?.sourceOrderNumber, 1004);
+  assert.equal(route?.title, "Neue Rechnung");
+  assert.equal(route?.adminOnly, true);
+  for (const path of ["/invoices/new/from-order/0", "/invoices/new/from-order/no", "/invoices/new/from-order/9007199254740992"]) {
+    assert.equal(resolveAdminRoute(path), null);
+  }
+});
