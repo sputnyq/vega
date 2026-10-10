@@ -5,6 +5,8 @@ import { prisma } from "../prisma.js";
 import { validateOrderCreateInput } from "./order-input.js";
 import { normalizeOrderCatalogInput } from "./order-service.js";
 import { orderDataWithRelations, orderRelationCreates, orderRelations } from "./order-relations.js";
+import { listPackings, listServices, listServiceRates } from "../catalog/catalog-service.js";
+import { generateOrderPdf, orderPdfFilename } from "../pdf/order-pdf.js";
 
 const PAGE_SIZE_MAX = 100;
 const ARCHIVE_RETENTION_DAYS = 60;
@@ -62,6 +64,31 @@ export function createAdminOrderRouter() {
       ].sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
       res.setHeader("Cache-Control", "no-store");
       res.json({ data: { items: entries } });
+    } catch (error) { next(error); }
+  });
+
+  router.get("/:orderNumber/pdf", async (req, res, next) => {
+    try {
+      const orderNumber = parseOrderNumber(req.params.orderNumber);
+      if (orderNumber === null) return notFound(res);
+      const order = await prisma.order.findUnique({ where: { orderNumber }, include: orderRelations });
+      if (!order) return notFound(res);
+      const [services, packings, rates] = await Promise.all([listServices(), listPackings(), listServiceRates()]);
+      const input = {
+        orderNumber, data: orderDataWithRelations(order), rates,
+        services: [
+          ...services.map((service) => ({ ...service, kind: "service" as const })),
+          ...packings.map((packing) => ({ ...packing, kind: "packaging" as const })),
+        ],
+      };
+      const pdf = generateOrderPdf(input);
+      await prisma.orderActivityEvent.create({
+        data: { id: randomUUID(), orderId: order.id, action: "PDF_EXPORTED", actorName: String(res.locals.staffUser.name) },
+      });
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(orderPdfFilename(input))}`);
+      res.status(200).send(pdf);
     } catch (error) { next(error); }
   });
 
