@@ -12,23 +12,31 @@ export async function generateInvoicePdf(invoice: Invoice): Promise<Buffer> {
   const left = 56.7; const right = 34; const width = 595.28; let y = 22.7;
   const logo = Buffer.from(LEGACY_RZ24_LOGO.slice(LEGACY_RZ24_LOGO.indexOf(",") + 1), "base64");
   doc.image(logo, left, y, { width: 96, height: 102 });
-  drawRight(doc, ["Alexander Berent", "Am Münchfeld 31, 80999 München", "089 30642972 | 0176 10171990", "info@umzugruckzuck24.de", "", "Steuernummer: 144/139/21180"], y + 3, 8, width - right);
-  y += 56;
-  text(doc, "Alexander Berent, Am Münchfeld 31, 80999 München", left, y, 8); y += 18;
-  drawRight(doc, [`Rechnungsdatum: ${formatDate(invoice.invoiceDate)}`, ...(invoice.orderNumberSnapshot ? [`Auftragsnummer: ${invoice.orderNumberSnapshot}`] : [])], y, 10, width - right); y += 30;
-  [invoice.company, invoice.customerNameSnapshot, invoice.customerStreet, invoice.customerPostalCity].filter(Boolean).forEach((line) => { text(doc, line, left, y, 10); y += 14; });
-  y += 95;
+  drawRight(doc, ["Alexander Berent", "Am Münchfeld 31, 80999 München", "089 30642972 | 0176 10171990", "info@umzugruckzuck24.de", "Steuernummer: 144/139/21180"], 37.1, 8, width - right);
+  // Match the supplied reference PDF's postal block after the legacy header flow.
+  y = (8 + 5 + 15) / 0.353 + 5 * 12 + 3 * 6 - 6;
+  // jsPDF uses baselines; PDFKit positions Helvetica text at the top (ascender 718/1000).
+  text(doc, "Alexander Berent, Am Münchfeld 31, 80999 München", left, y + 9.2 - 5.744, 8);
+  y += 18.4 + 5 / 0.353;
+  const information = [`Rechnungsdatum: ${formatDate(invoice.invoiceDate)}`, ...(invoice.orderNumberSnapshot ? [`Auftragsnummer: ${invoice.orderNumberSnapshot}`] : [])];
+  information.forEach((line) => { drawRight(doc, [line], y + 7 - 7.18, 10, width - right); y += 14; });
+  y += 5 / 0.353;
+  const customerY = y;
+  [invoice.company, invoice.customerNameSnapshot, invoice.customerStreet, invoice.customerPostalCity].filter(Boolean).forEach((line, index) => { text(doc, line, left, customerY + index * 14 + 7 - 7.18, 10); });
+  y = 356.6;
   doc.font("Helvetica-Bold").fontSize(12).fillColor("black").text(`Rechnung Nr: ${invoice.invoiceNumber}`, left, y, { width: width - left - right, align: "center" }); y += 35;
+  y = 375.4;
   const entries = parseEntries(invoice.entries);
   y = table(doc, entries, y, left, width - right);
-  y += 28;
+  y = Math.max(y + 28, 462.7);
   const totals = calculateInvoiceTotals(entries, Number(invoice.taxPercent));
   drawRight(doc, [`Nettobetrag:   ${euro(totals.net)}`, `${formatNumber(Number(invoice.taxPercent))}% MwSt:     ${euro(totals.tax)}`, `Gesamtbetrag:   ${euro(totals.total)}`], y, 10, width - right); y += 55;
   if (invoice.text) { text(doc, invoice.text, left, y, 10, width - left - right); y += Math.max(20, doc.heightOfString(invoice.text, { width: width - left - right })); }
-  y = Math.max(y, 708.7);
-  text(doc, "Die Rechnung wurde maschinell erstellt und ist ohne Unterschrift gültig.", left, y, 8); y += 18;
+  y = Math.max(y, 711.7);
+  text(doc, "Die Rechnung wurde maschinell erstellt und ist ohne Unterschrift gültig.", left, y, 8); y += 13.2;
   doc.strokeColor("#969696").moveTo(left, y).lineTo(width - right, y).stroke(); y += 8;
-  text(doc, "Bankverbindung:", left, y, 8); drawRight(doc, ["Alexander Berent, Stadtsparkasse München", "IBAN: DE41 7015 0000 1005 7863 20", "BIC: SSKMDEMMXXX"], y, 8, width - right);
+  text(doc, "Bankverbindung:", left, y, 8);
+  ["Alexander Berent, Stadtsparkasse München", "IBAN: DE41 7015 0000 1005 7863 20", "BIC: SSKMDEMMXXX"].forEach((line, index) => drawRight(doc, [line], y + index * 14, 8, width - right));
   doc.end(); return done;
 }
 
@@ -40,11 +48,11 @@ export function calculateInvoiceTotals(entries: Array<{ quantity: number; unitPr
 
 export function invoicePdfFilename(invoice: Invoice): string { const name = (invoice.company || invoice.customerNameSnapshot).replace(/[^\p{L}\p{N} ._-]/gu, "").replace(/^(Herr|Frau)\s+/u, "").trim() || "Rechnung"; return `R-${invoice.invoiceNumber} ${name}.pdf`; }
 function table(doc: PDFKit.PDFDocument, entries: Array<{ description: string; quantity: number; unitPrice: number }>, y: number, left: number, right: number): number {
-  const columns = [left, 315, 393, 475, right]; const headerHeight = 18;
+  const columns = [left, 315, 393, 475, right]; const headerHeight = 14.4;
   doc.fillColor("#6987a3").rect(left, y, right - left, headerHeight).fill(); doc.fillColor("white").font("Helvetica").fontSize(9);
   ["Bezeichnung", "Menge", "Einzelpreis", "Betrag"].forEach((label, i) => doc.text(label, columns[i]! + 4, y + 5, { width: columns[i + 1]! - columns[i]! - 8, align: i === 0 ? "left" : "right" })); y += headerHeight;
   doc.fillColor("black");
-  for (const entry of entries) { const rowHeight = Math.max(18, doc.heightOfString(entry.description, { width: columns[1]! - columns[0]! - 8 }) + 8); doc.strokeColor("#6987a3").rect(left, y, right - left, rowHeight).stroke(); [entry.description, formatNumber(entry.quantity), euro(entry.unitPrice), euro(entry.quantity * entry.unitPrice)].forEach((value, i) => doc.text(value, columns[i]! + 4, y + 4, { width: columns[i + 1]! - columns[i]! - 8, align: i === 0 ? "left" : "right" })); y += rowHeight; }
+  for (const entry of entries) { const rowHeight = Math.max(14.4, doc.heightOfString(entry.description, { width: columns[1]! - columns[0]! - 8 }) + 4); doc.strokeColor("#6987a3").rect(left, y, right - left, rowHeight).stroke(); [entry.description, formatNumber(entry.quantity), euro(entry.unitPrice), euro(entry.quantity * entry.unitPrice)].forEach((value, i) => doc.text(value, columns[i]! + 4, y + 5, { width: columns[i + 1]! - columns[i]! - 8, align: i === 0 ? "left" : "right" })); y += rowHeight; }
   return y;
 }
 function text(doc: PDFKit.PDFDocument, value: string, x: number, y: number, size: number, width?: number) { doc.font("Helvetica").fontSize(size).fillColor("black").text(value, x, y, width ? { width } : {}); }

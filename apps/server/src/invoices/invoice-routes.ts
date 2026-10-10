@@ -22,6 +22,13 @@ export function createInvoiceRouter() {
       res.json({ data: { items: invoices.map(toInvoiceDto) } });
     } catch (error) { next(error); }
   });
+  router.get("/next-number", async (_req, res, next) => {
+    try {
+      const sequence = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 }, select: { nextValue: true } });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: { nextValue: sequence.nextValue } });
+    } catch (error) { next(error); }
+  });
   router.get("/:id", async (req, res, next) => {
     try { const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } }); if (!invoice) return notFound(res); res.json({ data: toInvoiceDto(invoice) }); } catch (error) { next(error); }
   });
@@ -39,10 +46,10 @@ export function createInvoiceRouter() {
   });
   router.post("/", async (req, res, next) => {
     try {
-      const input = validateInvoice(req.body); if (!input.ok) return invalid(res, input.message);
+      const input = validateInvoice(req.body, true); if (!input.ok) return invalid(res, input.message);
       const invoice = await createInvoice(input.value);
       res.status(201).json({ data: toInvoiceDto(invoice) });
-    } catch (error) { next(error); }
+    } catch (error) { if (isUnique(error)) { res.status(409).json({ error: { code: "INVOICE_NUMBER_IN_USE", message: "Diese Rechnungsnummer wird bereits verwendet." } }); return; } next(error); }
   });
   router.get("/from-order/:orderNumber", async (req, res, next) => {
     try {
@@ -62,7 +69,7 @@ export function createInvoiceRouter() {
     try {
       const orderNumber = Number(req.params.orderNumber);
       if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) return notFound(res);
-      const input = validateInvoice(req.body);
+      const input = validateInvoice(req.body, true);
       if (!input.ok) return invalid(res, input.message);
       const order = await prisma.order.findUnique({ where: { orderNumber }, select: { id: true, orderNumber: true } });
       if (!order) return notFound(res);

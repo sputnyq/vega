@@ -9,6 +9,27 @@
 - Rechnung in eigener Tabelle, Admin-only, genau eine pro Angebot/Orderkopie.
 - Suchbar über Rechnungsnummer, Auftragsnummer und Kundenname. Beziehung zur Order darf bei Order-Purge nicht kaskadieren; Ordernummer/Kundenname werden als Such-Snapshot behalten.
 - Rechnungsnummer separat von DB-ID, eindeutig, im Adminbereich initialisierbar und später bearbeitbar.
+- Bei der Anlage übernimmt die Rechnung eine manuell eingegebene Nummer.
+  Eine positive ganzzahlige `R-<Nummer>` (auch mit führenden Nullen) setzt den
+  nächsten automatischen Wert transaktional auf das Maximum aus bisherigem
+  `nextValue` und `Nummer + 1`. Andere manuelle Formate verbrauchen keine
+  automatische Nummer und verändern den Nummernkreis nicht. Ohne manuelle
+  Eingabe wird die nächste `R-<nextValue>` vergeben und der Wert erhöht.
+  Fehlgeschlagene Anlagen rollen auch die Nummernkreisänderung zurück.
+  Spätere Änderungen einer Rechnung verändern den Nummernkreis nicht.
+- Der neue Rechnungseditor zeigt die verwendete Nummer ohne Helper-Texte
+  am Rechnungsnummernfeld; auch die nächste automatische Nummer wird dort
+  nicht als Hinweis angezeigt. Der
+  Editor trägt die geladene nächste Nummer initial als überschreibbaren
+  TextField-Eingabewert ein und sendet diesen Wert beim Speichern mit.
+  Der Admin-only
+  Vorschau-GET `/api/admin/invoices/next-number` liest nur `nextValue`,
+  ohne Reservierung oder Datenänderung (`Cache-Control: no-store`).
+  Bei paralleler Anlage kann sich die automatische Vorschau bis zum Speichern
+  ändern; verbindlich ist die serverseitige Vergabe beim Speichern.
+  Der DB-`Int` begrenzt manuelle sequenzwirksame Nummern bei der Anlage auf
+  `R-2147483646`, damit `Nummer + 1` darstellbar bleibt; größere Werte werden
+  mit Validierungsfehler abgewiesen. Die bisherige Editierbarkeit bleibt erhalten.
 - Rechnung ist einfache CRUD; keine Versionshistorie. Änderungen überschreiben den aktuellen DB-Stand.
 - PDF wird bei Bedarf aus dem aktuellen DB-Stand im Backend erzeugt und vom Admin lokal gespeichert. App speichert keine PDF-Dateien.
 - Admins können Rechnungen, Gutschriften und Mahnungsdatensätze/-ereignisse explizit archivieren und bis zur endgültigen Löschung wiederherstellen. Für alle drei Finanzdatentypen gilt dieselbe Frist: 30 Tage nach Archivierung werden sie aus der App-Datenbank gelöscht; erneutes Archivieren startet die Frist neu.

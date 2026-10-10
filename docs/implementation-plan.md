@@ -106,6 +106,12 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 - Rechnungen liegen in einer eigenen Tabelle, genau eine Rechnung pro Angebot/Auftragskopie. Die Rechnung ist nach Rechnungsnummer, Auftragsnummer und Kundenname suchbar.
 - Rechnung verweist auf das Angebot, aber das Löschen des Auftrags löscht die Rechnung nicht. Auftragsnummer und Kundenname werden als Such-Snapshot in der Rechnung gespeichert; eine FK-Beziehung darf nur gelöst werden, nicht kaskadierend löschen.
 - Rechnungsnummernkreis ist getrennt, fortlaufend, über die Admin-Oberfläche initialisier- und später editierbar. Die gedruckte Rechnungsnummer ist nicht die DB-ID.
+- Bei Rechnungsanlage setzt eine manuelle positive ganzzahlige `R-<Nummer>`
+  den nächsten automatischen Wert nur aufwärts auf `Nummer + 1`; führende
+  Nullen bleiben in der Rechnungsnummer erhalten. Andere manuelle Formate
+  verändern und verbrauchen den Nummernkreis nicht. Ohne manuelle Nummer gilt
+  die transaktionale automatische Vergabe. Änderungen bestehender Rechnungen
+  beeinflussen den Nummernkreis weiterhin nicht (ADR 0005).
 - Rechnungen sind einfache CRUD-Datensätze ohne Versionshistorie. Änderungen überschreiben den aktuellen DB-Stand.
 - PDFs werden im Backend bei Bedarf erzeugt und heruntergeladen bzw. als Mailanhang erzeugt; es gibt keine dauerhaft gespeicherten PDF-Dateien. Admins sichern benötigte externe PDF-Stände selbst.
 - Gutschriften bleiben optional, eine pro Rechnung, in eigener Tabelle und mit Nummerierungsverhalten wie bisher. Mahnungen werden als Ereignisse an Rechnungen gespeichert. Rechnungen, Gutschriften und Mahnungsereignisse erhalten eigene Archiv-/Purge-Felder; Admins archivieren sie einheitlich und der App-Purge erfolgt jeweils 30 Tage danach.
@@ -298,10 +304,29 @@ Blanco-Beleg oder mit optionalem 1:1-Auftragsbezug angelegt, bearbeitet,
 gesucht, archiviert und wiederhergestellt werden. Über den
 Auftrags-Toolbar-Button kann zunächst eine ungespeicherte, vorausgefüllte Vorlage
 geöffnet werden; erst explizites Speichern im Rechnungseditor legt den Beleg an
-und verbraucht eine Rechnungsnummer. Der Vorlagen-GET verändert keine Daten.
+und vergibt die Rechnungsnummer gemäß ADR 0005. Der Vorlagen-GET verändert keine Daten.
+Der neue Editor zeigt die verwendete Nummer ohne Helper-Texte am
+Rechnungsnummernfeld und ohne Hinweis zur nächsten automatischen Nummer. Die geladene nächste
+Nummer steht initial als überschreibbarer TextField-Eingabewert im neuen
+Blanco- oder auftragsbezogenen Entwurf und wird beim Speichern mitgesendet.
+Ein Admin-only
+GET `/api/admin/invoices/next-number` liefert ausschließlich `nextValue`
+mit `Cache-Control: no-store`; die Vorschau reserviert keine Nummer und kann
+sich bei paralleler Anlage bis zum Speichern ändern. Manuelle sequenzwirksame
+Anlagen sind auf `R-2147483646` begrenzt, damit der folgende DB-`Int` darstellbar
+bleibt. Nummernkreis und Rechnung werden gemeinsam transaktional geschrieben;
+Konflikte rollen beide zurück. Das Bearbeiten bestehender Rechnungen bleibt
+ohne Nummernkreisänderung.
 Die Rechnung kann aus dem
 aktuellen Datenstand serverseitig im übernommenen Legacy-Layout als PDF
 heruntergeladen werden; jeder Export wird beim verknüpften Auftrag protokolliert.
+Die Positionen des Rechnungs-PDFs sind an der bereitgestellten Legacy-PDF-
+Referenz abgeglichen (A4, Text-Oberkanten von oben in pt): Absender 154,4,
+Kunde mit Auftragsnummer 225,3, Titel 356,0, Tabellenkopf 379,9,
+erste Position 394,3, Summen ab 462,2, Schlussvermerk 711,3 und
+Bankblock ab 732,5. Der rechte Kontaktblock bleibt oben (ab 36,7).
+Mehrzeilige Positionen wachsen weiterhin dynamisch; Summen und Fußbereich
+werden bei längeren Inhalten entsprechend nach unten verschoben.
 Auch Aufträge und Angebotskopien können Admins und Kundenberater aus dem
 aktuellen gespeicherten Stand serverseitig als PDF exportieren. Die vollständige
 Legacy-`umzugruckzuck24`-Vorlage einschließlich AGB, festen Texten, Logo und

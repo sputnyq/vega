@@ -1,4 +1,5 @@
 export { meetsPasswordPolicy, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./password-policy.js";
+export { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE } from "./invoice-number.js";
 export { isValidEmailAddress } from "./email.js";
 
 /** Anwendungsrollen; Berechtigungen werden serverseitig durchgesetzt. */
