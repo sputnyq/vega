@@ -59,12 +59,12 @@ Verhaltensberührende Auffälligkeiten stehen ausschließlich in Abschnitt 6.
 
 | ID | Schweregrad | Aufwand | Fundstelle | Problem und Empfehlung |
 |---|---|---|---|---|
-| F1 | Wichtig | klein | `apps/server/test/invoice-pdf.test.ts:5-12` | Der Test trägt einen Layoutanspruch im Namen, prüft aber nur `%PDF` und den Dateinamen; `as any` umgeht zusätzlich die Fixture-Typprüfung. Ein PDF mit falschem Kunden, falschen Beträgen oder fehlendem Rechnungstext könnte weiter bestehen. Typisierte Fixture und Prüfungen des tatsächlich erzeugten Dokuments ergänzen; das aktuelle Layout vor Renderer-Änderungen zusätzlich visuell als Referenz sichern. |
+| F1 | Wichtig | klein | `apps/server/test/invoice-pdf.test.ts:5-12` | Der Test trägt einen Layoutanspruch im Namen, prüft aber nur `%PDF` und den Dateinamen; `as any` umgeht zusätzlich die Fixture-Typprüfung. Ein PDF mit falschem Kunden, falschen Beträgen oder fehlendem Rechnungstext könnte weiter bestehen. Typisierte Fixture ergänzen. `pdfkit` komprimiert Content-Streams standardmäßig und schreibt Text als Glyph-Codes; Kunde, Beträge oder Rechnungstext sind daher nicht direkt in den PDF-Bytes prüfbar. Inhalt über die an den Renderer übergebenen Daten bzw. extrahierte reine Berechnungs-/Formatierungsfunktionen prüfen und das Layout per manuellem Vergleich sichern; kein PDF-Parser als neue Dependency, keine geänderten Renderer-Optionen. |
 | F2 | Wichtig | mittel | `apps/server/src/invoices/invoice-routes.ts:11-95` | HTTP-Antworten, DB-Operationen/Nummerntransaktion, Eingangsvalidierung und DTO-Mapping liegen zusammen. Das erschwert isolierte Charakterisierung und macht Änderungen am Validator unnötig abhängig vom Router. Erst reine Input-/Mapping-Funktionen, danach zusammenhängende Schreiboperationen auslagern; die vorhandenen `*-input.ts`-/`*-service.ts`-Muster nutzen, ohne zusätzliche generische Schichten. |
-| F3 | Wichtig | mittel | `apps/server/src/orders/order-input.ts:148-283` | `validateDetails` behandelt Nebenadressen, Möbel, Leistungen, Angebotsbasis und Konditionen in einem Ablauf mit vielen Zwischenvariablen und mehrfachen Flags. Kleine fachlich benannte private Validatoren im selben Modul extrahieren. Reihenfolge der Fehler, Defaultwerte, erlaubte Entwürfe und Staff-/Public-Unterschiede müssen identisch bleiben. |
-| F4 | Wichtig | mittel | `apps/admin/src/invoices/InvoiceEditorPage.tsx:31` | Kundendaten, Rechnungsdaten, Positionsliste, wiederholte Positionsupdates und Aktionen sind in einem einzigen JSX-Ausdruck verschachtelt. Gemeint ist nicht nur Formatierung: lokale benannte Render-/Update-Helper trennen konkrete Verantwortlichkeiten. State und Hooks bleiben in der bestehenden Komponente; keine neue Form-Engine, kein neuer DOM-Wrapper und keine geänderten Keys. |
-| F5 | Hinweis | klein | `apps/admin/src/password-policy.ts:4-10`; `apps/server/src/password-policy.ts:5-11` | Dieselbe Längen-/ASCII-Zeichenprüfung ist zweimal implementiert. Die reine Prüfung über das vorhandene Domain-Package teilen und die bisherigen Exporte bzw. UI-Texte erhalten. Keine Änderung an erlaubten Zeichen, Passwortgrenzen oder Better-Auth-Konfiguration. |
-| F6 | Hinweis | klein | `apps/admin/src/catalog/catalog-api.ts:6-18`; `apps/admin/src/settings/UserManagementPage.tsx:5,32,50-53`; `apps/admin/src/settings/OptionsPage.tsx:4,49,57,97` | Der generische Admin-Request-Helper heißt `catalogRequest` und liegt im Katalogmodul, obwohl Settings und Mitarbeiterverwaltung ihn ebenfalls nutzen. Das suggeriert eine fachliche Abhängigkeit, die die Funktion nicht hat. In einen neutralen Admin-API-Ort verschieben und treffend benennen; Credentials, Envelope-Verarbeitung und auch bestehende Fallbacktexte unverändert übernehmen. Keine flächendeckende Umstellung anders arbeitender Fetch-Aufrufer. |
+| F3 | Wichtig | mittel | `apps/server/src/orders/order-input.ts:148-277` | `validateDetails` behandelt Nebenadressen, Möbel, Leistungen, Angebotsbasis und Konditionen in einem Ablauf mit vielen Zwischenvariablen und mehrfachen Flags. Kleine fachlich benannte private Validatoren im selben Modul extrahieren. Reihenfolge der Fehler, Defaultwerte, erlaubte Entwürfe und Staff-/Public-Unterschiede müssen identisch bleiben. |
+| F5 | Hinweis | klein | `apps/admin/src/password-policy.ts:4-10`; `apps/server/src/password-policy.ts:5-11` | Dieselbe Prüfung auf Länge (8–128) sowie Großbuchstabe, Kleinbuchstabe und Ziffer (jeweils `[A-Z]`, `[a-z]`, `[0-9]`) ist zweimal implementiert. Die reine Prüfung samt Längenkonstanten über das vorhandene Domain-Package teilen; die bisherigen Exporte und die unterschiedlichen Texte (Admin-Hilfetext, Server-Fehlermeldung) erhalten. Keine Änderung an erlaubten Zeichen, Passwortgrenzen oder Better-Auth-Konfiguration. |
+| F6 | Hinweis | klein | `apps/admin/src/catalog/catalog-api.ts:6-18`; `apps/admin/src/settings/UserManagementPage.tsx:5,32,50-53`; `apps/admin/src/settings/OptionsPage.tsx:4,49,57,97`; `apps/admin/src/orders/RouteDistance.tsx:3,18`; `apps/admin/src/orders/BasisTab.tsx:5,23`; `apps/admin/src/orders/ExtrasTab.tsx:5,23-24`; `apps/admin/src/orders/FurnitureTab.tsx:5,24` | Der generische Admin-Request-Helper heißt `catalogRequest` und liegt im Katalogmodul, obwohl Settings, Mitarbeiterverwaltung und Auftragsbearbeitung ihn ebenfalls nutzen. Das suggeriert eine fachliche Abhängigkeit, die die Funktion nicht hat. In einen neutralen Admin-API-Ort verschieben und treffend benennen; Credentials, Envelope-Verarbeitung und auch bestehende Fallbacktexte unverändert übernehmen. Keine flächendeckende Umstellung anders arbeitender Fetch-Aufrufer. |
+| F4 | Hinweis | mittel | `apps/admin/src/invoices/InvoiceEditorPage.tsx:31` | Kundendaten, Rechnungsdaten, Positionsliste, wiederholte Positionsupdates und Aktionen sind in einem einzigen JSX-Ausdruck verschachtelt. Gemeint ist nicht nur Formatierung: lokale benannte Render-/Update-Helper trennen konkrete Verantwortlichkeiten. State und Hooks bleiben in der bestehenden Komponente; keine neue Form-Engine, kein neuer DOM-Wrapper und keine geänderten Keys. |
 
 Positiv: Explizite öffentliche Projektionen, echte DB-Tests für Beziehungen und
 Nummern sowie die serverseitigen Auth-/Rollengates liefern bereits wichtige
@@ -84,8 +84,10 @@ und darf nicht durch eine stillschweigende neue Sollregel ersetzt werden.
 ### 1. Passwort- und Auftragsvalidierung charakterisieren
 
 - **Ziel/Dateien:** `apps/server/test/password-policy.test.ts`,
-  `apps/server/test/order-input.test.ts`; Paritätsprüfung der bestehenden
-  Admin- und Server-Passwortfunktionen in den vorhandenen Tests.
+  `apps/server/test/order-input.test.ts` und ein neuer Test für
+  `apps/admin/src/password-policy.ts` unter `apps/admin/test/`. Beide
+  Verzeichnisse laufen bereits in `npm test`; dieselbe Testmatrix belegt die
+  Parität der Admin- und Server-Passwortfunktionen.
 - **Begründung:** Voraussetzung für F3/F5. Vollständige Rückgabewerte und
   geordnete Fehlerlisten prüfen, nicht lediglich `ok` oder einzelne Felder.
   Public, Staff mit Preisen und unvollständige Staff-Entwürfe unterscheiden.
@@ -106,14 +108,22 @@ und darf nicht durch eine stillschweigende neue Sollregel ersetzt werden.
   Archiv/Restore und PDF-Export/Journaleffekt vor dem Umbau festhalten.
 - **Aufwand:** mittel. **Risiko für UI und Business-Logik:** keines.
 - **Absicherung:** Nur die ausdrücklich separate `_test`-Datenbank verwenden.
-  PDF-Fixture ohne `as any`; Inhalt/Beträge und aktuelles Erscheinungsbild
-  prüfen. Keine Produktionsdaten oder realen Providerzugänge.
+  PDF-Fixture ohne `as any`. Inhalt/Beträge nicht in den komprimierten
+  PDF-Bytes suchen, sondern über Renderer-Eingaben bzw. reine
+  Berechnungs-/Formatierungsfunktionen prüfen; Erscheinungsbild per
+  dokumentiertem manuellem Vergleich sichern. Kein PDF-Parser als neue
+  Dependency, keine geänderten `pdfkit`-Optionen. Keine Produktionsdaten oder
+  realen Providerzugänge.
   Keinen Vergleich instabiler vollständiger PDF-Bytes einführen.
 
 ### 3. Identische Passwortprüfung teilen
 
 - **Ziel/Dateien:** `packages/domain/src/index.ts` und beide bestehenden
   `password-policy.ts`-Module; zugehörige Tests aus Schritt 1.
+  `apps/admin/package.json` deklariert `@vega/domain` bisher nicht, obwohl
+  der Admin es bereits importiert (funktioniert nur über das Hoisting der
+  npm-Workspaces). Die Workspace-Abhängigkeit im selben Schritt explizit
+  eintragen und `package-lock.json` per npm aktualisieren.
 - **Begründung:** F5; eine einzige Implementierung verhindert Drift.
   Bestehende Modul-Exporte können auf die gemeinsame Funktion verweisen,
   damit nicht sämtliche Verbraucher gleichzeitig geändert werden müssen.
@@ -138,7 +148,7 @@ und darf nicht durch eine stillschweigende neue Sollregel ersetzt werden.
 ### 5. Rechnungs-Schreiboperationen aus dem Router lösen
 
 - **Ziel/Dateien:** `apps/server/src/invoices/invoice-routes.ts`,
-  `apps/server/src/invoices/invoice-service.ts`.
+  neu `apps/server/src/invoices/invoice-service.ts` (existiert noch nicht).
 - **Begründung:** Zweiter Teil von F2. Zusammenhängende Persistenzoperationen
   mit benannten Funktionen kapseln; der Router bleibt für HTTP und das
   bestehende Error-Mapping verantwortlich. Einzeilige Listen-/Lesefunktionen
@@ -181,10 +191,12 @@ und darf nicht durch eine stillschweigende neue Sollregel ersetzt werden.
   Positionsupdates, keine globale Formularabstraktion. State, Hook-Reihenfolge,
   elementare DOM-Struktur und Mount-Verhalten bleiben erhalten.
 - **Aufwand:** mittel. **Risiko für UI und Business-Logik:** keines.
-- **Absicherung:** Vorher-/Nachher-Prüfung aus Abschnitt 5 und Entscheidung
-  zur Browser-Absicherung aus Abschnitt 6. Festgelegt ist ein dokumentierter
-  manueller Browservergleich plus vorhandene Checks, ohne neue Dependencies.
-  Ohne diese Referenz keine Umsetzung.
+- **Absicherung:** Vorher-/Nachher-Prüfung aus Abschnitt 5. Entschieden ist
+  ein dokumentierter manueller Browservergleich plus vorhandene Checks, ohne
+  neue Dependencies und ohne automatisierten Browser-Test-Runner
+  (`apps/admin/package.json:6-10` enthält keinen). Die unveränderte
+  Oberfläche ist vorab als Referenz zu sichern; ohne diese Referenz keine
+  Umsetzung.
   Lade-/Fehlerzustände und Speichern dürfen nicht nebenbei verbessert werden.
 
 ## 5. Absicherungsstrategie
@@ -194,7 +206,7 @@ und darf nicht durch eine stillschweigende neue Sollregel ersetzt werden.
 | Passwort | Länge 7/8/128/129, fehlende Zeichenklassen, ASCII-/Nicht-ASCII-Zeichen, Leerzeichen und identische Ergebnisse beider vorhandenen Funktionen. Keine neue Passwortregel. |
 | Auftragsvalidator | Vollständiger Kunde und Staff-Entwurf; fehlende, leere und falsch typisierte Werte; ausgeblendete/eingeblendete Nebenadressen; Möbel-/Service-/Konditionsgrenzen; öffentliche Preisverbote; Daten/Uhrzeiten. Die vollständige normalisierte Ausgabe und Fehlerreihenfolge sind die Referenz. |
 | Rechnungs-API | Blanco und Auftragsübernahme; bestehende 1:1-Beziehung; automatische/manuelle Nummern und Rollback; PUT, Konflikte, Suche, Archiv/Restore und fehlende IDs; identische Statuscodes, Header, JSON-Antworten und Journalaktionen. Bestehende, möglicherweise ungewollte Fehlerantworten nicht als Teil des Refactorings korrigieren. |
-| PDF | Kunde/Adresse, Nummer/Datum, Positionen, Netto/Steuer/Gesamt, Rechnungstext und Dateiname; kurze und lange Texte sowie mehrere Positionen. Layout anhand des unveränderten Vega-Renderers festhalten, nicht anhand eines neu interpretierten Legacy-Solls. Keine Änderung von Rundung, Zeitformat oder Pagination. |
+| PDF | Kunde/Adresse, Nummer/Datum, Positionen, Netto/Steuer/Gesamt, Rechnungstext und Dateiname; kurze und lange Texte sowie mehrere Positionen. Inhalte über Renderer-Eingaben bzw. reine Funktionen prüfen, nicht in komprimierten PDF-Bytes. Layout per manuellem Vergleich anhand des unveränderten Vega-Renderers festhalten, nicht anhand eines neu interpretierten Legacy-Solls. Keine Änderung von Rundung, Zeitformat oder Pagination. |
 | Admin-Request-Helper | Fetch-Argumente und Rückgabe-/Fehlerverhalten mit dem vorhandenen `node:test`-Runner charakterisieren. Nicht nur Importnamen oder Quelltext prüfen. |
 | Rechnungseditor | Neu/Bearbeiten, ausgefüllte Felder, Positionsanlage/-änderung/-löschung, Lade-/Fehler-/Erfolgzustände, Save-Payload, Weiterleitung und PDF-Link. Vorher-/Nachher-Browserprüfung bei schmalem und breitem Viewport; DOM-Reihenfolge, Texte, `sx`, Props und kompakte MUI-Defaults bleiben identisch. |
 
@@ -213,8 +225,7 @@ hinzufügen.
 
 | Punkt | Beleg | Einordnung |
 |---|---|---|
-| Browser-Absicherung für Schritt 8: entschieden | `apps/admin/package.json:7-27`; `apps/admin/test/routes.test.ts:1-43` | Nutzerentscheidung: dokumentierter manueller Browservergleich plus vorhandene Checks, ohne neue Dependencies. Ein automatisierter Browser-Test-Runner wird nicht eingeführt. Vor der späteren Umsetzung ist die unveränderte Oberfläche als Referenz zu sichern; das ist eine Ausführungsvoraussetzung, keine offene Architekturentscheidung. |
-| Rechnungsvalidierung | `apps/server/src/invoices/invoice-routes.ts:86-94`; zum Vergleich `apps/server/src/orders/order-input.ts:141-146` | Rechnungsdatum wird nur über sein Format geprüft, Positionen/Fälligkeiten haben andere Zahlen-/Datumsprüfungen als Orders. Strengere Annahmeregeln würden das Verhalten ändern. Separat prüfen und als Fehlerbehebung freigeben, nicht bei der Extraktion angleichen. |
+| Rechnungsvalidierung | `apps/server/src/invoices/invoice-routes.ts:83-93`; zum Vergleich `apps/server/src/orders/order-input.ts:141-146` | Rechnungsdatum wird nur über sein Format geprüft, Positionen/Fälligkeiten haben andere Zahlen-/Datumsprüfungen als Orders. Strengere Annahmeregeln würden das Verhalten ändern. Separat prüfen und als Fehlerbehebung freigeben, nicht bei der Extraktion angleichen. |
 | Fehlgeschlagenes Archiv/Restore im Rechnungsfrontend | `apps/admin/src/invoices/InvoicesPage.tsx:8` | Der Mutation-Response wird nicht auf `ok` geprüft; anschließend wird neu geladen. Eine neue Fehlermeldung oder geänderte Reload-Regel verändert die UI und gehört in einen separaten Fehlerbehebungsauftrag. |
 | Outbox nach Prozessabbruch und Retry-Zählung | `apps/server/src/mail/mail-outbox-service.ts:42-48,75,83-89` | Ein Claim setzt `SENDING`; der Due-Scan selektiert nur `PENDING`/`FAILED`. Außerdem wird nach bereits erhöhtem `attempts` nochmals `+ 1` für die Retry-Zeit verwendet. Crash-Recovery, Retry-Timing und Doppelversand müssen separat gegen die gewünschte Mailsemantik geprüft werden. Kein automatisches Zurücksetzen oder Retry-Umbau im Refactoring. |
 | Breite Auth-Fehlerabbildung | `apps/server/src/app.ts:141-155,217-223`; Vergleich `apps/server/src/staff/staff-routes.ts:39-43` | Profil/Initialpasswort bilden jeden Fehler der betreffenden Auth-Operation als 400 ab, während Staff bekannte API-Fehler differenziert. Eine Vereinheitlichung verändert Statuscodes und Meldungen; separat entscheiden, nicht globales Catch-Cleanup. |
