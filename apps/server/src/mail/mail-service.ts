@@ -1,6 +1,7 @@
 import { htmlToPlainText, passwordResetEmail, renderEmailLayout } from "./email-template.js";
 import type { MailAttachment, OutgoingMail } from "./hostinger-mail-client.js";
 import type { AppSettingsDto } from "@vega/domain";
+import { isValidEmailAddress } from "@vega/domain";
 
 export type EmailKind = "INQUIRY_RECEIVED" | "OFFER" | "INVOICE" | "INQUIRY_DECLINED" | "PASSWORD_RESET";
 
@@ -50,5 +51,5 @@ export class MailService {
 }
 
 function isEmail(value: string): boolean {
-  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
+  return isValidEmailAddress(value);
 }

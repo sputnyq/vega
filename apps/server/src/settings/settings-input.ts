@@ -1,4 +1,5 @@
 import type { AppSettingsDto } from "@vega/domain";
+import { isValidEmailAddress } from "@vega/domain";
 
 export const EMPTY_SETTINGS: AppSettingsDto = {
   revision: 0, boxCbm: null, kleiderboxCbm: null, origin: null, dataPrivacyUrl: null, successUrl: null,
@@ -41,7 +42,7 @@ export function validateSettings(value: unknown): { ok: true; value: AppSettings
         continue;
       }
     }
-    if ((key === "companyEmail" || key === "emailFromAddress") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(trimmed)) {
+    if ((key === "companyEmail" || key === "emailFromAddress") && !isValidEmailAddress(trimmed)) {
       issues.push({ field: key, message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." });
       continue;
     }

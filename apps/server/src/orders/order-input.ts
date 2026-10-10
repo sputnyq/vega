@@ -6,6 +6,7 @@ import type {
   OrderFurnitureInput,
   OrderServiceInput,
 } from "@vega/domain";
+import { isValidEmailAddress } from "@vega/domain";
 
 export interface OrderInputIssue {
   field: string;
@@ -16,7 +17,6 @@ export type OrderInputValidation =
   | { ok: true; value: CreateOrderInput }
   | { ok: false; issues: OrderInputIssue[] };
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const TIME_PATTERN = /^\d{2}:\d{2}$/u;
 const ORDER_SOURCES = ["express", "individuelle", "Moebelliste", "UmzugRuckZuck", "check24", "umzugruckzuck24.de"] as const;
@@ -302,7 +302,7 @@ export function validateOrderCreateInput(body: unknown, {
     else issues.push({ field: "customer.salutation", message: "Ungültige Anrede." });
   }
 
-  if (email && !EMAIL_PATTERN.test(email)) issues.push({ field: "customer.email", message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." });
+  if (email && !isValidEmailAddress(email)) issues.push({ field: "customer.email", message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." });
   if (phone && !/[0-9]{3}/u.test(phone)) issues.push({ field: "customer.phone", message: "Bitte geben Sie eine gültige Telefonnummer ein." });
 
   const from = validateAddress(body.from, "from", issues, allowIncomplete);
