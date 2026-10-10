@@ -43,8 +43,8 @@ zusätzlich dessen `AGENTS.md` lesen; insbesondere gelten die Legacy-Regeln in
    Reihenfolge ab; bei offenen Fach-, Sicherheits- oder Compliance-Entscheidungen
    dokumentiere den Blocker, statt eine Regel zu erfinden.
 2. Vergleiche zu portierende Funktionalität mit `old-app/`, aber setze sie
-  in der Zielstruktur des Vega-Repositories neu um. Keine Bestandsdatenmigration
-  und keine ungeprüfte Übernahme alter Endpunkte oder Zugangsdaten.
+   in der Zielstruktur des Vega-Repositories neu um. Keine Bestandsdatenmigration
+   und keine ungeprüfte Übernahme alter Endpunkte oder Zugangsdaten.
 3. Halte die Zielstruktur und Paketbefehle aus `package.json` aktuell.
    Zielruntime ist Node.js 24; Architekturvorgaben sind Express 5, TypeScript 7,
    React 19, Vite und MUI. Ein Express-Prozess liefert API und getrennte
