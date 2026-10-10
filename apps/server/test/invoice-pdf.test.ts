@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Prisma, type Invoice } from "@prisma/client";
+import { Prisma, type Invoice } from "../src/generated/prisma/client.js";
 import test from "node:test";
 import { calculateInvoiceTotals, generateInvoicePdf, invoicePdfFilename } from "../src/pdf/invoice-pdf.js";
 

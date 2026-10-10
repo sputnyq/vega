@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../../src/generated/prisma/client.js";
 import type { InvoiceInput } from "@vega/domain";
 import express from "express";
 import test, { after } from "node:test";
@@ -406,4 +406,29 @@ test("failed order transactions consume no number and concurrent creation assign
   assert.ok(results.every((result) => result.status === "fulfilled"));
   assert.deepEqual(numbers.sort((a, b) => a - b), Array.from({ length: 5 }, (_, index) => before.nextValue + index));
   assert.equal((await prisma.orderNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, before.nextValue + 5);
+});
+
+test("driver adapter preserves JSON, Decimal, UTC DateTime, BigInt and missing-record errors", async () => {
+  await rollback(async (tx) => {
+    const invoiceDate = new Date("2026-10-10T10:12:34.567Z");
+    const entries = { items: [{ name: "Prisma-Testmöbel", price: 12.34 }], optional: null, enabled: true };
+    const id = randomUUID();
+    await tx.invoice.create({ data: {
+      id, invoiceNumber: `R-${id}`, customerNameSnapshot: "Adapter-Test",
+      invoiceDate, taxPercent: "19.75", text: "", entries, dueDates: [],
+    } });
+    const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+    assert.deepEqual(invoice.entries, entries);
+    assert.deepEqual(invoice.dueDates, []);
+    assert.equal(invoice.taxPercent.toFixed(2), "19.75");
+    assert.equal(invoice.invoiceDate.toISOString(), invoiceDate.toISOString());
+    assert.equal(invoice.archivedAt, null);
+    const rate = await tx.rateLimit.create({ data: {
+      id: randomUUID(), key: randomUUID(), count: 1, lastRequest: 9_007_199_254_740_993n,
+    } });
+    assert.equal((await tx.rateLimit.findUniqueOrThrow({ where: { id: rate.id } })).lastRequest, 9_007_199_254_740_993n);
+    await assert.rejects(tx.invoice.findUniqueOrThrow({ where: { id: randomUUID() } }), (error: unknown) => {
+      return typeof error === "object" && error !== null && "code" in error && error.code === "P2025";
+    });
+  });
 });

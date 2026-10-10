@@ -20,6 +20,7 @@ test("built single-process deployment serves API, both frontends and absolute lo
     cwd: root, stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env, NODE_ENV: "production", HOST: "127.0.0.1", PORT: String(port),
+      DATABASE_URL: "mysql://deployment_test:deployment_test@127.0.0.1:1/vega_deployment_test",
       APP_BASE_URL: "https://vega.example.test", BETTER_AUTH_URL: "https://vega.example.test",
       BETTER_AUTH_TRUSTED_ORIGINS: "https://vega.example.test",
       CORS_ALLOWED_ORIGINS: "https://wordpress.example.test",

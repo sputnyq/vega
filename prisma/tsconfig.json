@@ -8,5 +8,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["seed.ts", "../prisma.config.ts"]
+  "include": ["seed.ts", "recover-admin.ts", "../prisma.config.ts"]
 }

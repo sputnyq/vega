@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { InvoiceInput } from "@vega/domain";
 
 export function validateInvoice(value: unknown): { ok: true; value: InvoiceInput } | { ok: false; message: string } {
