@@ -22,14 +22,20 @@ export async function generateInvoicePdf(invoice: Invoice): Promise<Buffer> {
   const entries = parseEntries(invoice.entries);
   y = table(doc, entries, y, left, width - right);
   y += 28;
-  const net = entries.reduce((sum, entry) => sum + entry.quantity * entry.unitPrice, 0); const tax = net * Number(invoice.taxPercent) / 100;
-  drawRight(doc, [`Nettobetrag:   ${euro(net)}`, `${formatNumber(Number(invoice.taxPercent))}% MwSt:     ${euro(tax)}`, `Gesamtbetrag:   ${euro(net + tax)}`], y, 10, width - right); y += 55;
+  const totals = calculateInvoiceTotals(entries, Number(invoice.taxPercent));
+  drawRight(doc, [`Nettobetrag:   ${euro(totals.net)}`, `${formatNumber(Number(invoice.taxPercent))}% MwSt:     ${euro(totals.tax)}`, `Gesamtbetrag:   ${euro(totals.total)}`], y, 10, width - right); y += 55;
   if (invoice.text) { text(doc, invoice.text, left, y, 10, width - left - right); y += Math.max(20, doc.heightOfString(invoice.text, { width: width - left - right })); }
   y = Math.max(y, 708.7);
   text(doc, "Die Rechnung wurde maschinell erstellt und ist ohne Unterschrift gültig.", left, y, 8); y += 18;
   doc.strokeColor("#969696").moveTo(left, y).lineTo(width - right, y).stroke(); y += 8;
   text(doc, "Bankverbindung:", left, y, 8); drawRight(doc, ["Alexander Berent, Stadtsparkasse München", "IBAN: DE41 7015 0000 1005 7863 20", "BIC: SSKMDEMMXXX"], y, 8, width - right);
   doc.end(); return done;
+}
+
+export function calculateInvoiceTotals(entries: Array<{ quantity: number; unitPrice: number }>, taxPercent: number) {
+  const net = entries.reduce((sum, entry) => sum + entry.quantity * entry.unitPrice, 0);
+  const tax = net * taxPercent / 100;
+  return { net, tax, total: net + tax };
 }
 
 export function invoicePdfFilename(invoice: Invoice): string { const name = (invoice.company || invoice.customerNameSnapshot).replace(/[^\p{L}\p{N} ._-]/gu, "").replace(/^(Herr|Frau)\s+/u, "").trim() || "Rechnung"; return `R-${invoice.invoiceNumber} ${name}.pdf`; }

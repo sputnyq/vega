@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import type { Prisma } from "../../src/generated/prisma/client.js";
+import type { InvoiceInput } from "@vega/domain";
 import express from "express";
 import test, { after } from "node:test";
 import { orderFixture } from "../fixtures/order.js";
@@ -16,6 +17,7 @@ const { prisma } = await import("../../src/prisma.js");
 const { createOrder } = await import("../../src/orders/order-service.js");
 const { createAdminOrderRouter } = await import("../../src/orders/admin-order-routes.js");
 const { createInvoiceRouter } = await import("../../src/invoices/invoice-routes.js");
+const { createInvoice: persistInvoice } = await import("../../src/invoices/invoice-service.js");
 const { orderDataWithRelations, orderRelationCreates, orderRelations } = await import("../../src/orders/order-relations.js");
 after(() => prisma.$disconnect());
 
@@ -32,11 +34,25 @@ function uniqueFailure(error: unknown) {
 function assertRecord(value: unknown): asserts value is Record<string, unknown> {
   assert.ok(typeof value === "object" && value !== null && !Array.isArray(value));
 }
+function stringValue(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Expected a string in the invoice response.");
+  return value;
+}
+function arrayValue(value: unknown): unknown[] {
+  if (!Array.isArray(value)) throw new Error("Expected an array in the invoice response.");
+  return value;
+}
 async function responseData(response: Awaited<ReturnType<typeof fetch>>) {
   const body: unknown = await response.json();
   assertRecord(body);
   assertRecord(body.data);
   return body.data;
+}
+async function responseError(response: Awaited<ReturnType<typeof fetch>>) {
+  const body: unknown = await response.json();
+  assertRecord(body);
+  assertRecord(body.error);
+  return body.error;
 }
 
 test("fresh migrations initialize only technical sequences/settings, with the complete relational schema", async () => {
@@ -223,6 +239,148 @@ test("order create, copy, edit, read and invoice address projection use independ
   assert.ok(typeof invoice.id === "string");
   invoiceIds.push(invoice.id);
   assert.equal(invoice.customerStreet, "Relationales Testziel 10");
+});
+
+test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF headers, and export journal order", async (context) => {
+  const app = express();
+  app.use(express.json());
+  app.use((_req, res, next) => { res.locals.staffUser = { name: "Test Admin" }; next(); });
+  app.use("/invoices", createInvoiceRouter());
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
+
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const base = `http://127.0.0.1:${address.port}/invoices`;
+  const sequenceBefore = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
+  const orderNumbers: number[] = [];
+  const invoiceIds: string[] = [];
+  context.after(async () => {
+    await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+    await prisma.order.deleteMany({ where: { orderNumber: { in: orderNumbers } } });
+    await prisma.invoiceNumberSequence.update({ where: { id: 1 }, data: { nextValue: sequenceBefore.nextValue } });
+  });
+
+  const order = await createOrder(orderFixture(), "admin", "Test Admin");
+  orderNumbers.push(order.orderNumber);
+  const createdResponse = await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" });
+  assert.equal(createdResponse.status, 201);
+  const created = await responseData(createdResponse);
+  const createdInvoiceNumber = stringValue(created.invoiceNumber);
+  const createdInvoiceDate = stringValue(created.invoiceDate);
+  assert.equal(createdInvoiceNumber, `R-${sequenceBefore.nextValue}`);
+  assert.equal(created.orderNumber, order.orderNumber);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 1);
+  assert.equal((await fetch(`${base}/from-order/${order.orderNumber}`, { method: "POST" })).status, 409);
+  assert.equal((await fetch(`${base}/missing-invoice`)).status, 404);
+
+  const invoiceId = stringValue(created.id);
+  invoiceIds.push(invoiceId);
+  const invoiceInput: InvoiceInput = {
+    invoiceNumber: createdInvoiceNumber,
+    invoiceDate: createdInvoiceDate,
+    company: "Test GmbH",
+    customerName: "Test Kunde",
+    customerStreet: "Teststraße 1",
+    customerPostalCity: "80331 München",
+    taxPercent: 19,
+    text: "Danke für Ihren Auftrag.",
+    entries: [{ description: "Umzug", quantity: 2, unitPrice: 100 }],
+    dueDates: [{ date: "2026-11-10", amount: 238, text: "Fällig" }],
+  };
+  const standaloneResponse = await fetch(base, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...invoiceInput, invoiceNumber: undefined }),
+  });
+  assert.equal(standaloneResponse.status, 201);
+  const standalone = await responseData(standaloneResponse);
+  assert.equal(standalone.invoiceNumber, `R-${sequenceBefore.nextValue + 1}`);
+  assert.equal(standalone.orderNumber, null);
+  invoiceIds.push(stringValue(standalone.id));
+  const manualNumber = `R-test-${randomUUID()}`;
+  const manualResponse = await fetch(base, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...invoiceInput, invoiceNumber: manualNumber }),
+  });
+  assert.equal(manualResponse.status, 201);
+  const manual = await responseData(manualResponse);
+  assert.equal(manual.invoiceNumber, manualNumber);
+  const manualId = stringValue(manual.id);
+  invoiceIds.push(manualId);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBefore.nextValue + 3);
+  const sequenceBeforeFailure = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
+  await assert.rejects(persistInvoice({ ...invoiceInput, invoiceNumber: manualNumber }), uniqueFailure);
+  assert.equal((await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } })).nextValue, sequenceBeforeFailure.nextValue);
+
+  const searchResponse = await fetch(`${base}?search=${encodeURIComponent(manualNumber)}`);
+  const searchResult = await responseData(searchResponse);
+  assert.deepEqual(arrayValue(searchResult.items).map((item) => {
+    assertRecord(item);
+    return stringValue(item.id);
+  }), [manualId]);
+
+  const conflictingUpdate = await fetch(`${base}/${invoiceId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...invoiceInput, invoiceNumber: manualNumber }),
+  });
+  assert.equal(conflictingUpdate.status, 409);
+  assert.deepEqual(await responseError(conflictingUpdate), {
+    code: "INVOICE_NUMBER_IN_USE",
+    message: "Diese Rechnungsnummer wird bereits verwendet.",
+  });
+  const updateResponse = await fetch(`${base}/${invoiceId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(invoiceInput),
+  });
+  assert.equal(updateResponse.status, 200);
+  const updated = await responseData(updateResponse);
+  assert.equal(updated.id, invoiceId);
+  assert.equal(updated.invoiceNumber, invoiceInput.invoiceNumber);
+  assert.equal(updated.orderNumber, order.orderNumber);
+  assert.equal(updated.customerName, invoiceInput.customerName);
+  assert.equal(updated.customerStreet, invoiceInput.customerStreet);
+  assert.equal(updated.taxPercent, invoiceInput.taxPercent);
+  assert.equal(updated.text, invoiceInput.text);
+  assert.deepEqual(updated.entries, invoiceInput.entries);
+  assert.deepEqual(updated.dueDates, invoiceInput.dueDates);
+  assert.equal(updated.archivedAt, null);
+
+  const invalid = await fetch(`${base}/${invoiceId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...invoiceInput, customerName: "" }),
+  });
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(await responseError(invalid), { code: "INVALID_INVOICE", message: "Rechnungsdatum und Kunde sind erforderlich." });
+
+  const archiveResponse = await fetch(`${base}/${invoiceId}/archive`, { method: "POST" });
+  assert.equal(archiveResponse.status, 200);
+  const archived = await responseData(archiveResponse);
+  assert.ok(typeof archived.archivedAt === "string");
+  const archivedRecord = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
+  assert.equal(archivedRecord.purgeAt?.getTime(), archivedRecord.archivedAt!.getTime() + 30 * 86400000);
+  const archivedList = await responseData(await fetch(`${base}?archived=true`));
+  assert.ok(arrayValue(archivedList.items).some((item) => {
+    assertRecord(item);
+    return item.id === invoiceId;
+  }));
+  assert.equal((await fetch(`${base}/${invoiceId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(invoiceInput) })).status, 409);
+
+  const restoreResponse = await fetch(`${base}/${invoiceId}/restore`, { method: "POST" });
+  assert.equal(restoreResponse.status, 200);
+  assert.equal((await responseData(restoreResponse)).archivedAt, null);
+  const pdfResponse = await fetch(`${base}/${invoiceId}/pdf`);
+  assert.equal(pdfResponse.status, 200);
+  assert.equal(pdfResponse.headers.get("cache-control"), "no-store");
+  assert.match(pdfResponse.headers.get("content-type") ?? "", /application\/pdf/u);
+  assert.match(pdfResponse.headers.get("content-disposition") ?? "", /filename\*=UTF-8''/u);
+  assert.equal((await pdfResponse.arrayBuffer()).byteLength > 0, true);
+  assert.equal(await prisma.orderActivityEvent.count({ where: { orderId: (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).orderId!, action: "PDF_EXPORTED" } }), 1);
 });
 
 test("failed order transactions consume no number and concurrent creation assigns unique consecutive numbers", async (context) => {

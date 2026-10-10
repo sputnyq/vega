@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Chip, Grid, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import type { CatalogOfferDto, OrderDetailsInput } from "@vega/domain";
 import { AppointmentFields } from "./AppointmentFields.js";
-import { catalogRequest } from "../catalog/catalog-api.js";
+import { apiRequest } from "../api/api-request.js";
 import type { OrderFormValue } from "./order-form-types.js";
 
 interface BasisTabProps {
@@ -20,7 +20,7 @@ export function BasisTab({ value, update, onBasisChange }: BasisTabProps) {
 
   useEffect(() => {
     let active = true;
-    catalogRequest<CatalogOfferDto[]>("/api/catalog/offers")
+    apiRequest<CatalogOfferDto[]>("/api/catalog/offers")
       .then((items) => { if (active) setOffers(items); })
       .catch((cause: unknown) => { if (active) setOffersError(cause instanceof Error ? cause.message : "Angebote konnten nicht geladen werden."); })
       .finally(() => { if (active) setOffersLoading(false); });

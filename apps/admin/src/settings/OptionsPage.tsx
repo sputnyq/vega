@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Grid, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
 import type { AppSettingsDto } from "@vega/domain";
-import { catalogRequest } from "../catalog/catalog-api.js";
+import { apiRequest } from "../api/api-request.js";
 import { ServiceRatesEditor } from "../catalog/ServiceRatesEditor.js";
 
 type SettingKey = Exclude<keyof AppSettingsDto, "revision">;
@@ -46,7 +46,7 @@ export function OptionsPage() {
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
-    void catalogRequest<AppSettingsDto>("/api/admin/settings").then((settings) => {
+    void apiRequest<AppSettingsDto>("/api/admin/settings").then((settings) => {
       if (active) { setSaved(settings); setDraft(toDraft(settings)); setIssues({}); setMessage(""); }
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Einstellungen konnten nicht geladen werden."); })
       .finally(() => { if (active) setLoading(false); });
@@ -54,7 +54,7 @@ export function OptionsPage() {
   }, [reload]);
   useEffect(() => {
     let active = true;
-    void catalogRequest<{ nextValue: number }>("/api/admin/settings/invoice-number").then((sequence) => {
+    void apiRequest<{ nextValue: number }>("/api/admin/settings/invoice-number").then((sequence) => {
       if (active) { setInvoiceNext(sequence.nextValue); setInvoiceDraft(String(sequence.nextValue)); setInvoiceError(""); }
     }).catch((reason: unknown) => { if (active) setInvoiceError(reason instanceof Error ? reason.message : "Nummernkreis konnte nicht geladen werden."); });
     return () => { active = false; };
@@ -94,7 +94,7 @@ export function OptionsPage() {
     try {
       const nextValue = Number(invoiceDraft);
       if (!Number.isSafeInteger(nextValue) || nextValue < 1) throw new Error("Bitte geben Sie eine positive ganze Rechnungsnummer ein.");
-      const sequence = await catalogRequest<{ nextValue: number }>("/api/admin/settings/invoice-number", "PUT", { nextValue, expectedNextValue: invoiceNext });
+      const sequence = await apiRequest<{ nextValue: number }>("/api/admin/settings/invoice-number", "PUT", { nextValue, expectedNextValue: invoiceNext });
       setInvoiceNext(sequence.nextValue); setInvoiceDraft(String(sequence.nextValue)); setInvoiceMessage("Rechnungsnummernkreis gespeichert.");
     } catch (reason) { setInvoiceError(reason instanceof Error ? reason.message : "Nummernkreis konnte nicht gespeichert werden."); }
     finally { setInvoiceBusy(false); }

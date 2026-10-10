@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AddOutlined, DeleteOutlined } from "@mui/icons-material";
 import { Alert, Button, FormControlLabel, Grid, MenuItem, Paper, Stack, Switch, Tabs, Tab, TextField, Typography } from "@mui/material";
 import type { CatalogFurnitureDto, OrderFurnitureInput } from "@vega/domain";
-import { catalogRequest } from "../catalog/catalog-api.js";
+import { apiRequest } from "../api/api-request.js";
 import type { OrderFormValue } from "./order-form-types.js";
 import { OrderImages } from "./OrderImages.js";
 
@@ -21,7 +21,7 @@ export function FurnitureTab({ value, update, onFurnitureChange, orderNumber }: 
 
   useEffect(() => {
     let active = true;
-    catalogRequest<CatalogFurnitureDto[]>("/api/catalog/furniture")
+    apiRequest<CatalogFurnitureDto[]>("/api/catalog/furniture")
       .then((entries) => { if (active) setCatalogFurniture(entries); })
       .catch((cause: unknown) => { if (active) setCatalogError(cause instanceof Error ? cause.message : "Möbelkatalog konnte nicht geladen werden."); });
     return () => { active = false; };
