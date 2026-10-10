@@ -49,7 +49,6 @@ export interface CatalogColumn<T> {
 interface CatalogCrudPageProps<T extends IdentifiedCatalogRecord> {
   resource: string;
   title: string;
-  description: string;
   fields: CatalogField[];
   columns: CatalogColumn<T>[];
   defaults: Record<string, unknown>;
@@ -61,7 +60,6 @@ interface CatalogCrudPageProps<T extends IdentifiedCatalogRecord> {
 export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
   resource,
   title,
-  description,
   fields,
   columns,
   defaults,
@@ -178,10 +176,6 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
-        <Stack spacing={0.5}>
-          <Typography component="h2" variant="h5">{title}</Typography>
-          <Typography color="text.secondary">{description}</Typography>
-        </Stack>
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           {toolbarContent}
           <Button variant="contained" startIcon={<AddOutlined />} onClick={openCreate}>Hinzufügen</Button>

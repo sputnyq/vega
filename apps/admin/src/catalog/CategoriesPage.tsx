@@ -17,7 +17,6 @@ export function CategoriesPage() {
     <CatalogCrudPage<CatalogCategoryDto>
       resource="categories"
       title="Möbel-Kategorien"
-      description="Kategorien für den Möbelliste-Katalog verwalten. Die Kategorie-ID ist der interne Schlüssel."
       fields={fields}
       columns={columns}
       defaults={{ name: "", sort: 0 }}

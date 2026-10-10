@@ -6,6 +6,7 @@ import type {
   OrderFurnitureInput,
   OrderServiceInput,
 } from "@vega/domain";
+import { isValidEmailAddress } from "@vega/domain";
 
 export interface OrderInputIssue {
   field: string;
@@ -16,7 +17,6 @@ export type OrderInputValidation =
   | { ok: true; value: CreateOrderInput }
   | { ok: false; issues: OrderInputIssue[] };
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const TIME_PATTERN = /^\d{2}:\d{2}$/u;
 const ORDER_SOURCES = ["express", "individuelle", "Moebelliste", "UmzugRuckZuck", "check24", "umzugruckzuck24.de"] as const;
@@ -145,6 +145,111 @@ function validDate(value: string, field: string, issues: OrderInputIssue[]) {
   }
 }
 
+function validateFurniture(value: unknown, issues: OrderInputIssue[]): OrderDetailsInput["furniture"] | undefined {
+  if (!isRecord(value)) {
+    issues.push({ field: "details.furniture", message: "Ungültige Möbelliste." });
+    return undefined;
+  }
+  const volume = numeric(value, "volume", "details.furniture.volume", issues, { required: true, max: 100000 });
+  const volumeComplete = bool(value, "volumeComplete", "details.furniture.volumeComplete", issues);
+  const boxes = numeric(value, "boxes", "details.furniture.boxes", issues, { required: true, max: 100000 });
+  const wardrobeBoxes = numeric(value, "wardrobeBoxes", "details.furniture.wardrobeBoxes", issues, { required: true, max: 100000 });
+  const ownItems = text(value, "ownItems", "details.furniture.ownItems", issues, { max: 10000 });
+  const expensiveText = text(value, "expensiveText", "details.furniture.expensiveText", issues, { max: 3000 });
+  const heavyText = text(value, "heavyText", "details.furniture.heavyText", issues, { max: 3000 });
+  const bulkyText = text(value, "bulkyText", "details.furniture.bulkyText", issues, { max: 3000 });
+  const expensive = bool(value, "expensive", "details.furniture.expensive", issues);
+  const heavy = bool(value, "heavy", "details.furniture.heavy", issues);
+  const bulky = bool(value, "bulky", "details.furniture.bulky", issues);
+  const rawItems = value.items;
+  const items: OrderFurnitureInput[] = [];
+  if (!Array.isArray(rawItems) || rawItems.length > 200) issues.push({ field: "details.furniture.items", message: "Ungültige Möbelliste." });
+  else rawItems.forEach((rawItem, index) => {
+    if (!isRecord(rawItem)) {
+      issues.push({ field: `details.furniture.items.${index}`, message: "Ungültige Möbelposition." });
+      return;
+    }
+    const name = text(rawItem, "name", `details.furniture.items.${index}.name`, issues, { required: true, max: 191 });
+    const quantity = numeric(rawItem, "quantity", `details.furniture.items.${index}.quantity`, issues, { required: true, max: 100000 });
+    const itemVolume = numeric(rawItem, "volume", `details.furniture.items.${index}.volume`, issues, { max: 100000 });
+    const category = text(rawItem, "category", `details.furniture.items.${index}.category`, issues, { max: 191 });
+    const catalogId = rawItem.catalogId === undefined ? undefined : numeric(rawItem, "catalogId", `details.furniture.items.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
+    if (name !== undefined && quantity !== undefined) items.push({
+      name,
+      quantity,
+      ...(itemVolume !== undefined ? { volume: itemVolume } : {}),
+      ...(category !== undefined ? { category } : {}),
+      ...(catalogId !== undefined ? { catalogId } : {}),
+    });
+  });
+  if (volume === undefined || boxes === undefined || wardrobeBoxes === undefined || ownItems === undefined || expensiveText === undefined || heavyText === undefined || bulkyText === undefined || expensive === undefined || heavy === undefined || bulky === undefined) return undefined;
+  return {
+    volume, boxes, wardrobeBoxes, ownItems, items, expensive, expensiveText, heavy, heavyText, bulky, bulkyText,
+    ...(volumeComplete !== undefined ? { volumeComplete } : {}),
+  };
+}
+
+function validateExtras(value: unknown, issues: OrderInputIssue[]): OrderDetailsInput["extras"] | undefined {
+  if (!isRecord(value)) {
+    issues.push({ field: "details.extras", message: "Ungültige Zusatzleistungen." });
+    return undefined;
+  }
+  const packingRequested = bool(value, "packingRequested", "details.extras.packingRequested", issues);
+  const rawServices = value.services;
+  const services: OrderServiceInput[] = [];
+  if (!Array.isArray(rawServices) || rawServices.length > 200) issues.push({ field: "details.extras.services", message: "Ungültige Leistungsliste." });
+  else rawServices.forEach((rawService, index) => {
+    if (!isRecord(rawService)) {
+      issues.push({ field: `details.extras.services.${index}`, message: "Ungültige Leistung." });
+      return;
+    }
+    const name = text(rawService, "name", `details.extras.services.${index}.name`, issues, { required: true, max: 191 });
+    const quantity = numeric(rawService, "quantity", `details.extras.services.${index}.quantity`, issues, { required: true, max: 100000 });
+    const kind = rawService.kind;
+    const catalogId = rawService.catalogId === undefined ? undefined : numeric(rawService, "catalogId", `details.extras.services.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
+    if (kind !== "packaging" && kind !== "service") issues.push({ field: `details.extras.services.${index}.kind`, message: "Ungültige Leistungsart." });
+    if (name !== undefined && quantity !== undefined && (kind === "packaging" || kind === "service")) services.push({ name, quantity, kind, ...(catalogId !== undefined ? { catalogId } : {}) });
+  });
+  return packingRequested === undefined ? undefined : { packingRequested, services };
+}
+
+function validateBasis(value: unknown, issues: OrderInputIssue[], allowStaffPricing: boolean): OrderDetailsInput["basis"] | undefined {
+  if (!isRecord(value)) {
+    issues.push({ field: "details.basis", message: "Ungültige Angebotsbasis." });
+    return undefined;
+  }
+  const workers = numeric(value, "workers", "details.basis.workers", issues, { required: true, max: 1000 });
+  const trucks = numeric(value, "trucks", "details.basis.trucks", issues, { required: true, max: 1000 });
+  const hours = numeric(value, "hours", "details.basis.hours", issues, { required: true, max: 10000 });
+  const basePrice = numeric(value, "basePrice", "details.basis.basePrice", issues, { required: true, max: 10_000_000 });
+  const extraHourPrice = numeric(value, "extraHourPrice", "details.basis.extraHourPrice", issues, { required: true, max: 1_000_000 });
+  const discountPercent = numeric(value, "discountPercent", "details.basis.discountPercent", issues, { required: true, max: 100 });
+  if (!allowStaffPricing && ((basePrice ?? 0) > 0 || (extraHourPrice ?? 0) > 0 || (discountPercent ?? 0) > 0)) {
+    issues.push({ field: "details.basis", message: "Preis- und Rabattangaben sind nur für angemeldete Mitarbeiter verfügbar." });
+  }
+  if (workers === undefined || trucks === undefined || hours === undefined || basePrice === undefined || extraHourPrice === undefined || discountPercent === undefined) return undefined;
+  return { workers, trucks, hours, basePrice, extraHourPrice, discountPercent };
+}
+
+function validateConditions(value: unknown, issues: OrderInputIssue[], allowStaffPricing: boolean): OrderConditionInput[] | undefined {
+  if (!Array.isArray(value) || value.length > 200) {
+    issues.push({ field: "details.conditions", message: "Ungültige Konditionen." });
+    return undefined;
+  }
+  const conditions: OrderConditionInput[] = [];
+  value.forEach((rawCondition, index) => {
+    if (!isRecord(rawCondition)) {
+      issues.push({ field: `details.conditions.${index}`, message: "Ungültige Kondition." });
+      return;
+    }
+    const description = text(rawCondition, "description", `details.conditions.${index}.description`, issues, { required: true, max: 500 });
+    const amount = numeric(rawCondition, "amount", `details.conditions.${index}.amount`, issues, { required: true, max: 10_000_000 });
+    if (!allowStaffPricing && (amount ?? 0) > 0) issues.push({ field: `details.conditions.${index}.amount`, message: "Preisangaben sind nur für angemeldete Mitarbeiter verfügbar." });
+    if (description !== undefined && amount !== undefined) conditions.push({ description, amount });
+  });
+  return conditions;
+}
+
 function validateDetails(value: unknown, issues: OrderInputIssue[], allowStaffPricing: boolean, allowIncomplete: boolean): OrderDetailsInput | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
@@ -156,110 +261,10 @@ function validateDetails(value: unknown, issues: OrderInputIssue[], allowStaffPr
   const distanceKm = numeric(value, "distanceKm", "details.distanceKm", issues, { required: true, max: 10000 });
   const secondaryFrom = value.secondaryFrom === undefined ? undefined : validateAddress(value.secondaryFrom, "details.secondaryFrom", issues, allowIncomplete);
   const secondaryTo = value.secondaryTo === undefined ? undefined : validateAddress(value.secondaryTo, "details.secondaryTo", issues, allowIncomplete);
-
-  const rawFurniture = value.furniture;
-  const rawExtras = value.extras;
-  const rawBasis = value.basis;
-  const rawConditions = value.conditions;
-  let furniture: OrderDetailsInput["furniture"] | undefined;
-  let extras: OrderDetailsInput["extras"] | undefined;
-  let basis: OrderDetailsInput["basis"] | undefined;
-  let conditions: OrderConditionInput[] | undefined;
-
-  if (!isRecord(rawFurniture)) issues.push({ field: "details.furniture", message: "Ungültige Möbelliste." });
-  else {
-    const volume = numeric(rawFurniture, "volume", "details.furniture.volume", issues, { required: true, max: 100000 });
-    const volumeComplete = bool(rawFurniture, "volumeComplete", "details.furniture.volumeComplete", issues);
-    const boxes = numeric(rawFurniture, "boxes", "details.furniture.boxes", issues, { required: true, max: 100000 });
-    const wardrobeBoxes = numeric(rawFurniture, "wardrobeBoxes", "details.furniture.wardrobeBoxes", issues, { required: true, max: 100000 });
-    const ownItems = text(rawFurniture, "ownItems", "details.furniture.ownItems", issues, { max: 10000 });
-    const expensiveText = text(rawFurniture, "expensiveText", "details.furniture.expensiveText", issues, { max: 3000 });
-    const heavyText = text(rawFurniture, "heavyText", "details.furniture.heavyText", issues, { max: 3000 });
-    const bulkyText = text(rawFurniture, "bulkyText", "details.furniture.bulkyText", issues, { max: 3000 });
-    const expensive = bool(rawFurniture, "expensive", "details.furniture.expensive", issues);
-    const heavy = bool(rawFurniture, "heavy", "details.furniture.heavy", issues);
-    const bulky = bool(rawFurniture, "bulky", "details.furniture.bulky", issues);
-    const rawItems = rawFurniture.items;
-    const items: OrderFurnitureInput[] = [];
-    if (!Array.isArray(rawItems) || rawItems.length > 200) issues.push({ field: "details.furniture.items", message: "Ungültige Möbelliste." });
-    else rawItems.forEach((rawItem, index) => {
-      if (!isRecord(rawItem)) {
-        issues.push({ field: `details.furniture.items.${index}`, message: "Ungültige Möbelposition." });
-        return;
-      }
-      const name = text(rawItem, "name", `details.furniture.items.${index}.name`, issues, { required: true, max: 191 });
-      const quantity = numeric(rawItem, "quantity", `details.furniture.items.${index}.quantity`, issues, { required: true, max: 100000 });
-      const itemVolume = numeric(rawItem, "volume", `details.furniture.items.${index}.volume`, issues, { max: 100000 });
-      const category = text(rawItem, "category", `details.furniture.items.${index}.category`, issues, { max: 191 });
-      const catalogId = rawItem.catalogId === undefined ? undefined : numeric(rawItem, "catalogId", `details.furniture.items.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
-      if (name !== undefined && quantity !== undefined) items.push({
-        name,
-        quantity,
-        ...(itemVolume !== undefined ? { volume: itemVolume } : {}),
-        ...(category !== undefined ? { category } : {}),
-        ...(catalogId !== undefined ? { catalogId } : {}),
-      });
-    });
-    if (volume !== undefined && boxes !== undefined && wardrobeBoxes !== undefined && ownItems !== undefined && expensiveText !== undefined && heavyText !== undefined && bulkyText !== undefined && expensive !== undefined && heavy !== undefined && bulky !== undefined) {
-      furniture = { volume, boxes, wardrobeBoxes, ownItems, items, expensive, expensiveText, heavy, heavyText, bulky, bulkyText,
-        ...(volumeComplete !== undefined ? { volumeComplete } : {}),
-      };
-    }
-  }
-
-  if (!isRecord(rawExtras)) issues.push({ field: "details.extras", message: "Ungültige Zusatzleistungen." });
-  else {
-    const packingRequested = bool(rawExtras, "packingRequested", "details.extras.packingRequested", issues);
-    const rawServices = rawExtras.services;
-    const services: OrderServiceInput[] = [];
-    if (!Array.isArray(rawServices) || rawServices.length > 200) issues.push({ field: "details.extras.services", message: "Ungültige Leistungsliste." });
-    else rawServices.forEach((rawService, index) => {
-      if (!isRecord(rawService)) {
-        issues.push({ field: `details.extras.services.${index}`, message: "Ungültige Leistung." });
-        return;
-      }
-      const name = text(rawService, "name", `details.extras.services.${index}.name`, issues, { required: true, max: 191 });
-      const quantity = numeric(rawService, "quantity", `details.extras.services.${index}.quantity`, issues, { required: true, max: 100000 });
-      const kind = rawService.kind;
-      const catalogId = rawService.catalogId === undefined ? undefined : numeric(rawService, "catalogId", `details.extras.services.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
-      if (kind !== "packaging" && kind !== "service") issues.push({ field: `details.extras.services.${index}.kind`, message: "Ungültige Leistungsart." });
-      if (name !== undefined && quantity !== undefined && (kind === "packaging" || kind === "service")) services.push({ name, quantity, kind, ...(catalogId !== undefined ? { catalogId } : {}) });
-    });
-    if (packingRequested !== undefined) extras = { packingRequested, services };
-  }
-
-  if (!isRecord(rawBasis)) issues.push({ field: "details.basis", message: "Ungültige Angebotsbasis." });
-  else {
-    const workers = numeric(rawBasis, "workers", "details.basis.workers", issues, { required: true, max: 1000 });
-    const trucks = numeric(rawBasis, "trucks", "details.basis.trucks", issues, { required: true, max: 1000 });
-    const hours = numeric(rawBasis, "hours", "details.basis.hours", issues, { required: true, max: 10000 });
-    const basePrice = numeric(rawBasis, "basePrice", "details.basis.basePrice", issues, { required: true, max: 10_000_000 });
-    const extraHourPrice = numeric(rawBasis, "extraHourPrice", "details.basis.extraHourPrice", issues, { required: true, max: 1_000_000 });
-    const discountPercent = numeric(rawBasis, "discountPercent", "details.basis.discountPercent", issues, { required: true, max: 100 });
-    if (!allowStaffPricing && ((basePrice ?? 0) > 0 || (extraHourPrice ?? 0) > 0 || (discountPercent ?? 0) > 0)) {
-      issues.push({ field: "details.basis", message: "Preis- und Rabattangaben sind nur für angemeldete Mitarbeiter verfügbar." });
-    }
-    if (workers !== undefined && trucks !== undefined && hours !== undefined && basePrice !== undefined && extraHourPrice !== undefined && discountPercent !== undefined) {
-      basis = { workers, trucks, hours, basePrice, extraHourPrice, discountPercent };
-    }
-  }
-
-  if (!Array.isArray(rawConditions) || rawConditions.length > 200) issues.push({ field: "details.conditions", message: "Ungültige Konditionen." });
-  else {
-    const validatedConditions: OrderConditionInput[] = [];
-    rawConditions.forEach((rawCondition, index) => {
-      if (!isRecord(rawCondition)) {
-        issues.push({ field: `details.conditions.${index}`, message: "Ungültige Kondition." });
-        return;
-      }
-      const description = text(rawCondition, "description", `details.conditions.${index}.description`, issues, { required: true, max: 500 });
-      const amount = numeric(rawCondition, "amount", `details.conditions.${index}.amount`, issues, { required: true, max: 10_000_000 });
-      if (!allowStaffPricing && (amount ?? 0) > 0) issues.push({ field: `details.conditions.${index}.amount`, message: "Preisangaben sind nur für angemeldete Mitarbeiter verfügbar." });
-      if (description !== undefined && amount !== undefined) validatedConditions.push({ description, amount });
-    });
-    conditions = validatedConditions;
-  }
-
+  const furniture = validateFurniture(value.furniture, issues);
+  const extras = validateExtras(value.extras, issues);
+  const basis = validateBasis(value.basis, issues, allowStaffPricing);
+  const conditions = validateConditions(value.conditions, issues, allowStaffPricing);
   if (showSecondaryFrom === undefined || showSecondaryTo === undefined || distanceKm === undefined || !furniture || !extras || !basis || !conditions) return undefined;
   if (showSecondaryFrom && !secondaryFrom && !allowIncomplete) issues.push({ field: "details.secondaryFrom", message: "Bitte geben Sie die zweite Beladestelle ein." });
   if (showSecondaryTo && !secondaryTo && !allowIncomplete) issues.push({ field: "details.secondaryTo", message: "Bitte geben Sie die zweite Entladestelle ein." });
@@ -297,7 +302,7 @@ export function validateOrderCreateInput(body: unknown, {
     else issues.push({ field: "customer.salutation", message: "Ungültige Anrede." });
   }
 
-  if (email && !EMAIL_PATTERN.test(email)) issues.push({ field: "customer.email", message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." });
+  if (email && !isValidEmailAddress(email)) issues.push({ field: "customer.email", message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." });
   if (phone && !/[0-9]{3}/u.test(phone)) issues.push({ field: "customer.phone", message: "Bitte geben Sie eine gültige Telefonnummer ein." });
 
   const from = validateAddress(body.from, "from", issues, allowIncomplete);

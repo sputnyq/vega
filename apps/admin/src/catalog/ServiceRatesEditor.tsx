@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Grid, Paper, Stack, TextField, Typography } from "@mui/material";
 import type { CatalogServiceRateDto, ServiceRateKey } from "@vega/domain";
-import { catalogRequest } from "./catalog-api.js";
+import { apiRequest } from "../api/api-request.js";
 
 const rateGroups: Array<{ title: string; fields: Array<{ key: ServiceRateKey; label: string }> }> = [
   {
@@ -37,7 +37,7 @@ export function ServiceRatesEditor() {
 
   useEffect(() => {
     let active = true;
-    catalogRequest<CatalogServiceRateDto[]>("/api/admin/catalog/service-rates")
+    apiRequest<CatalogServiceRateDto[]>("/api/admin/catalog/service-rates")
       .then((rates) => {
         if (active) {
           const next = Object.fromEntries(rates.map((rate) => [rate.key, String(rate.price)]));
@@ -59,7 +59,7 @@ export function ServiceRatesEditor() {
     setError(null);
     setMessage(null);
     try {
-      const saved = await catalogRequest<CatalogServiceRateDto>(`/api/admin/catalog/service-rates/${key}`, "PUT", { price });
+      const saved = await apiRequest<CatalogServiceRateDto>(`/api/admin/catalog/service-rates/${key}`, "PUT", { price });
       setValues((current) => ({ ...current, [key]: String(saved.price) }));
       setSavedValues((current) => ({ ...current, [key]: String(saved.price) }));
       setMessage("Preis gespeichert.");

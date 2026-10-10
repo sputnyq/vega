@@ -1,4 +1,5 @@
 import type { CatalogCategoryDto, CatalogFurnitureDto, CatalogPackingDto, CatalogServiceDto, CatalogServiceRateDto, CreateOrderInput, CustomerFormConfig, OrderAddressInput } from "@vega/domain";
+import { isValidEmailAddress } from "@vega/domain";
 
 export const movementObjects = ["Wohnung", "Haus", "Keller", "Lager", "Büro"];
 export const parkingDistances = Array.from({ length: 10 }, (_, i) => `${(i + 1) * 10} m.`);
@@ -85,7 +86,7 @@ export function validateStep(draft: FormDraft, step: number): string | null {
     for (const [key, label] of [["firstName", "Vorname"], ["lastName", "Nachname"], ["email", "E-Mail"], ["phone", "Telefon"]] as const) {
       if (!draft.customer[key].trim()) return missing(label);
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.customer.email)) return "Die E-Mail Adresse ist ungültig";
+    if (!isValidEmailAddress(draft.customer.email)) return "Die E-Mail Adresse ist ungültig";
     if (!/[0-9]{3}/.test(draft.customer.phone)) return "Bitte geben Sie eine gültige Telefonnummer ein.";
     const dates = draft.dateFixed ? [draft.movingDate] : [draft.dateFrom, draft.dateTo];
     if (dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(`${date}T12:00:00`).toISOString().slice(0, 10) !== date)) return "Bitte geben Sie einen gültigen Umzugstermin ein.";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateOrderCreateInput } from "../src/orders/order-input.js";
+import { orderFixture } from "./fixtures/order.js";
 
 const validOrder = {
   customer: {
@@ -97,4 +98,78 @@ test("allows a staff draft with empty legacy fields but still requires public su
   assert.equal(staffResult.ok, true);
   if (staffResult.ok) assert.equal(staffResult.value.customer.firstName, "");
   assert.equal(validateOrderCreateInput(draft).ok, false);
+});
+
+test("preserves the complete normalized payload for public and staff orders", () => {
+  const staffInput = orderFixture();
+  const staffResult = validateOrderCreateInput(staffInput, { allowStaffPricing: true });
+  assert.deepEqual(staffResult, { ok: true, value: staffInput });
+
+  const publicInput = orderFixture();
+  if (!publicInput.details) throw new Error("Order fixture must include details");
+  publicInput.details.basis = { ...publicInput.details.basis, basePrice: 0, extraHourPrice: 0, discountPercent: 0 };
+  const publicResult = validateOrderCreateInput(publicInput);
+  assert.deepEqual(publicResult, { ok: true, value: publicInput });
+});
+
+test("preserves the ordered validation issues for malformed order details", () => {
+  const input = orderFixture();
+  if (!input.details) throw new Error("Order fixture must include details");
+  input.customer.firstName = " ";
+  input.customer.email = "not-an-email";
+  input.from.street = "";
+  input.movingDate = "2026-02-31";
+  input.movingTime = "25:61";
+  input.details.distanceKm = -1;
+  input.details.secondaryFrom = { street: "", postalCode: "80335", city: "Muenchen" };
+  input.details.furniture.volume = -1;
+  input.details.furniture.items = [{ name: "", quantity: -1 }];
+  input.details.extras.services = [{ name: "", kind: "service", quantity: -1 }];
+  input.details.basis.basePrice = 800;
+  input.details.conditions = [{ description: "", amount: 100 }];
+
+  const result = validateOrderCreateInput({
+    ...input,
+    details: { ...input.details, showSecondaryFrom: "yes" },
+  });
+  assert.deepEqual(result, {
+    ok: false,
+    issues: [
+      { field: "customer.firstName", message: "Dieses Feld ist erforderlich." },
+      { field: "customer.email", message: "Bitte geben Sie eine gültige E-Mail-Adresse ein." },
+      { field: "from.street", message: "Dieses Feld ist erforderlich." },
+      { field: "details.showSecondaryFrom", message: "Ungültiger Wert." },
+      { field: "details.distanceKm", message: "Bitte geben Sie eine Zahl zwischen 0 und 10000 ein." },
+      { field: "details.secondaryFrom.street", message: "Dieses Feld ist erforderlich." },
+      { field: "details.furniture.volume", message: "Bitte geben Sie eine Zahl zwischen 0 und 100000 ein." },
+      { field: "details.furniture.items.0.name", message: "Dieses Feld ist erforderlich." },
+      { field: "details.furniture.items.0.quantity", message: "Bitte geben Sie eine Zahl zwischen 0 und 100000 ein." },
+      { field: "details.extras.services.0.name", message: "Dieses Feld ist erforderlich." },
+      { field: "details.extras.services.0.quantity", message: "Bitte geben Sie eine Zahl zwischen 0 und 100000 ein." },
+      { field: "details.basis", message: "Preis- und Rabattangaben sind nur für angemeldete Mitarbeiter verfügbar." },
+      { field: "details.conditions.0.description", message: "Dieses Feld ist erforderlich." },
+      { field: "details.conditions.0.amount", message: "Preisangaben sind nur für angemeldete Mitarbeiter verfügbar." },
+      { field: "movingDate", message: "Bitte geben Sie ein gültiges Datum ein." },
+      { field: "movingTime", message: "Bitte geben Sie eine gültige Uhrzeit ein." },
+    ],
+  });
+});
+
+test("preserves exact normalization and defaults for an incomplete staff draft", () => {
+  const result = validateOrderCreateInput({
+    customer: { firstName: "", lastName: "", phone: "" },
+    from: { street: "", postalCode: "", city: "" },
+    to: { street: "", postalCode: "", city: "" },
+    movingDate: "",
+  }, { allowIncomplete: true, allowStaffPricing: true });
+
+  assert.deepEqual(result, {
+    ok: true,
+    value: {
+      customer: { firstName: "", lastName: "", phone: "" },
+      from: { street: "", postalCode: "", city: "" },
+      to: { street: "", postalCode: "", city: "" },
+      movingDate: "",
+    },
+  });
 });

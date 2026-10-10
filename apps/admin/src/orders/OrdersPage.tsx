@@ -1,6 +1,8 @@
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CloseIcon from "@mui/icons-material/Close";
+import SearchIcon from "@mui/icons-material/Search";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, CircularProgress, Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField } from "@mui/material";
 import type { AdminOrderListItem } from "@vega/domain";
 
 const PAGE_SIZE = 10;
@@ -61,11 +63,43 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
   }
 
   return <Stack spacing={2}>
-    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
-      <Typography component="h1" variant="h4">{archived ? "Archivierte Aufträge" : "Aufträge"}</Typography>
-      {!archived && <Button variant="contained" onClick={() => navigate("/edit/-1")}>Neuer Auftrag</Button>}
+    <Stack
+      direction={{ xs: "column", sm: "row" }}
+      spacing={1}
+      sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}
+    >
+      <Box sx={{ width: 420, maxWidth: "100%" }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <TextField
+            size="small"
+            label="Auftrag suchen"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void onSearch(); } }}
+            fullWidth
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton aria-label="Suche leeren" onClick={onClear} disabled={loading || !search}>
+                      <CloseIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+          <IconButton aria-label="Aufträge suchen" onClick={() => void onSearch()} disabled={loading}>
+            <SearchIcon />
+          </IconButton>
+        </Stack>
+      </Box>
+      {!archived && (
+        <Button variant="contained" onClick={() => navigate("/edit/-1")} sx={{ alignSelf: { xs: "flex-end", sm: "auto" } }}>
+          Neuer Auftrag
+        </Button>
+      )}
     </Stack>
-    <Box sx={{ width: 330, maxWidth: "100%" }}><Stack direction="row" spacing={1}><TextField size="small" label="Auftrag suchen" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void onSearch(); } }} fullWidth /><Button variant="outlined" onClick={() => void onSearch()} disabled={loading}>Suchen</Button><Button onClick={onClear} disabled={loading}>Leeren</Button></Stack></Box>
     {error && <Alert severity="error">{error}</Alert>}
     <Paper variant="outlined" sx={{ overflowX: "auto" }}>
       {loading && <Stack sx={{ height: 420, alignItems: "center", justifyContent: "center" }}><CircularProgress /></Stack>}

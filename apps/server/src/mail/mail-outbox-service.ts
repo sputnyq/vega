@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../prisma.js";
 import { MailDeliveryError, type MailAttachment } from "./hostinger-mail-client.js";
 import type { EmailKind, MailService } from "./mail-service.js";
