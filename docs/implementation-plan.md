@@ -305,8 +305,8 @@ gesucht, archiviert und wiederhergestellt werden. Über den
 Auftrags-Toolbar-Button kann zunächst eine ungespeicherte, vorausgefüllte Vorlage
 geöffnet werden; erst explizites Speichern im Rechnungseditor legt den Beleg an
 und vergibt die Rechnungsnummer gemäß ADR 0005. Der Vorlagen-GET verändert keine Daten.
-Der neue Editor zeigt die verwendete Nummer und bei manueller positiver
-ganzzahliger `R-<Nummer>` die nächste automatische Nummer. Die geladene nächste
+Der neue Editor zeigt die verwendete Nummer ohne Helper-Texte am
+Rechnungsnummernfeld und ohne Hinweis zur nächsten automatischen Nummer. Die geladene nächste
 Nummer steht initial als überschreibbarer TextField-Eingabewert im neuen
 Blanco- oder auftragsbezogenen Entwurf und wird beim Speichern mitgesendet.
 Ein Admin-only

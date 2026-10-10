@@ -17,8 +17,9 @@
   Eingabe wird die nächste `R-<nextValue>` vergeben und der Wert erhöht.
   Fehlgeschlagene Anlagen rollen auch die Nummernkreisänderung zurück.
   Spätere Änderungen einer Rechnung verändern den Nummernkreis nicht.
-- Der neue Rechnungseditor zeigt die verwendete Nummer und bei manuellen
-  `R-<Nummer>` zusätzlich die nächste automatische Nummer. Der
+- Der neue Rechnungseditor zeigt die verwendete Nummer ohne Helper-Texte
+  am Rechnungsnummernfeld; auch die nächste automatische Nummer wird dort
+  nicht als Hinweis angezeigt. Der
   Editor trägt die geladene nächste Nummer initial als überschreibbaren
   TextField-Eingabewert ein und sendet diesen Wert beim Speichern mit.
   Der Admin-only
