@@ -13,7 +13,8 @@ export async function generateInvoicePdf(invoice: Invoice): Promise<Buffer> {
   const logo = Buffer.from(LEGACY_RZ24_LOGO.slice(LEGACY_RZ24_LOGO.indexOf(",") + 1), "base64");
   doc.image(logo, left, y, { width: 96, height: 102 });
   drawRight(doc, ["Alexander Berent", "Am Münchfeld 31, 80999 München", "089 30642972 | 0176 10171990", "info@umzugruckzuck24.de", "", "Steuernummer: 144/139/21180"], y + 3, 8, width - right);
-  y += 56;
+  // Legacy header flow (five contact lines and three blanks), then 15 mm to the postal block.
+  y = (8 + 5 + 15) / 0.353 + 5 * 12 + 3 * 6;
   text(doc, "Alexander Berent, Am Münchfeld 31, 80999 München", left, y, 8); y += 18;
   drawRight(doc, [`Rechnungsdatum: ${formatDate(invoice.invoiceDate)}`, ...(invoice.orderNumberSnapshot ? [`Auftragsnummer: ${invoice.orderNumberSnapshot}`] : [])], y, 10, width - right); y += 30;
   [invoice.company, invoice.customerNameSnapshot, invoice.customerStreet, invoice.customerPostalCity].filter(Boolean).forEach((line) => { text(doc, line, left, y, 10); y += 14; });

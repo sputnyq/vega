@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Prisma, type Invoice } from "../src/generated/prisma/client.js";
 import test from "node:test";
+import PDFDocument from "pdfkit";
 import { calculateInvoiceTotals, generateInvoicePdf, invoicePdfFilename } from "../src/pdf/invoice-pdf.js";
 
 function invoiceFixture(): Invoice {
@@ -38,4 +39,25 @@ test("renders the legacy-styled invoice layout as a server-side PDF", async () =
   assert.equal(pdf.subarray(0, 4).toString("ascii"), "%PDF");
   assert.equal(pdf.subarray(-6).toString("ascii"), "%%EOF\n");
   assert.equal(invoicePdfFilename(invoice), "R-R-42 Beispiel GmbH.pdf");
+});
+
+test("postal sender and recipient start below the logo with the legacy header spacing", async (context) => {
+  const calls: Array<{ text: string; y: number }> = [];
+  const original = PDFDocument.prototype.text;
+  context.mock.method(PDFDocument.prototype, "text", function (this: PDFKit.PDFDocument, text: string, x: number, y: number, options?: PDFKit.Mixins.TextOptions) {
+    calls.push({ text, y });
+    return original.call(this, text, x, y, options);
+  });
+  await generateInvoicePdf(invoiceFixture());
+  const postalY = (8 + 5 + 15) / 0.353 + 5 * 12 + 3 * 6;
+  const position = (text: string) => {
+    const call = calls.find((entry) => entry.text === text);
+    assert.ok(call, text);
+    return call.y;
+  };
+  assert.equal(position("Alexander Berent, Am Münchfeld 31, 80999 München"), postalY);
+  assert.ok(postalY > 22.7 + 102);
+  assert.equal(position("Beispiel GmbH"), postalY + 48);
+  assert.equal(position("Ada Beispiel"), postalY + 62);
+  assert.equal(position("Alexander Berent"), 25.7);
 });

@@ -320,6 +320,9 @@ ohne Nummernkreisänderung.
 Die Rechnung kann aus dem
 aktuellen Datenstand serverseitig im übernommenen Legacy-Layout als PDF
 heruntergeladen werden; jeder Export wird beim verknüpften Auftrag protokolliert.
+Der linke Absender-/Empfängerblock beginnt unterhalb des Logos: berücksichtigt
+werden der Legacy-Headerfluss (fünf Kontaktzeilen und drei Leerzeilen) und
+15 mm Abstand vor der Absenderzeile. Der rechte Kontaktblock bleibt oben.
 Auch Aufträge und Angebotskopien können Admins und Kundenberater aus dem
 aktuellen gespeicherten Stand serverseitig als PDF exportieren. Die vollständige
 Legacy-`umzugruckzuck24`-Vorlage einschließlich AGB, festen Texten, Logo und
