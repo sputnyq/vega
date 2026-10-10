@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, CircularProgress, Grid, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
-import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
 import DeleteOutlined from "@mui/icons-material/DeleteOutlined";
 import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type AdminInvoiceDto, type InvoiceInput } from "@vega/domain";
 
@@ -17,7 +16,7 @@ export function InvoiceNumberField({ invoiceNumber, nextValue, editing, onChange
   return <TextField label="Rechnungsnummer" value={invoiceNumber ?? ""} placeholder={!editing && nextValue !== undefined ? `R-${nextValue}` : undefined} onChange={(e) => onChange(e.target.value || undefined)} error={invalid} />;
 }
 
-export function InvoiceEditorPage({ id, orderNumber, navigate }: { id?: string; orderNumber?: number; navigate: (path: string) => void }) {
+export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onInvoiceNumberChange }: { id?: string; orderNumber?: number; navigate: (path: string) => void; onBusyChange?: (busy: boolean) => void; onInvoiceNumberChange?: (invoiceNumber: string | undefined) => void }) {
   const [value, setValue] = useState<InvoiceInput>(emptyInvoice);
   const [busy, setBusy] = useState(id !== undefined || orderNumber !== undefined);
   const [loading, setLoading] = useState(id !== undefined || orderNumber !== undefined);
@@ -26,6 +25,8 @@ export function InvoiceEditorPage({ id, orderNumber, navigate }: { id?: string; 
   const [success, setSuccess] = useState("");
   const [nextValue, setNextValue] = useState<number>();
   const [numberLoading, setNumberLoading] = useState(!id);
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
+  useEffect(() => { onInvoiceNumberChange?.(value.invoiceNumber); }, [onInvoiceNumberChange, value.invoiceNumber]);
   useEffect(() => {
     if (id) return;
     let cancelled = false;
@@ -89,7 +90,7 @@ export function InvoiceEditorPage({ id, orderNumber, navigate }: { id?: string; 
     return <><Typography variant="h6">Leistungen</Typography>{value.entries.map((entry, index) => <Stack key={index} direction={{ xs: "column", md: "row" }} spacing={1}><TextField label="Beschreibung" value={entry.description} onChange={(e) => updateEntry(index, { description: e.target.value })} fullWidth /><TextField label="Menge" type="number" value={entry.quantity} onChange={(e) => updateEntry(index, { quantity: Number(e.target.value) })} /><TextField label="Einzelpreis" type="number" value={entry.unitPrice} onChange={(e) => updateEntry(index, { unitPrice: Number(e.target.value) })} /><IconButton onClick={() => removeEntry(index)}><DeleteOutlined /></IconButton></Stack>)}<Button onClick={addEntry} sx={{ alignSelf: "flex-start" }}>Leistung hinzufügen</Button></>;
   }
   function renderFormFields() {
-    return <>{renderCustomerFields()}{renderEntries()}<TextField label="Rechnungstext" multiline minRows={4} value={value.text} onChange={(e) => change("text", e.target.value)} /><Stack direction="row" spacing={1}><Button type="submit" variant="contained" disabled={busy}>Speichern</Button>{id && <Button component="a" href={`/api/admin/invoices/${id}/pdf`} startIcon={<FileDownloadOutlined />} variant="outlined">PDF speichern</Button>}</Stack></>;
+    return <>{renderCustomerFields()}{renderEntries()}<TextField label="Rechnungstext" multiline minRows={4} value={value.text} onChange={(e) => change("text", e.target.value)} /></>;
   }
-  return <Paper component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}><Stack spacing={2}><Typography component="h2" variant="h5">{id ? "Rechnung bearbeiten" : "Neue Rechnung"}</Typography>{orderNumber !== undefined && <Alert severity="info">Ungespeicherter Rechnungsentwurf aus Auftrag {orderNumber}. Die Rechnung wird erst mit „Speichern“ angelegt.</Alert>}{error && <Alert severity="error">{error}</Alert>}{success && <Alert severity="success">{success}</Alert>}{loading || numberLoading ? <CircularProgress /> : <fieldset disabled={busy || loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}><Stack spacing={2}>{renderFormFields()}</Stack></fieldset>}</Stack></Paper>;
+  return <Paper id="invoice-editor-form" component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}><Stack spacing={2}>{orderNumber !== undefined && <Alert severity="info">Ungespeicherter Rechnungsentwurf aus Auftrag {orderNumber}. Die Rechnung wird erst mit „Speichern“ angelegt.</Alert>}{error && <Alert severity="error">{error}</Alert>}{success && <Alert severity="success">{success}</Alert>}{loading || numberLoading ? <CircularProgress /> : <fieldset disabled={busy || loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}><Stack spacing={2}>{renderFormFields()}</Stack></fieldset>}</Stack></Paper>;
 }

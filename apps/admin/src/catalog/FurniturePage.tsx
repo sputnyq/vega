@@ -83,7 +83,6 @@ export function FurniturePage() {
       <CatalogCrudPage<CatalogFurnitureDto>
         resource="furniture"
         title="Möbel"
-        description="Möbelstammdaten mit Kategorien, Volumen, Montageangaben und kundensichtbaren Aufpreisen verwalten."
         fields={fields}
         columns={columns}
         toolbarContent={toolbarContent}

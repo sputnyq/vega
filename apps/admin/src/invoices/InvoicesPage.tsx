@@ -1,10 +1,88 @@
-import { useEffect, useState } from "react";
-import { Alert, Button, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
+import SearchIcon from "@mui/icons-material/Search";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
 import type { AdminInvoiceDto } from "@vega/domain";
 export function InvoicesPage({ archived = false, navigate }: { archived?: boolean; navigate: (path: string) => void }) {
-  const [items, setItems] = useState<AdminInvoiceDto[]>([]); const [error, setError] = useState("");
-  const load = () => void fetch(`/api/admin/invoices?archived=${archived}`).then(async (r) => ({ r, b: await r.json() as { data?: { items?: AdminInvoiceDto[] } } })).then(({ r, b }) => { if (!r.ok || !b.data?.items) setError("Rechnungen konnten nicht geladen werden."); else setItems(b.data.items); }).catch(() => setError("Rechnungen konnten nicht geladen werden."));
-  useEffect(load, [archived]);
-  async function archive(id: string) { await fetch(`/api/admin/invoices/${id}/${archived ? "restore" : "archive"}`, { method: "POST" }); load(); }
-  return <Stack spacing={2}><Stack direction="row" sx={{ justifyContent: "space-between" }}><Typography component="h1" variant="h4">{archived ? "Archivierte Rechnungen" : "Rechnungen"}</Typography>{!archived && <Button variant="contained" onClick={() => navigate("/invoices/new")}>Neue Rechnung</Button>}</Stack>{error && <Alert severity="error">{error}</Alert>}<Paper variant="outlined"><Table size="small"><TableHead><TableRow><TableCell>Nummer</TableCell><TableCell>Kunde</TableCell><TableCell>Auftrag</TableCell><TableCell>Datum</TableCell><TableCell /></TableRow></TableHead><TableBody>{items.map((invoice) => <TableRow key={invoice.id}><TableCell><Button onClick={() => navigate(`/invoices/${invoice.id}`)}>{invoice.invoiceNumber}</Button></TableCell><TableCell>{invoice.customerName}</TableCell><TableCell>{invoice.orderNumber ?? "–"}</TableCell><TableCell>{new Date(`${invoice.invoiceDate}T00:00:00`).toLocaleDateString("de-DE")}</TableCell><TableCell><Button size="small" onClick={() => void archive(invoice.id)}>{archived ? "Wiederherstellen" : "Archivieren"}</Button></TableCell></TableRow>)}{items.length === 0 && <TableRow><TableCell colSpan={5} align="center">Keine Rechnungen vorhanden.</TableCell></TableRow>}</TableBody></Table></Paper></Stack>;
+  const [items, setItems] = useState<AdminInvoiceDto[]>([]);
+  const [search, setSearch] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
+  const [error, setError] = useState("");
+
+  const load = useCallback(async (searchValue: string) => {
+    setError("");
+    try {
+      const query = new URLSearchParams({ archived: String(archived) });
+      if (searchValue) query.set("search", searchValue);
+      const response = await fetch(`/api/admin/invoices?${query}`, { credentials: "same-origin" });
+      const body = await response.json() as { data?: { items?: AdminInvoiceDto[] }; error?: { message?: string } };
+      if (!response.ok || !body.data?.items) {
+        setError(body.error?.message ?? "Rechnungen konnten nicht geladen werden.");
+        return;
+      }
+      setItems(body.data.items);
+    } catch {
+      setError("Rechnungen konnten nicht geladen werden.");
+    }
+  }, [archived]);
+
+  useEffect(() => { void load(activeSearch); }, [activeSearch, load]);
+
+  function onSearch() {
+    const value = search.trim();
+    setActiveSearch(value);
+    if (!value) setSearch("");
+  }
+
+  function onClear() {
+    setSearch("");
+    setActiveSearch("");
+  }
+
+  async function archive(id: string) {
+    const response = await fetch(`/api/admin/invoices/${id}/${archived ? "restore" : "archive"}`, { method: "POST", credentials: "same-origin" });
+    if (!response.ok) {
+      setError("Aktion konnte nicht ausgeführt werden.");
+      return;
+    }
+    void load(activeSearch);
+  }
+
+  return <Stack spacing={2}>
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
+      <Box sx={{ width: 420, maxWidth: "100%" }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <TextField
+            size="small"
+            label="Rechnung suchen"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onSearch(); } }}
+            fullWidth
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton aria-label="Suche leeren" onClick={onClear} disabled={!search}>
+                      <CloseIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+          <IconButton aria-label="Rechnungen suchen" onClick={onSearch}>
+            <SearchIcon />
+          </IconButton>
+        </Stack>
+      </Box>
+      {!archived && (
+        <Button variant="contained" onClick={() => navigate("/invoices/new")} sx={{ alignSelf: { xs: "flex-end", sm: "auto" } }}>
+          Neue Rechnung
+        </Button>
+      )}
+    </Stack>
+    {error && <Alert severity="error">{error}</Alert>}
+    <Paper variant="outlined"><Table size="small"><TableHead><TableRow><TableCell>Nummer</TableCell><TableCell>Kunde</TableCell><TableCell>Auftrag</TableCell><TableCell>Datum</TableCell><TableCell /></TableRow></TableHead><TableBody>{items.map((invoice) => <TableRow key={invoice.id}><TableCell><Button onClick={() => navigate(`/invoices/${invoice.id}`)}>{invoice.invoiceNumber}</Button></TableCell><TableCell>{invoice.customerName}</TableCell><TableCell>{invoice.orderNumber ?? "–"}</TableCell><TableCell>{new Date(`${invoice.invoiceDate}T00:00:00`).toLocaleDateString("de-DE")}</TableCell><TableCell><Button size="small" onClick={() => void archive(invoice.id)}>{archived ? "Wiederherstellen" : "Archivieren"}</Button></TableCell></TableRow>)}{items.length === 0 && <TableRow><TableCell colSpan={5} align="center">Keine Rechnungen vorhanden.</TableCell></TableRow>}</TableBody></Table></Paper>
+  </Stack>;
 }

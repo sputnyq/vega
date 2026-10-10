@@ -55,8 +55,10 @@ test("sequence limits show an error only on creation, and editing never previews
 test("blank and order-derived invoice editors wait for the authoritative number preview", () => {
   for (const props of [{}, { orderNumber: 1004 }]) {
     const html = render(createElement(InvoiceEditorPage, { ...props, navigate: () => {} }));
-    assert.match(html, /Neue Rechnung/u);
+    assert.doesNotMatch(html, /Neue Rechnung/u);
     assert.match(html, /role="progressbar"/u);
     assert.doesNotMatch(html, />Speichern</u);
   }
+  const editing = render(createElement(InvoiceEditorPage, { id: "invoice-1", navigate: () => {} }));
+  assert.doesNotMatch(editing, /Rechnung bearbeiten/u);
 });

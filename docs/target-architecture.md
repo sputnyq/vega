@@ -22,10 +22,21 @@ Kundenberater/Admin
 
 Die Vega-Admin-Navigation behält die Legacy-Routen für Aufträge, Bearbeitung,
 Rechnungserstellung, E-Mail-Text und Einstellungen. Einstellungen sind in
-Optionen (`/settings`), Content Management (`/settings/content/*`) und
-User Management (`/settings/users`) gegliedert. Legacy-Content-Pfade bleiben
-als Aliase verfügbar; archivierte Orders/Rechnungen und Profil haben eigene
-Routen.
+Optionen (`/settings`), Katalogbereiche (`/settings/*`) und
+Nutzer (`/settings/users`) gegliedert. Legacy-Content-Pfade bleiben
+als weitergeleitete Aliase verfügbar; archivierte Orders/Rechnungen und Profil
+haben eigene Routen.
+
+Die Katalognavigation öffnet standardmäßig Leistungen (`/settings/services`),
+und wird ausschließlich über das Seitenmenü bedient; in den Seiten selbst gibt
+es keine zweite Tab-Navigation. Alte `/settings/content/*`-URLs leiten per
+History-Replacement auf `/settings/*` weiter.
+Der Preise-Reiter (`/settings/prices`) enthält die globalen Preisgruppen AGB
+und Konfigurator; Leistungen enthält nur den Leistungskatalog.
+Optionen enthält keine globalen Preisgruppen.
+Die Angebotsverwaltung gruppiert Angebote wie im bisherigen Admin in Karten
+nach LKW-Anzahl und Trägern; Änderungen laufen weiterhin über die Vega-
+Katalog-API.
 
 WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend, Auth-System oder Mailer. Alte WordPress-REST-Daten und Altdaten werden nicht migriert. Das Formular-Bundle wird aus derselben Codebasis wie die Node-App gebaut; der kleine Loader auf Vega liefert absolute URLs. Die konkreten Runtime-Pfade kommen aus Konfiguration und werden nicht in Vite-Builds eingebrannt.
 

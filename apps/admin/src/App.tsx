@@ -53,12 +53,16 @@ export function App() {
   const [orderSaved, setOrderSaved] = useState(false);
   const [orderDirty, setOrderDirty] = useState(false);
   const [orderBusy, setOrderBusy] = useState(true);
+  const [invoiceBusy, setInvoiceBusy] = useState(true);
+  const [invoiceNumber, setInvoiceNumber] = useState<string>();
   const [totpPassword, setTotpPassword] = useState<string | undefined>();
   const [twoFactorRequired, setTwoFactorRequired] = useState(() => window.location.pathname === "/two-factor");
   const route = resolveAdminRoute(pathname);
   const isAuthPath = pathname === "/login" || pathname === "/two-factor";
   const isPasswordResetPath = pathname === "/forgot-password" || pathname === "/reset-password";
   const isKnownPath = route !== null || isAuthPath || isPasswordResetPath;
+
+  useEffect(() => { setInvoiceNumber(undefined); }, [pathname]);
 
   const onTwoFactorRequired = useCallback(() => {
     setTwoFactorRequired(true);
@@ -75,6 +79,7 @@ export function App() {
     if (!session && route) replacePath("/login");
     if (!session && pathname === "/two-factor" && !twoFactorRequired) replacePath("/login");
     if (session && isAuthPath) replacePath("/");
+    if (session && route && pathname !== route.path) replacePath(route.path);
   }, [isAuthPath, isKnownPath, isPending, pathname, replacePath, route, session, twoFactorRequired]);
 
   useEffect(() => {
@@ -154,11 +159,11 @@ export function App() {
         : route.path === "/invoices/archived"
           ? <InvoicesPage archived navigate={navigatePath} />
         : route.sourceOrderNumber !== undefined
-          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} orderNumber={route.sourceOrderNumber} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} orderNumber={route.sourceOrderNumber} onBusyChange={setInvoiceBusy} onInvoiceNumberChange={setInvoiceNumber} />
         : route.path === "/invoices/new" || route.path === "/blanco"
-          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} onBusyChange={setInvoiceBusy} onInvoiceNumberChange={setInvoiceNumber} />
         : route.path.startsWith("/invoices/")
-          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} id={route.path.slice("/invoices/".length)} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} id={route.path.slice("/invoices/".length)} onBusyChange={setInvoiceBusy} onInvoiceNumberChange={setInvoiceNumber} />
         : route.path.startsWith("/edit/")
         ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
             <OrderCreatePage key={route.path} navigate={navigatePath} onSaved={() => setOrderSaved(true)} onDirtyChange={setOrderDirty} onBusyChange={setOrderBusy} dirty={orderDirty} {...(route.path === "/edit/-1" ? {} : { orderNumber: Number(route.path.slice("/edit/".length)) })} />
@@ -167,14 +172,14 @@ export function App() {
           ? <OptionsPage />
           : route.settingsArea === "content"
             ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
-                <ContentManagementPage route={route} navigate={navigatePath} />
+                <ContentManagementPage route={route} />
               </Suspense>
             : route.settingsArea === "users"
               ? <UserManagementPage currentUserId={user.id} />
               : <RoutePlaceholderPage route={route} />;
 
   return (
-    <AdminShell user={staffUser} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty} orderBusy={orderBusy}>
+    <AdminShell user={staffUser} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty} orderBusy={orderBusy} invoiceBusy={invoiceBusy} invoiceNumber={invoiceNumber}>
       {page}
     </AdminShell>
   );

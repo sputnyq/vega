@@ -25,7 +25,6 @@ export function PackingsPage() {
     <CatalogCrudPage<CatalogPackingDto>
       resource="packings"
       title="Verpackung"
-      description="Packmaterial, Preis, Beschreibung und Formularsichtbarkeit verwalten."
       fields={fields}
       columns={columns}
       defaults={{ name: "", price: 0, description: "", media: "", sort: 0, show: true }}

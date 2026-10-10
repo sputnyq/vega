@@ -109,11 +109,15 @@ gehört nur in die CORS-Liste, nicht in die Auth-Liste.
 Admin-Routen übernehmen den Legacy-Pfadbestand (`/`, `/edit/:id`, `/blanco`,
 `/settings/*`, `/email-text/:id`) und ergänzen `/invoices`,
 `/invoices/archived`, `/orders/archived` und `/profile`. Einstellungen sind in
-`/settings` (Optionen), `/settings/content/*` (Möbel, Kategorien, Angebote,
-Verpackung, Leistungen) und `/settings/users` (User Management) gegliedert;
-bestehende `/settings/furniture`- und ähnliche Pfade bleiben kompatible Aliase.
+`/settings` (Optionen), `/settings/{offers,prices,packings,services,categories,furniture}`
+und `/settings/users` (Nutzer) gegliedert. Alte `/settings/content/*`
+URLs werden auf die entsprechenden `/settings/*`-Pfade weitergeleitet.
 Die Content-Seiten Möbel, Kategorien, Angebote, Verpackung und Leistungen sind
 an Admin-CRUD-Endpunkte angeschlossen.
+Die Katalognavigation öffnet standardmäßig Leistungen unter `/settings/services`.
+Ein separater Übersicht-Reiter entfällt; alte `/settings/content`-URLs leiten
+ohne zusätzlichen Browser-History-Eintrag auf `/settings/*` weiter. Der Reiter
+Preise unter `/settings/prices` enthält die Preisgruppen AGB und Konfigurator.
 
 Öffentliche Safe-DTO-GETs für das eingebettete Formular:
 `/api/catalog/categories`, `/api/catalog/furniture`, `/api/catalog/offers`,

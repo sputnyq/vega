@@ -60,7 +60,6 @@ export function UserManagementPage({ currentUserId }: { currentUserId: string })
     finally { setBusy(false); }
   }
   return <Stack spacing={2}>
-    <Typography component="h1" variant="h5">Mitarbeiterverwaltung</Typography>
     <Alert severity="info">Jede Kontoaktion erfordert Ihr aktuelles Admin-Passwort. Der 2FA-Reset ist nur nach separat geprüfter Identität des Mitarbeiters auszuführen. Das eigene Konto kann hier nicht gesperrt, herabgestuft oder per 2FA-Reset zurückgesetzt werden.</Alert>
     {error && <Alert severity="error">{error}</Alert>}{message && <Alert severity="success">{message}</Alert>}
     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} component="form" onSubmit={(event) => { event.preventDefault(); setPage(1); setQuery(search.trim()); }}>
