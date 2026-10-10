@@ -1,4 +1,5 @@
 import { hashPassword } from "better-auth/crypto";
+import { isValidEmailAddress } from "@vega/domain";
 import { meetsPasswordPolicy, PASSWORD_POLICY_MESSAGE } from "./password-policy.js";
 
 const INITIAL_ADMIN_NAME = "root_user";
@@ -30,7 +31,7 @@ export async function ensureInitialAdmin(
   const password = env.INITIAL_ADMIN_PASSWORD;
   if (!email && !password) return "skipped";
 
-  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
+  if (!email || !isValidEmailAddress(email)) {
     throw new Error("INITIAL_ADMIN_EMAIL muss eine gültige E-Mail-Adresse enthalten.");
   }
   if (!password || !meetsPasswordPolicy(password)) {

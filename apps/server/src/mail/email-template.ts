@@ -1,3 +1,6 @@
+import sanitizeHtml from "sanitize-html";
+import { convert } from "html-to-text";
+
 /**
  * The established Umzug Ruck Zuck mail frame.  Keep this server-side: callers
  * only provide the editable inner body, never a complete document.
@@ -23,37 +26,29 @@ export function renderEmailLayout(contentHtml: string): string {
  * Text comes from a rich-text editor, not from a trusted template file. Keep a
  * deliberately small formatting subset and reject executable/event attributes
  * and non-web links before it reaches an HTML email.
+ *
+ * Implemented with the maintained sanitize-html parser: disallowed elements
+ * (including script/style/iframe/object/embed/form/input), comments, event
+ * handler/style attributes, and non-http(s)/mailto links are removed. Entity
+ * handling stays inside the library so sequential manual decoding cannot
+ * double-unescape attacker input.
  */
+const EMAIL_ALLOWED_TAGS = ["a", "b", "br", "div", "em", "h1", "h2", "h3", "i", "li", "ol", "p", "span", "strong", "table", "tbody", "td", "thead", "tr", "u", "ul"];
+
 export function sanitizeEmailHtml(html: string): string {
-  const allowedTags = new Set(["a", "b", "br", "div", "em", "h1", "h2", "h3", "i", "li", "ol", "p", "span", "strong", "table", "tbody", "td", "thead", "tr", "u", "ul"]);
-  return html
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<\s*\/?\s*(?:script|style|iframe|object|embed|form|input)[^>]*>/gi, "")
-    .replace(/<\s*\/??\s*([a-z0-9]+)([^>]*)>/gi, (whole, rawTag: string, rawAttributes: string) => {
-      const tag = rawTag.toLowerCase();
-      if (!allowedTags.has(tag)) return "";
-      if (/^<\s*\//.test(whole)) return `</${tag}>`;
-      if (tag !== "a") return `<${tag}>`;
-      const href = /\bhref\s*=\s*(["'])(.*?)\1/i.exec(rawAttributes)?.[2]?.trim();
-      if (!href || !/^(https?:|mailto:)/i.test(href)) return "<a>";
-      const decodedHref = href.replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'");
-      return `<a href="${escapeHtml(decodedHref)}">`;
-    });
+  return sanitizeHtml(html, {
+    allowedTags: EMAIL_ALLOWED_TAGS,
+    allowedAttributes: { a: ["href"] },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowProtocolRelative: false,
+  });
 }
 
 export function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<\s*br\s*\/?>/gi, "\n")
-    .replace(/<\/p\s*>/gi, "\n\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#39;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  // Parser-based conversion: script/style content and comments are dropped,
+  // entities are decoded once for text (not HTML) output.
+  const text = convert(html, { wordwrap: false });
+  return text.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export function passwordResetEmail(url: string): { subject: string; contentHtml: string; text: string } {
