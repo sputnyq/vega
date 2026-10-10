@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "../generated/prisma/client.js";
 import { Router, type Response } from "express";
 import { prisma } from "../prisma.js";
+import { createAdminRateLimit } from "../http-rate-limit.js";
 import { validateOrderCreateInput } from "./order-input.js";
 import { normalizeOrderCatalogInput } from "./order-service.js";
 import { orderDataWithRelations, orderRelationCreates, orderRelations } from "./order-relations.js";
@@ -13,6 +14,9 @@ const ARCHIVE_RETENTION_DAYS = 60;
 
 export function createAdminOrderRouter() {
   const router = Router();
+  // Standard per-staff limiter at the router boundary (app-level admin
+  // limiter also applies; both use generous quotas for staff workflows).
+  router.use(createAdminRateLimit());
 
   router.get("/", async (req, res, next) => {
     try {
