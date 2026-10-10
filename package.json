@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "auth": "1.7.7",
-    "concurrently": "9.2.4",
+    "concurrently": "10.0.5",
     "dotenv": "16.6.1",
     "oxlint": "1.87.0",
     "prisma": "7.10.0",
