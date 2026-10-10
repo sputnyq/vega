@@ -6,18 +6,26 @@ import type { AdminInvoiceDto, InvoiceInput } from "@vega/domain";
 
 const emptyInvoice = (): InvoiceInput => ({ invoiceDate: new Date().toISOString().slice(0, 10), company: "", customerName: "", customerStreet: "", customerPostalCity: "", taxPercent: 19, text: "", entries: [], dueDates: [] });
 
-export function InvoiceEditorPage({ id, navigate }: { id?: string; navigate: (path: string) => void }) {
+export function InvoiceEditorPage({ id, orderNumber, navigate }: { id?: string; orderNumber?: number; navigate: (path: string) => void }) {
   const [value, setValue] = useState<InvoiceInput>(emptyInvoice);
-  const [busy, setBusy] = useState(id !== undefined);
+  const [busy, setBusy] = useState(id !== undefined || orderNumber !== undefined);
+  const [loading, setLoading] = useState(id !== undefined || orderNumber !== undefined);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   useEffect(() => {
-    if (!id) return;
-    void fetch(`/api/admin/invoices/${id}`).then(async (response) => ({ response, body: await response.json() as { data?: AdminInvoiceDto } })).then(({ response, body }) => {
-      if (!response.ok || !body.data) setError("Rechnung konnte nicht geladen werden.");
-      else setValue({ invoiceNumber: body.data.invoiceNumber, invoiceDate: body.data.invoiceDate, company: body.data.company, customerName: body.data.customerName, customerStreet: body.data.customerStreet, customerPostalCity: body.data.customerPostalCity, taxPercent: body.data.taxPercent, text: body.data.text, entries: body.data.entries as InvoiceInput["entries"], dueDates: body.data.dueDates as InvoiceInput["dueDates"] });
-    }).catch(() => setError("Rechnung konnte nicht geladen werden.")).finally(() => setBusy(false));
-  }, [id]);
+    if (!id && orderNumber === undefined) return;
+    let cancelled = false;
+    const path = id ? `/api/admin/invoices/${id}` : `/api/admin/invoices/from-order/${orderNumber}`;
+    void fetch(path, { credentials: "same-origin" }).then(async (response) => ({ response, body: await response.json() as { data?: InvoiceInput; error?: { message?: string } } })).then(({ response, body }) => {
+      if (cancelled) return;
+      if (!response.ok || !body.data) {
+        setError(body.error?.message ?? "Rechnung konnte nicht geladen werden.");
+        setLoadFailed(true);
+      } else setValue(body.data);
+    }).catch(() => { if (!cancelled) { setError("Rechnung konnte nicht geladen werden."); setLoadFailed(true); } }).finally(() => { if (!cancelled) { setBusy(false); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [id, orderNumber]);
   function change<K extends keyof InvoiceInput>(key: K, next: InvoiceInput[K]) { setValue((current) => ({ ...current, [key]: next })); }
   function updateEntry(index: number, patch: Partial<InvoiceInput["entries"][number]>) {
     change("entries", value.entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...patch } : entry));
@@ -29,9 +37,12 @@ export function InvoiceEditorPage({ id, navigate }: { id?: string; navigate: (pa
     change("entries", [...value.entries, { description: "", quantity: 1, unitPrice: 0 }]);
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault();
+    if (busy || loadFailed) return;
+    setBusy(true); setError("");
     try {
-      const response = await fetch(id ? `/api/admin/invoices/${id}` : "/api/admin/invoices", { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
+      const path = id ? `/api/admin/invoices/${id}` : orderNumber !== undefined ? `/api/admin/invoices/from-order/${orderNumber}` : "/api/admin/invoices";
+      const response = await fetch(path, { method: id ? "PUT" : "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
       const body = await response.json() as { data?: AdminInvoiceDto; error?: { message?: string } };
       if (!response.ok || !body.data) { setError(body.error?.message ?? "Rechnung konnte nicht gespeichert werden."); return; }
       if (!id) navigate(`/invoices/${body.data.id}`); else setSuccess("Rechnung gespeichert.");
@@ -46,5 +57,5 @@ export function InvoiceEditorPage({ id, navigate }: { id?: string; navigate: (pa
   function renderFormFields() {
     return <>{renderCustomerFields()}{renderEntries()}<TextField label="Rechnungstext" multiline minRows={4} value={value.text} onChange={(e) => change("text", e.target.value)} /><Stack direction="row" spacing={1}><Button type="submit" variant="contained" disabled={busy}>Speichern</Button>{id && <Button component="a" href={`/api/admin/invoices/${id}/pdf`} startIcon={<FileDownloadOutlined />} variant="outlined">PDF speichern</Button>}</Stack></>;
   }
-  return <Paper component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}><Stack spacing={2}><Typography component="h2" variant="h5">{id ? "Rechnung bearbeiten" : "Neue Rechnung"}</Typography>{error && <Alert severity="error">{error}</Alert>}{success && <Alert severity="success">{success}</Alert>}{busy && id ? <CircularProgress /> : renderFormFields()}</Stack></Paper>;
+  return <Paper component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}><Stack spacing={2}><Typography component="h2" variant="h5">{id ? "Rechnung bearbeiten" : "Neue Rechnung"}</Typography>{orderNumber !== undefined && <Alert severity="info">Ungespeicherter Rechnungsentwurf aus Auftrag {orderNumber}. Die Rechnung wird erst mit „Speichern“ angelegt.</Alert>}{error && <Alert severity="error">{error}</Alert>}{success && <Alert severity="success">{success}</Alert>}{loading ? <CircularProgress /> : <fieldset disabled={busy || loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}><Stack spacing={2}>{renderFormFields()}</Stack></fieldset>}</Stack></Paper>;
 }

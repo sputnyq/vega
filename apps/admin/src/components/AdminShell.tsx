@@ -46,10 +46,11 @@ interface AdminShellProps {
   navigate: (path: string) => void;
   orderSaved?: boolean;
   orderDirty?: boolean;
+  orderBusy?: boolean;
   children: ReactNode;
 }
 
-export function AdminShell({ user, route, pathname, navigate, orderSaved = false, orderDirty = false, children }: AdminShellProps) {
+export function AdminShell({ user, route, pathname, navigate, orderSaved = false, orderDirty = false, orderBusy = false, children }: AdminShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(
     pathname === "/orders/archived" || pathname === "/invoices/archived",
@@ -92,12 +93,17 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
           </IconButton>
           <Typography component="h1" variant="h6" sx={{ flexGrow: 1, ml: 2 }}>{route.title}</Typography>
           {pathname.startsWith("/edit/") && !orderSaved && <>
-            <Tooltip title="Speichern"><IconButton color="inherit" type="submit" form="order-create-form" aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderDirty}><SaveOutlined /></Badge></IconButton></Tooltip>
+            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" disabled={orderBusy} aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderDirty}><SaveOutlined /></Badge></IconButton></span></Tooltip>
             {editedOrderNumber && <>
               <Tooltip title="Angebotskopie erstellen"><IconButton color="inherit" onClick={() => void copyOrder()} aria-label="Angebotskopie erstellen"><ContentCopyOutlined /></IconButton></Tooltip>
-              <Tooltip title="PDF-Erzeugung wird mit dem Backend-PDF-Service aktiviert"><span><IconButton color="inherit" disabled aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
+              <Tooltip title="Als PDF speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="pdf" disabled={orderBusy} aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
               <Tooltip title="E-Mail-Versand wird mit PDF-Anhang und Versanddialog aktiviert"><span><IconButton color="inherit" disabled aria-label="E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
+              <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
               <Tooltip title="Archivieren"><IconButton color="warning" onClick={() => void archiveOrder()} aria-label="Auftrag archivieren"><ArchiveOutlined /></IconButton></Tooltip>
+              {isAdmin && <>
+                <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
+                <Tooltip title="Rechnung aus Auftrag anlegen"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="invoice" disabled={orderBusy} aria-label="Rechnung aus Auftrag anlegen"><ReceiptLongOutlined /></IconButton></span></Tooltip>
+              </>}
             </>}
           </>}
         </Toolbar>

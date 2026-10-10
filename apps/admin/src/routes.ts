@@ -4,6 +4,7 @@ export interface AdminRoute {
   description: string;
   adminOnly?: boolean;
   profile?: boolean;
+  sourceOrderNumber?: number;
   settingsArea?: "options" | "content" | "users";
   contentSection?: "overview" | "furniture" | "categories" | "offers" | "packings" | "services";
 }
@@ -36,6 +37,13 @@ const fixedAdminRoutes: Record<string, AdminRoute> = {
 export function resolveAdminRoute(pathname: string): AdminRoute | null {
   const fixed = fixedAdminRoutes[pathname];
   if (fixed) return fixed;
+
+  const invoiceDraft = pathname.match(/^\/invoices\/new\/from-order\/([1-9]\d*)$/u);
+  if (invoiceDraft) {
+    const orderNumber = Number(invoiceDraft[1]);
+    if (!Number.isSafeInteger(orderNumber)) return null;
+    return { path: pathname, title: "Neue Rechnung", description: `Rechnungsentwurf aus Auftrag ${orderNumber}`, adminOnly: true, sourceOrderNumber: orderNumber };
+  }
 
   const editMatch = pathname.match(/^\/edit\/([^/]+)$/u);
   if (editMatch) {

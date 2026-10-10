@@ -183,6 +183,8 @@ das nichtproduktive Hostinger-Deployment sind separat nachzuweisen.
 **ORM-Upgrade (2026-10-10):** Prisma CLI, Client und MariaDB-Adapter sind
 auf `7.10.0` gepinnt. CI generiert den serverseitigen ESM-Client explizit
 nach `npm ci`; Migrationsbefehle erzeugen ihn nicht mehr automatisch.
+Die lokalen Dev-Befehle nutzen den Server-Workspace mit `predev`-Generierung,
+damit auch ohne vorhandenen generierten Client der Server starten kann.
 Der gezielte `mariadb@3.5.4`-Override und der lokale Node-24-Proof sind
 in `docs/proof-01-integration-compatibility.md` dokumentiert.
 
@@ -293,9 +295,23 @@ Hostinger Mail API Adapter, DB-Outbox/Retry, Anfrage-E-Mails, Angebot/Absage/Rec
 
 **Teilstatus:** Admin-only Rechnungs-CRUD ist umgesetzt: Rechnungen können als
 Blanco-Beleg oder mit optionalem 1:1-Auftragsbezug angelegt, bearbeitet,
-gesucht, archiviert und wiederhergestellt werden. Die Rechnung kann aus dem
+gesucht, archiviert und wiederhergestellt werden. Über den
+Auftrags-Toolbar-Button kann zunächst eine ungespeicherte, vorausgefüllte Vorlage
+geöffnet werden; erst explizites Speichern im Rechnungseditor legt den Beleg an
+und verbraucht eine Rechnungsnummer. Der Vorlagen-GET verändert keine Daten.
+Die Rechnung kann aus dem
 aktuellen Datenstand serverseitig im übernommenen Legacy-Layout als PDF
 heruntergeladen werden; jeder Export wird beim verknüpften Auftrag protokolliert.
+Auch Aufträge und Angebotskopien können Admins und Kundenberater aus dem
+aktuellen gespeicherten Stand serverseitig als PDF exportieren. Die vollständige
+Legacy-`umzugruckzuck24`-Vorlage einschließlich AGB, festen Texten, Logo und
+Dateinamen wurde mit denselben jsPDF-/AutoTable-Versionen portiert. Der
+Vierseiten-Referenzfall stimmt in Zeichenanweisungen und gerenderten Pixeln
+mit dem Legacy-PDF überein; ein Regressionstest fixiert die Seiten-Hashes.
+Ungespeicherte Editoränderungen werden vor dem Download gespeichert;
+fehlgeschlagene Speicherung verhindert den Export. Jeder erfolgreiche Export
+erzeugt `PDF_EXPORTED` im Journal. Preise bleiben gespeicherte Konditionen bzw.
+aktuelle Katalogpreise, keine neue automatische Angebotskalkulation.
 Kunden-/Auftragsnummern werden als Such-Snapshot gespeichert; beim Auftrags-Purge wird nur die
 Beziehung gelöst. Rechnungsversand, Gutschriften, Mahnungen und
 der 30-Tage-Finanz-Purge bleiben offen.
