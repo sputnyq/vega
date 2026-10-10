@@ -3,7 +3,7 @@ export interface ApiEnvelope<T> {
   error?: { code?: string; message?: string; issues?: Array<{ field: string; message: string }> };
 }
 
-export async function catalogRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+export async function apiRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const request: RequestInit = {
     method,
     credentials: "same-origin",

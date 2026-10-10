@@ -9,3 +9,4 @@ coverage/
 *.log
 apps/*/dist/
 packages/*/dist/
+apps/server/src/generated/prisma/

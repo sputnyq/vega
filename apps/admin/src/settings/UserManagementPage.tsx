@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Pagination, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import type { StaffAccountDto, UserRole } from "@vega/domain";
 import { PasswordField } from "../auth/PasswordField.js";
-import { catalogRequest } from "../catalog/catalog-api.js";
+import { apiRequest } from "../api/api-request.js";
 
 type Action = { kind: "role"; role: UserRole } | { kind: "block"; blocked: boolean } | { kind: "reset-totp" } | { kind: "reset-password" };
 type Pending = { type: "create" } | { type: "action"; user: StaffAccountDto; action: Action };
@@ -29,7 +29,7 @@ export function UserManagementPage({ currentUserId }: { currentUserId: string })
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
-    void catalogRequest<{ items: StaffAccountDto[]; total: number }>(`/api/admin/staff?page=${page}&search=${encodeURIComponent(query)}`)
+    void apiRequest<{ items: StaffAccountDto[]; total: number }>(`/api/admin/staff?page=${page}&search=${encodeURIComponent(query)}`)
       .then((result) => { if (active) { setItems(result.items); setTotal(result.total); } })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Konten konnten nicht geladen werden."); })
       .finally(() => { if (active) setLoading(false); });
@@ -47,10 +47,10 @@ export function UserManagementPage({ currentUserId }: { currentUserId: string })
     setBusy(true); setActionError(""); setMessage("");
     try {
       if (pending.type === "create") {
-        await catalogRequest("/api/admin/staff", "POST", { name, email, role, initialPassword, currentPassword: password });
+        await apiRequest("/api/admin/staff", "POST", { name, email, role, initialPassword, currentPassword: password });
         setMessage("Konto angelegt. Initialpasswort separat sicher übergeben; vor Zugriff sind Passwortwechsel und TOTP erforderlich.");
       } else {
-        await catalogRequest(`/api/admin/staff/${encodeURIComponent(pending.user.id)}/actions`, "POST", { ...pending.action, currentPassword: password });
+        await apiRequest(`/api/admin/staff/${encodeURIComponent(pending.user.id)}/actions`, "POST", { ...pending.action, currentPassword: password });
         setMessage(pending.action.kind === "reset-password" ? "Passwort-Reset-Mail versendet."
           : pending.action.kind === "reset-totp" ? "Authenticator und Recovery-Codes gelöscht. Neue Anmeldung und TOTP-Einrichtung erforderlich."
           : "Konto aktualisiert. Bestehende Sitzungen wurden widerrufen.");

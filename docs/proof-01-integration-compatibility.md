@@ -1,9 +1,9 @@
 # Issue 01 – Integrations- und Kompatibilitäts-Proof
 
-**Stand:** 2026-10-09
+**Stand:** 2026-10-10
 **Status:** Teilproof – lokale Node-24-Auth-/Prisma-Integration verifiziert; Hostinger-/Provider-Proofs offen.
 
-## Lokaler Proof
+## Lokaler Proof vor dem ORM-Upgrade (2026-10-09)
 
 Ausgeführt im Verzeichnis `vega/` mit Node.js `24.21.0` und npm `11.19.0`:
 
@@ -56,13 +56,76 @@ Session-Casts.
 
 ### Beim Proof gefundener Dependency-Befund
 
-Der erste Audit-Lauf meldete zwei kritische Findings über `concurrently@9.2.4` → `shell-quote@1.9.0` (GHSA-pqg4-j6r4-53mv). `vega/package.json` pinnt nun Overrides für `shell-quote`, `mysql2` und `deepmerge-ts`; Prisma `6.19.3` wird ohne den aktuell verwundbaren Prisma-7-MariaDB-Treiber verwendet. `npm audit` meldet 0 bekannte Schwachstellen. Es wurde kein `npm audit fix --force` verwendet.
+Der erste Audit-Lauf meldete zwei kritische Findings über `concurrently@9.2.4` → `shell-quote@1.9.0` (GHSA-pqg4-j6r4-53mv). `vega/package.json` pinnt Overrides für `shell-quote`, `mysql2` und `deepmerge-ts`; damals wurde Prisma `6.19.3` ohne den verwundbaren Prisma-7-MariaDB-Treiber verwendet. Der damalige `npm audit` meldete 0 bekannte Schwachstellen. Es wurde kein `npm audit fix --force` verwendet.
 
 Für das Rechnungs-PDF wurde die verwundbare Legacy-Browserbibliothek `jspdf`
 nicht übernommen. Stattdessen wird `pdfkit` nur serverseitig verwendet;
 `npm audit --omit=dev` meldet nach der Änderung weiterhin 0 Vulnerabilities.
 
 Bei `npm ci` meldet npm weiterhin, dass das optionale Install-Script von `fsevents@2.3.3` nicht in `allowScripts` freigegeben ist. Installation, Tests und Builds funktionieren trotzdem; das Script wurde nicht zusätzlich freigegeben.
+
+## Lokaler Prisma-7-Upgrade-Proof (2026-10-10)
+
+Ausgeführt mit Node.js `24.18.0` und npm `11.16.0`. Prisma CLI,
+`@prisma/client` und `@prisma/adapter-mariadb` sind exakt `7.10.0`;
+Better Auth bleibt unverändert bei `1.7.7`.
+
+| Prüfschritt | Ergebnis |
+|---|---|
+| Reproduzierbare Installation | `npm ci` mit finalem Lockfile bestanden; nur das bereits bekannte optionale `fsevents`-Script bleibt gesperrt |
+| Versionsauflösung | CLI/Client/Adapter `7.10.0`, gezielt überschriebener Treiber `mariadb@3.5.4`, keine ungültigen Peer Dependencies |
+| Generate / Build ohne DB-Secrets | `db:generate` und `build` ohne `DATABASE_URL` und ohne `.env` bestanden; `db:migrate:deploy` ohne URL scheitert ausdrücklich |
+| Typecheck / Lint | beide bestanden, einschließlich Seed, Recovery und neuer Konfigurationstests |
+| Unit-/API-Tests | 60/60 bestanden; drei neue Tests für URL-Decoding, Pool-/Timeout-Konfiguration, Fehler ohne Credential-Ausgabe und strikte TLS-Konfiguration |
+| Frische Migrationen / Status / Drift | alle 14 unveränderten SQL-Migrationen auf neuer isolierter MariaDB 10.11.19 angewendet; Status aktuell, kein Schema-Drift |
+| Database-/Auth-Tests | 8/8 bestanden, auch mit `TZ=Europe/Berlin`; FK-Regeln, Rollback, parallele Nummernvergabe und kompletter A3-DB-/HTTP-Auth-Lifecycle |
+| Datentypen / Fehlercodes | JSON, Decimal, UTC-DateTime mit Millisekunden, BigInt oberhalb der sicheren JS-Integergrenze sowie `P2002`/`P2025` nachgewiesen |
+| Seed / Recovery-CLI | expliziter Admin-Seed, idempotente Wiederholung ohne Passwortänderung und tatsächlicher Recovery-Befehl mit Widerruf von Sitzungen/Challenges/Faktoren bestanden |
+| Produktionsbuild / Deployment | alle Workspaces gebaut; 1/1 Ein-Prozess-Smoke-Test bestanden; kompilierter Prisma-Client verbindet und liest die Test-DB unter Node ohne `tsx` |
+| Dependency-Audit | `npm audit` und `npm audit --omit=dev`: jeweils 0 bekannte Schwachstellen |
+
+Die Testdatenbank lag in einem separaten, ausschließlich für diesen Proof
+gestarteten und anschließend entfernten Container ohne produktive Daten.
+Die laufende App-Datenbank
+wurde nicht migriert, zurückgesetzt oder mit Testkonten befüllt.
+DB-Testdateien laufen nun seriell, damit der Bootstrap-/Sole-Admin-Proof
+nicht mit anderen Auth-Fixtures konkurriert. Unit-/Deployment-Tests setzen
+ihre DB-Konfiguration ausdrücklich auf ein synthetisches, unerreichbares
+Ziel und benötigen keine echten DB-Zugänge.
+
+`prisma-client` erzeugt ESM-TypeScript unter
+`apps/server/src/generated/prisma/`; `tsc` kompiliert es mit den bestehenden
+NodeNext-/`.js`-Imports nach `apps/server/dist/`. Die URL liegt für die
+CLI in `prisma.config.ts`, für die Runtime wird sie explizit in sichere
+Adapteroptionen übersetzt. Neue SQL-Migrationen oder Auth-Schemaänderungen
+waren für dieses Upgrade nicht erforderlich. Clientgenerierung und Seed
+werden bewusst separat ausgeführt.
+
+### Gezielter MariaDB-Treiber-Override
+
+Auch Adapter `7.10.0` pinnt upstream noch `mariadb@3.4.5`
+([npm-Metadaten](https://registry.npmjs.org/@prisma%2Fadapter-mariadb/7.10.0)).
+Der zunächst vorgesehene Override auf `3.4.7` behebt Passwort-Offenlegung
+und SET-Key-Injection, wurde aber im anschließenden Audit noch durch einen
+weiteren ed25519-/TLS-Befund beanstandet. Deshalb verwendet der geprüfte
+Versionssatz einen ausschließlich auf den Adapter begrenzten Override auf
+`3.5.4`, nicht einen ungeprüften Majorwechsel oder `audit fix --force`.
+
+| Advisory | Patch in verwendeter Linie |
+|---|---|
+| [GHSA-cqhc-2h57-wpxf – Password Disclosure bei TLS](https://github.com/advisories/GHSA-cqhc-2h57-wpxf) | seit `3.5.3` |
+| [GHSA-v6pj-gxxw-phfw – SQL Injection bei `permitSetMultiParamEntries`](https://github.com/advisories/GHSA-v6pj-gxxw-phfw) | seit `3.5.4` |
+| [GHSA-cx2f-j9fh-8g68 – Uncaught Exception bei ed25519/TLS](https://github.com/advisories/GHSA-cx2f-j9fh-8g68) | seit `3.5.4` |
+
+Der Override weicht vom offiziellen Adapter-Pin ab; die oben ausgeführten
+echten DB-/Auth-Regressionen sind deshalb Teil dieses Versions-Proofs.
+Bei künftigen Updates erneut Auflösung, Audit und Kompatibilität prüfen.
+TLS-Zertifikatsprüfung wird nicht abgeschaltet. Die reale
+Hostinger-Verbindungs-/CA-Konfiguration und der tatsächliche GitHub-CI-Lauf
+bleiben externe Nachweise, keine durch diesen lokalen Proof erfüllten Gates.
+
+Referenz für Generator, Config, Adapter und die expliziten Generate-/Seed-
+Schritte: [offizieller Prisma-v7-Upgrade-Guide](https://www.prisma.io/docs/guides/upgrade-prisma-orm/v7).
 
 ## Noch offen – externe Proofs
 
