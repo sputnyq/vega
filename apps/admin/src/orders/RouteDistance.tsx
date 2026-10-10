@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Stack, Typography } from "@mui/material";
-import { catalogRequest } from "../catalog/catalog-api.js";
+import { apiRequest } from "../api/api-request.js";
 import type { OrderFormValue } from "./order-form-types.js";
 
 export function RouteDistance({ value, onDistance }: { value: OrderFormValue; onDistance: (distance: number) => void }) {
@@ -15,7 +15,7 @@ export function RouteDistance({ value, onDistance }: { value: OrderFormValue; on
   const routeKey = texts.join("\n");
   useEffect(() => {
     let active = true;
-    void catalogRequest<{ origin: string | null; available: boolean }>("/api/admin/routes/config").then((result) => { if (active) setConfig(result); })
+    void apiRequest<{ origin: string | null; available: boolean }>("/api/admin/routes/config").then((result) => { if (active) setConfig(result); })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Routenkonfiguration konnte nicht geladen werden."); });
     return () => { active = false; controller.current?.abort(); };
   }, []);

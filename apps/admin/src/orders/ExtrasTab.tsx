@@ -2,7 +2,7 @@ import { AddOutlined, DeleteOutlined } from "@mui/icons-material";
 import { Alert, Button, FormControlLabel, Grid, MenuItem, Paper, Stack, Switch, Tab, Tabs, TextField, Typography } from "@mui/material";
 import type { CatalogPackingDto, CatalogServiceDto, OrderServiceInput } from "@vega/domain";
 import { useEffect, useState } from "react";
-import { catalogRequest } from "../catalog/catalog-api.js";
+import { apiRequest } from "../api/api-request.js";
 import type { OrderFormValue } from "./order-form-types.js";
 
 interface ExtrasTabProps {
@@ -20,8 +20,8 @@ export function ExtrasTab({ value, onExtrasChange }: ExtrasTabProps) {
   useEffect(() => {
     let active = true;
     Promise.all([
-      catalogRequest<CatalogPackingDto[]>("/api/catalog/packings"),
-      catalogRequest<CatalogServiceDto[]>("/api/catalog/services"),
+      apiRequest<CatalogPackingDto[]>("/api/catalog/packings"),
+      apiRequest<CatalogServiceDto[]>("/api/catalog/services"),
     ]).then(([packings, services]) => {
       if (active) setCatalog([
         ...packings.map((item) => ({ id: item.id, name: item.name, price: item.price, kind: "packaging" as const })),
