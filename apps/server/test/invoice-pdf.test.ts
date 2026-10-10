@@ -55,9 +55,10 @@ test("postal sender and recipient start below the logo with the legacy header sp
     assert.ok(call, text);
     return call.y;
   };
-  assert.equal(position("Alexander Berent, Am Münchfeld 31, 80999 München"), postalY);
+  assert.equal(position("Alexander Berent, Am Münchfeld 31, 80999 München"), postalY + 9.2 - 5.744);
   assert.ok(postalY > 22.7 + 102);
-  assert.equal(position("Beispiel GmbH"), postalY + 48);
-  assert.equal(position("Ada Beispiel"), postalY + 62);
+  const customerY = postalY + 18.4 + 5 / 0.353 + 14 + 5 / 0.353;
+  assert.ok(Math.abs(position("Beispiel GmbH") - (customerY + 7 - 7.18)) < 0.001);
+  assert.ok(Math.abs(position("Ada Beispiel") - (customerY + 14 + 7 - 7.18)) < 0.001);
   assert.equal(position("Alexander Berent"), 25.7);
 });

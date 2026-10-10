@@ -15,10 +15,15 @@ export async function generateInvoicePdf(invoice: Invoice): Promise<Buffer> {
   drawRight(doc, ["Alexander Berent", "Am Münchfeld 31, 80999 München", "089 30642972 | 0176 10171990", "info@umzugruckzuck24.de", "", "Steuernummer: 144/139/21180"], y + 3, 8, width - right);
   // Legacy header flow (five contact lines and three blanks), then 15 mm to the postal block.
   y = (8 + 5 + 15) / 0.353 + 5 * 12 + 3 * 6;
-  text(doc, "Alexander Berent, Am Münchfeld 31, 80999 München", left, y, 8); y += 18;
-  drawRight(doc, [`Rechnungsdatum: ${formatDate(invoice.invoiceDate)}`, ...(invoice.orderNumberSnapshot ? [`Auftragsnummer: ${invoice.orderNumberSnapshot}`] : [])], y, 10, width - right); y += 30;
-  [invoice.company, invoice.customerNameSnapshot, invoice.customerStreet, invoice.customerPostalCity].filter(Boolean).forEach((line) => { text(doc, line, left, y, 10); y += 14; });
-  y += 95;
+  // jsPDF uses baselines; PDFKit positions Helvetica text at the top (ascender 718/1000).
+  text(doc, "Alexander Berent, Am Münchfeld 31, 80999 München", left, y + 9.2 - 5.744, 8);
+  y += 18.4 + 5 / 0.353;
+  const information = [`Rechnungsdatum: ${formatDate(invoice.invoiceDate)}`, ...(invoice.orderNumberSnapshot ? [`Auftragsnummer: ${invoice.orderNumberSnapshot}`] : [])];
+  information.forEach((line) => { drawRight(doc, [line], y + 7 - 7.18, 10, width - right); y += 14; });
+  y += 5 / 0.353;
+  const customerY = y;
+  [invoice.company, invoice.customerNameSnapshot, invoice.customerStreet, invoice.customerPostalCity].filter(Boolean).forEach((line, index) => { text(doc, line, left, customerY + index * 14 + 7 - 7.18, 10); });
+  y = customerY + 28 + 35 / 0.353;
   doc.font("Helvetica-Bold").fontSize(12).fillColor("black").text(`Rechnung Nr: ${invoice.invoiceNumber}`, left, y, { width: width - left - right, align: "center" }); y += 35;
   const entries = parseEntries(invoice.entries);
   y = table(doc, entries, y, left, width - right);
