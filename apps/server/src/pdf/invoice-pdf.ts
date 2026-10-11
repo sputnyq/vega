@@ -58,6 +58,6 @@ function table(doc: PDFKit.PDFDocument, entries: Array<{ description: string; qu
 function text(doc: PDFKit.PDFDocument, value: string, x: number, y: number, size: number, width?: number) { doc.font("Helvetica").fontSize(size).fillColor("black").text(value, x, y, width ? { width } : {}); }
 function drawRight(doc: PDFKit.PDFDocument, lines: string[], y: number, size: number, right: number) { lines.forEach((line, index) => doc.font("Helvetica").fontSize(size).fillColor("#3c3c3c").text(line, 0, y + index * (size + 4), { width: right, align: "right" })); doc.fillColor("black"); }
 function parseEntries(value: unknown): Array<{ description: string; quantity: number; unitPrice: number }> { return Array.isArray(value) ? value.filter((entry): entry is { description: string; quantity: number; unitPrice: number } => typeof entry === "object" && entry !== null && typeof (entry as Record<string, unknown>).description === "string" && typeof (entry as Record<string, unknown>).quantity === "number" && typeof (entry as Record<string, unknown>).unitPrice === "number") : []; }
-function formatDate(date: Date): string { return date.toLocaleDateString("de-DE"); }
+function formatDate(date: Date): string { return date.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" }); }
 function euro(value: number): string { return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value); }
 function formatNumber(value: number): string { return new Intl.NumberFormat("de-DE").format(value); }

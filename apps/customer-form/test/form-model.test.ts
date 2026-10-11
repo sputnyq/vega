@@ -8,7 +8,7 @@ const resources: FormResources = {
   config: { privacyUrl: "https://example.test/privacy", boxCalculatorUrl: null, successUrl: null, boxVolume: 0.1, wardrobeBoxVolume: 0.5, uploadsAvailable: false, placesAvailable: false },
   categories: [{ id: 1, name: "Wohnzimmer", sort: 1 }],
   furniture: [{ id: 2, name: "Sofa", categoryIds: [1], categoryRefs: [{ id: 1, name: "Wohnzimmer" }], volume: 3,
-    step: 1, sortOrder: 0, weight: null, montagePrice: 0, extraPrice: 0, demontage: false, notDismountable: false, bulky: false, montage: false, m100: false, m150: false }],
+    step: 1, sortOrder: 0 }],
   packings: [{ id: 3, name: "Karton", price: 4, description: "", media: null, sort: 1, show: true }],
   services: [{ id: 4, name: "Lampe aufhängen", price: 20, sort: 1, show: true }], rates: [],
 };

@@ -1,8 +1,11 @@
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
+import AddOutlined from "@mui/icons-material/AddOutlined";
+import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
+import RestoreOutlined from "@mui/icons-material/RestoreOutlined";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField, Tooltip } from "@mui/material";
 import type { AdminOrderListItem } from "@vega/domain";
 
 const PAGE_SIZE = 10;
@@ -49,7 +52,7 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
       const response = await fetch(`/api/admin/orders?${query}`, { credentials: "same-origin" });
       const body = await response.json() as { data?: { items?: AdminOrderListItem[]; total?: number }; error?: { message?: string } };
       if (!response.ok || !body.data?.items || typeof body.data.total !== "number") { setError(body.error?.message ?? "Aufträge konnten nicht geladen werden."); return; }
-      if (/^\d+$/u.test(value) && body.data.items.length === 1) { navigate(`/edit/${body.data.items[0]!.orderNumber}`); return; }
+      if (!archived && /^\d+$/u.test(value) && body.data.items.length === 1) { navigate(`/edit/${body.data.items[0]!.orderNumber}`); return; }
       setItems(body.data.items); setTotal(body.data.total); setActiveSearch(value); setCurrentPage(1);
     } catch { setError("Aufträge konnten nicht geladen werden."); }
     finally { setLoading(false); }
@@ -95,8 +98,8 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
         </Stack>
       </Box>
       {!archived && (
-        <Button variant="contained" onClick={() => navigate("/edit/-1")} sx={{ alignSelf: { xs: "flex-end", sm: "auto" } }}>
-          Neuer Auftrag
+        <Button variant="contained" startIcon={<AddOutlined />} onClick={() => navigate("/edit/-1")} sx={{ alignSelf: "flex-end" }}>
+          Auftrag anlegen
         </Button>
       )}
     </Stack>
@@ -104,13 +107,17 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
     <Paper variant="outlined" sx={{ overflowX: "auto" }}>
       {loading && <Stack sx={{ height: 420, alignItems: "center", justifyContent: "center" }}><CircularProgress /></Stack>}
       {!loading && <Table size="small" sx={{ minWidth: 1100 }}><TableHead><TableRow>
-        <TableCell>ID</TableCell><TableCell>Quelle</TableCell><TableCell>Kunde</TableCell><TableCell>Datum</TableCell><TableCell>Auszugsadresse</TableCell><TableCell padding="checkbox">HVZ</TableCell><TableCell>Einzugsadresse</TableCell><TableCell padding="checkbox">HVZ</TableCell><TableCell>Mann</TableCell><TableCell>3,5t</TableCell><TableCell>Std.</TableCell>
+        <TableCell>ID</TableCell><TableCell>Quelle</TableCell><TableCell>Kunde</TableCell><TableCell>Datum</TableCell><TableCell>Auszugsadresse</TableCell><TableCell padding="checkbox">HVZ</TableCell><TableCell>Einzugsadresse</TableCell><TableCell padding="checkbox">HVZ</TableCell><TableCell>Mann</TableCell><TableCell>3,5t</TableCell><TableCell>Std.</TableCell>{archived && <TableCell>Aktionen</TableCell>}
       </TableRow></TableHead><TableBody>
         {items.map((order) => <TableRow key={order.orderNumber} hover sx={{ "& td": { fontWeight: order.editedAt ? "normal" : 700 } }}>
-          <TableCell><Button size="small" onClick={() => navigate(`/edit/${order.orderNumber}`)}>{order.orderNumber}</Button></TableCell>
+          <TableCell>{archived ? order.orderNumber : <Button size="small" onClick={() => navigate(`/edit/${order.orderNumber}`)}>{order.orderNumber}</Button>}</TableCell>
           <TableCell>{order.source}</TableCell><TableCell>{order.customerName}</TableCell><TableCell>{formatDate(order.movingDate)}</TableCell><TableCell>{order.fromAddress}</TableCell><TableCell padding="checkbox">{order.fromParkingSlot && <CheckCircleIcon color="success" fontSize="small" />}</TableCell><TableCell>{order.toAddress}</TableCell><TableCell padding="checkbox">{order.toParkingSlot && <CheckCircleIcon color="success" fontSize="small" />}</TableCell><TableCell>{order.workers ?? ""}</TableCell><TableCell>{order.trucks ?? ""}</TableCell><TableCell>{order.hours ?? ""}</TableCell>
+          {archived && <TableCell sx={{ whiteSpace: "nowrap" }}>
+            <Tooltip title="PDF herunterladen"><IconButton component="a" href={`/api/admin/orders/${order.orderNumber}/pdf`} aria-label="Auftrags-PDF herunterladen"><FileDownloadOutlined /></IconButton></Tooltip>
+            <Tooltip title="Wiederherstellen"><IconButton onClick={() => void changeArchive(order.orderNumber)} aria-label="Auftrag wiederherstellen"><RestoreOutlined /></IconButton></Tooltip>
+          </TableCell>}
         </TableRow>)}
-        {items.length === 0 && <TableRow><TableCell colSpan={11} align="center">Keine Aufträge gefunden.</TableCell></TableRow>}
+        {items.length === 0 && <TableRow><TableCell colSpan={archived ? 12 : 11} align="center">Keine Aufträge gefunden.</TableCell></TableRow>}
       </TableBody></Table>}
       <TablePagination component="div" count={total} page={page - 1} onPageChange={(_, next) => setCurrentPage(next + 1)} rowsPerPage={PAGE_SIZE} rowsPerPageOptions={[PAGE_SIZE]} labelDisplayedRows={({ from, to, count }) => `${from}–${to} von ${count}`} />
     </Paper>

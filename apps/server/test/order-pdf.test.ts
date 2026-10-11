@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { generateOrderPdf, orderPdfFilename } from "../src/pdf/order-pdf.js";
+import { generateOrderPdf, orderPdfEditDate, orderPdfFilename } from "../src/pdf/order-pdf.js";
 import { orderPdfFixture } from "./order-pdf-fixture.js";
 
 const now = new Date("2026-10-10T10:00:00Z");
@@ -20,6 +20,27 @@ test("order PDF matches the original OrderPdf.ts page drawing streams exactly", 
     "c560469113a9e3e468d08e9606214b0cd5cc86eb6a783f08865e2d56e198d487",
   ]);
   assert.equal(orderPdfFilename(orderPdfFixture()), "24.10.2026_Beispiel_1042_3+2x3.5_4_Std_1xHVZ.pdf");
+});
+
+test("historically archived and restored orders recover their last edit date from the journal", () => {
+  const createdAt = new Date("2026-08-01T10:00:00Z");
+  const editedAt = new Date("2026-09-15T10:00:00Z");
+  const updatedAt = new Date("2026-10-11T10:00:00Z");
+  for (const action of ["ARCHIVED", "RESTORED"]) {
+    const order = { createdAt, updatedAt };
+    assert.equal(orderPdfEditDate(order, { action, createdAt: updatedAt }, { createdAt: editedAt }), editedAt);
+    assert.equal(orderPdfEditDate(order, { action, createdAt: updatedAt }, null), createdAt);
+    const recovered = orderPdfEditDate(order, { action, createdAt: updatedAt }, { createdAt: editedAt });
+    assert.ok(generateOrderPdf(orderPdfFixture(), recovered).toString("latin1").includes("15.9.2026"));
+  }
+  assert.equal(orderPdfEditDate({ createdAt, updatedAt }, { action: "UPDATED", createdAt: updatedAt }, { createdAt: editedAt }), updatedAt);
+  assert.equal(orderPdfEditDate({ createdAt, updatedAt }, null, null), updatedAt);
+});
+
+test("order PDF displays the supplied last-edit date rather than today's export date", () => {
+  const pdf = generateOrderPdf(orderPdfFixture(), new Date("2025-02-03T23:30:00Z")).toString("latin1");
+  assert.ok(pdf.includes("4.2.2025"));
+  assert.ok(!pdf.includes("10.10.2026"));
 });
 
 test("PDF handles incomplete saved drafts without invalid dates or invented data", () => {

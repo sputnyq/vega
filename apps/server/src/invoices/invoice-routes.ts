@@ -7,6 +7,7 @@ import { toInvoiceDto, validateInvoice } from "./invoice-input.js";
 import {
   archiveInvoice,
   createInvoice,
+  InvoiceOrderError,
   recordInvoicePdfExport,
   restoreInvoice,
   updateInvoice,
@@ -55,6 +56,7 @@ export function createInvoiceRouter() {
     try {
       const orderNumber = Number(req.params.orderNumber); if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) return notFound(res);
       const order = await prisma.order.findUnique({ where: { orderNumber }, include: orderRelations }); if (!order) return notFound(res);
+      if (order.archivedAt) return archivedOrder(res);
       const existing = await prisma.invoice.findUnique({ where: { orderId: order.id } });
       if (existing) { res.status(409).json({ error: { code: "INVOICE_ALREADY_EXISTS", message: "Für diesen Auftrag existiert bereits eine Rechnung." } }); return; }
       const data = orderDataWithRelations(order);
@@ -71,8 +73,9 @@ export function createInvoiceRouter() {
       if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) return notFound(res);
       const input = validateInvoice(req.body, true);
       if (!input.ok) return invalid(res, input.message);
-      const order = await prisma.order.findUnique({ where: { orderNumber }, select: { id: true, orderNumber: true } });
+      const order = await prisma.order.findUnique({ where: { orderNumber }, select: { id: true, orderNumber: true, archivedAt: true } });
       if (!order) return notFound(res);
+      if (order.archivedAt) return archivedOrder(res);
       const existing = await prisma.invoice.findUnique({ where: { orderId: order.id } });
       if (existing) {
         res.status(409).json({ error: { code: "INVOICE_ALREADY_EXISTS", message: "Für diesen Auftrag existiert bereits eine Rechnung." } });
@@ -81,6 +84,10 @@ export function createInvoiceRouter() {
       const invoice = await createInvoice(input.value, order);
       res.status(201).json({ data: toInvoiceDto(invoice) });
     } catch (error) {
+      if (error instanceof InvoiceOrderError) {
+        if (error.code === "ORDER_ARCHIVED") return archivedOrder(res);
+        return notFound(res);
+      }
       if (isUnique(error)) {
         res.status(409).json({ error: { code: "INVOICE_CONFLICT", message: "Die Rechnungsnummer oder der Auftrag ist bereits einer Rechnung zugeordnet." } });
         return;
@@ -95,7 +102,18 @@ export function createInvoiceRouter() {
       if (existing.archivedAt) { res.status(409).json({ error: { code: "INVOICE_ARCHIVED", message: "Archivierte Rechnungen müssen zuerst wiederhergestellt werden." } }); return; }
       const invoice = await updateInvoice(existing.id, input.value, existing.invoiceNumber);
       res.json({ data: toInvoiceDto(invoice) });
-    } catch (error) { if (isUnique(error)) { res.status(409).json({ error: { code: "INVOICE_NUMBER_IN_USE", message: "Diese Rechnungsnummer wird bereits verwendet." } }); return; } next(error); }
+    } catch (error) {
+      if (isMissing(error)) {
+        const latest = await prisma.invoice.findUnique({ where: { id: req.params.id }, select: { archivedAt: true } });
+        if (!latest) return notFound(res);
+        res.status(409).json({ error: latest.archivedAt
+          ? { code: "INVOICE_ARCHIVED", message: "Archivierte Rechnungen müssen zuerst wiederhergestellt werden." }
+          : { code: "INVOICE_CONFLICT", message: "Die Rechnung wurde zwischenzeitlich geändert. Bitte laden Sie sie neu." } });
+        return;
+      }
+      if (isUnique(error)) { res.status(409).json({ error: { code: "INVOICE_NUMBER_IN_USE", message: "Diese Rechnungsnummer wird bereits verwendet." } }); return; }
+      next(error);
+    }
   });
   router.post("/:id/archive", async (req, res, next) => {
     try { const invoice = await archiveInvoice(req.params.id, new Date()); res.json({ data: toInvoiceDto(invoice) }); } catch (error) { if (isMissing(error)) return notFound(res); next(error); }
@@ -107,6 +125,7 @@ export function createInvoiceRouter() {
 }
 function stringValue(value: unknown): string { return typeof value === "string" ? value : ""; }
 function notFound(res: Response) { res.status(404).json({ error: { code: "INVOICE_NOT_FOUND", message: "Rechnung nicht gefunden." } }); }
+function archivedOrder(res: Response) { res.status(409).json({ error: { code: "ORDER_ARCHIVED", message: "Archivierte Aufträge müssen vor der Rechnungserstellung wiederhergestellt werden." } }); }
 function invalid(res: Response, message: string) { res.status(400).json({ error: { code: "INVALID_INVOICE", message } }); }
 function isMissing(error: unknown) { return typeof error === "object" && error !== null && "code" in error && error.code === "P2025"; }
 function isUnique(error: unknown) { return typeof error === "object" && error !== null && "code" in error && error.code === "P2002"; }

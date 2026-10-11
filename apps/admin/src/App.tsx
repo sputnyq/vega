@@ -50,10 +50,10 @@ export function App() {
   const { data: session, isPending } = authClient.useSession();
   const { pathname, replacePath, navigatePath } = useLocalPathname();
   const [initialPassword, setInitialPassword] = useState<PendingInitialPassword | null>(null);
-  const [orderSaved, setOrderSaved] = useState(false);
   const [orderDirty, setOrderDirty] = useState(false);
   const [orderBusy, setOrderBusy] = useState(true);
   const [invoiceBusy, setInvoiceBusy] = useState(true);
+  const [invoiceDirty, setInvoiceDirty] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState<string>();
   const [totpPassword, setTotpPassword] = useState<string | undefined>();
   const [twoFactorRequired, setTwoFactorRequired] = useState(() => window.location.pathname === "/two-factor");
@@ -83,8 +83,8 @@ export function App() {
   }, [isAuthPath, isKnownPath, isPending, pathname, replacePath, route, session, twoFactorRequired]);
 
   useEffect(() => {
-    setOrderSaved(false);
     setOrderDirty(false);
+    setInvoiceDirty(false);
   }, [pathname]);
 
   if (!isKnownPath) return <NotFoundPage onHome={() => replacePath("/")} />;
@@ -159,14 +159,14 @@ export function App() {
         : route.path === "/invoices/archived"
           ? <InvoicesPage archived navigate={navigatePath} />
         : route.sourceOrderNumber !== undefined
-          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} orderNumber={route.sourceOrderNumber} onBusyChange={setInvoiceBusy} onInvoiceNumberChange={setInvoiceNumber} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} orderNumber={route.sourceOrderNumber} onBusyChange={setInvoiceBusy} onDirtyChange={setInvoiceDirty} onInvoiceNumberChange={setInvoiceNumber} />
         : route.path === "/invoices/new" || route.path === "/blanco"
-          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} onBusyChange={setInvoiceBusy} onInvoiceNumberChange={setInvoiceNumber} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} onBusyChange={setInvoiceBusy} onDirtyChange={setInvoiceDirty} onInvoiceNumberChange={setInvoiceNumber} />
         : route.path.startsWith("/invoices/")
-          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} id={route.path.slice("/invoices/".length)} onBusyChange={setInvoiceBusy} onInvoiceNumberChange={setInvoiceNumber} />
+          ? <InvoiceEditorPage key={route.path} navigate={navigatePath} id={route.path.slice("/invoices/".length)} onBusyChange={setInvoiceBusy} onDirtyChange={setInvoiceDirty} onInvoiceNumberChange={setInvoiceNumber} />
         : route.path.startsWith("/edit/")
         ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
-            <OrderCreatePage key={route.path} navigate={navigatePath} onSaved={() => setOrderSaved(true)} onDirtyChange={setOrderDirty} onBusyChange={setOrderBusy} dirty={orderDirty} {...(route.path === "/edit/-1" ? {} : { orderNumber: Number(route.path.slice("/edit/".length)) })} />
+            <OrderCreatePage key={route.path} navigate={navigatePath} onDirtyChange={setOrderDirty} onBusyChange={setOrderBusy} dirty={orderDirty} {...(route.path === "/edit/-1" ? {} : { orderNumber: Number(route.path.slice("/edit/".length)) })} />
           </Suspense>
         : route.settingsArea === "options"
           ? <OptionsPage />
@@ -179,7 +179,7 @@ export function App() {
               : <RoutePlaceholderPage route={route} />;
 
   return (
-    <AdminShell user={staffUser} route={route} pathname={pathname} navigate={navigatePath} orderSaved={orderSaved} orderDirty={orderDirty} orderBusy={orderBusy} invoiceBusy={invoiceBusy} invoiceNumber={invoiceNumber}>
+    <AdminShell user={staffUser} route={route} pathname={pathname} navigate={navigatePath} orderDirty={orderDirty || pathname === "/edit/-1"} orderBusy={orderBusy} invoiceBusy={invoiceBusy} invoiceDirty={invoiceDirty || pathname === "/invoices/new" || pathname === "/blanco" || route.sourceOrderNumber !== undefined} invoiceNumber={invoiceNumber}>
       {page}
     </AdminShell>
   );

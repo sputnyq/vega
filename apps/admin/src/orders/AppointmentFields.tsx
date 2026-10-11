@@ -26,15 +26,13 @@ export function AppointmentFields({ value, onChange }: AppointmentFieldsProps) {
         type="date"
         label="Von"
         value={value.dateFrom}
-        onChange={(event) => onChange({ dateFrom: event.target.value })}
-        slotProps={{ inputLabel: { shrink: true } }}
+        slotProps={{ inputLabel: { shrink: true }, htmlInput: { readOnly: true } }}
       />
       <TextField
         type="date"
         label="Bis"
         value={value.dateTo}
-        onChange={(event) => onChange({ dateTo: event.target.value })}
-        slotProps={{ inputLabel: { shrink: true } }}
+        slotProps={{ inputLabel: { shrink: true }, htmlInput: { readOnly: true } }}
       />
       <TextField
         type="time"

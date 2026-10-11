@@ -235,17 +235,8 @@ export interface CatalogFurnitureDto {
   categoryIds: number[];
   categoryRefs: Array<Pick<CatalogCategoryDto, "id" | "name">>;
   volume: number;
-  step: number | null;
+  step: number;
   sortOrder: number;
-  weight: string | null;
-  montagePrice: number;
-  extraPrice: number;
-  demontage: boolean;
-  notDismountable: boolean;
-  bulky: boolean;
-  montage: boolean;
-  m100: boolean;
-  m150: boolean;
 }
 
 export interface CatalogServiceDto {

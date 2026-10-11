@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Button, Paper, Snackbar, Stack } from "@mui/material";
+import { Alert, Snackbar, Stack } from "@mui/material";
 import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
 import { SectionTabs } from "../components/SectionTabs.js";
 import { AddressesTab } from "./AddressesTab.js";
@@ -16,7 +16,6 @@ const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditio
 
 interface OrderCreatePageProps {
   navigate: (path: string) => void;
-  onSaved: () => void;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   dirty: boolean;
@@ -30,12 +29,11 @@ interface ApiErrorResponse {
   };
 }
 
-export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange, dirty, orderNumber }: OrderCreatePageProps) {
+export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, orderNumber }: OrderCreatePageProps) {
   const [value, setValue] = useState(createEmptyOrder);
   const [activeTab, setActiveTab] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<CreateOrderResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loading, setLoading] = useState(orderNumber !== undefined);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -52,6 +50,7 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
       .then(({ response, body }) => {
         if (cancelled) return;
         if (!response.ok || !body.data) { setError(body.error?.message ?? "Auftrag konnte nicht geladen werden."); setLoadFailed(true); return; }
+        if (body.data.archivedAt) { navigate("/orders/archived"); return; }
         const base = createEmptyOrder();
         const data = body.data.data;
         setValue({
@@ -67,7 +66,7 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
       .catch(() => { if (!cancelled) { setError("Auftrag konnte nicht geladen werden."); setLoadFailed(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [onDirtyChange, orderNumber]);
+  }, [navigate, onDirtyChange, orderNumber]);
 
   function update(patch: Partial<OrderFormValue>) {
     setValue((current) => ({ ...current, ...patch }));
@@ -101,8 +100,8 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
       return false;
     }
     if (orderNumber === undefined) {
-      setSaved({ orderNumber: body.data.orderNumber });
-      onSaved();
+      onDirtyChange(false);
+      navigate(`/edit/${body.data.orderNumber}`);
     } else {
       onDirtyChange(false);
       setSaveSuccess(true);
@@ -116,6 +115,10 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const exportPdf = submitter instanceof HTMLButtonElement && submitter.value === "pdf";
     const createInvoice = submitter instanceof HTMLButtonElement && submitter.value === "invoice";
+    if ((exportPdf || createInvoice) && (dirty || orderNumber === undefined)) {
+      setError("Bitte speichern Sie den Auftrag zuerst.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -124,10 +127,9 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
           && !value.details.conditions.some((condition) => condition.description.toUpperCase().includes("HALTEVERBOT"))) {
           window.alert("Halteverbotzone(n) wurde(n) ausgewählt!\nBitte entweder die HVZ entfernen oder als Kondition aufnehmen.");
         }
-        const file = await saveAndFetchOrderPdf(orderNumber, () => dirty ? save() : Promise.resolve(true));
+        const file = await saveAndFetchOrderPdf(orderNumber, () => Promise.resolve(true));
         if (file) downloadOrderPdf(file);
       } else if (createInvoice && orderNumber !== undefined) {
-        if (dirty && !await save()) return;
         navigate(`/invoices/new/from-order/${orderNumber}`);
       } else {
         await save();
@@ -141,19 +143,13 @@ export function OrderCreatePage({ navigate, onSaved, onDirtyChange, onBusyChange
     }
   }
 
-  if (saved) {
-    return (
-      <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, maxWidth: 780 }}>
-        <Stack spacing={2}>
-          <Alert severity="success">Auftrag {saved.orderNumber} wurde erfolgreich gespeichert.</Alert>
-          <Button variant="contained" onClick={() => navigate("/")}>Zur Auftragsübersicht</Button>
-        </Stack>
-      </Paper>
-    );
-  }
-
   return (
-    <Stack component="form" id="order-create-form" spacing={2} onSubmit={submit} noValidate>
+    <Stack component="form" id="order-create-form" spacing={2} onSubmit={submit} noValidate sx={{
+      "& .MuiTextField-root": { minWidth: 0, maxWidth: "100%" },
+      "& .MuiGrid-root > .MuiTextField-root": { width: "100%" },
+      "& .MuiFormControlLabel-root": { maxWidth: "100%" },
+      "& .MuiFormControlLabel-label": { overflowWrap: "anywhere" },
+    }}>
       {loading && <Alert severity="info">Auftrag wird geladen …</Alert>}
       {error && <Alert severity="error" role="alert">{error}</Alert>}
       <SectionTabs

@@ -16,16 +16,23 @@ export function InvoiceNumberField({ invoiceNumber, nextValue, editing, onChange
   return <TextField label="Rechnungsnummer" value={invoiceNumber ?? ""} placeholder={!editing && nextValue !== undefined ? `R-${nextValue}` : undefined} onChange={(e) => onChange(e.target.value || undefined)} error={invalid} />;
 }
 
-export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onInvoiceNumberChange }: { id?: string; orderNumber?: number; navigate: (path: string) => void; onBusyChange?: (busy: boolean) => void; onInvoiceNumberChange?: (invoiceNumber: string | undefined) => void }) {
+export function InvoiceTaxField({ taxPercent, onChange }: { taxPercent: number; onChange: (value: number) => void }) {
+  const valid = taxPercent === 19 || taxPercent === 0;
+  return <TextField label="Umsatzsteuer (%)" select required error={!valid} value={valid ? taxPercent : ""} onChange={(e) => onChange(Number(e.target.value))} slotProps={{ select: { native: true } }}>{!valid && <option value="" disabled>Bitte wählen</option>}<option value={19}>19 %</option><option value={0}>0 %</option></TextField>;
+}
+
+export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onDirtyChange, onInvoiceNumberChange }: { id?: string; orderNumber?: number; navigate: (path: string) => void; onBusyChange?: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void; onInvoiceNumberChange?: (invoiceNumber: string | undefined) => void }) {
   const [value, setValue] = useState<InvoiceInput>(emptyInvoice);
   const [busy, setBusy] = useState(id !== undefined || orderNumber !== undefined);
+  const [dirty, setDirty] = useState(!id);
   const [loading, setLoading] = useState(id !== undefined || orderNumber !== undefined);
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [nextValue, setNextValue] = useState<number>();
   const [numberLoading, setNumberLoading] = useState(!id);
-  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
+  useEffect(() => { onBusyChange?.(busy || loading || numberLoading || loadFailed); }, [busy, loading, numberLoading, loadFailed, onBusyChange]);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => { onInvoiceNumberChange?.(value.invoiceNumber); }, [onInvoiceNumberChange, value.invoiceNumber]);
   useEffect(() => {
     if (id) return;
@@ -49,19 +56,21 @@ export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onI
     if (!id && orderNumber === undefined) return;
     let cancelled = false;
     const path = id ? `/api/admin/invoices/${id}` : `/api/admin/invoices/from-order/${orderNumber}`;
-    void fetch(path, { credentials: "same-origin" }).then(async (response) => ({ response, body: await response.json() as { data?: InvoiceInput; error?: { message?: string } } })).then(({ response, body }) => {
+    void fetch(path, { credentials: "same-origin" }).then(async (response) => ({ response, body: await response.json() as { data?: InvoiceInput & { archivedAt?: string | null }; error?: { message?: string } } })).then(({ response, body }) => {
       if (cancelled) return;
       if (!response.ok || !body.data) {
         setError(body.error?.message ?? "Rechnung konnte nicht geladen werden.");
         setLoadFailed(true);
       } else {
         const loaded = body.data;
+        if (loaded.archivedAt) { navigate("/invoices/archived"); return; }
         setValue((current) => id ? loaded : initializeInvoiceNumber(loaded, current.invoiceNumber));
+        if (id) setDirty(false);
       }
     }).catch(() => { if (!cancelled) { setError("Rechnung konnte nicht geladen werden."); setLoadFailed(true); } }).finally(() => { if (!cancelled) { setBusy(false); setLoading(false); } });
     return () => { cancelled = true; };
-  }, [id, orderNumber]);
-  function change<K extends keyof InvoiceInput>(key: K, next: InvoiceInput[K]) { setValue((current) => ({ ...current, [key]: next })); }
+  }, [id, navigate, orderNumber]);
+  function change<K extends keyof InvoiceInput>(key: K, next: InvoiceInput[K]) { setValue((current) => ({ ...current, [key]: next })); setDirty(true); setSuccess(""); }
   function updateEntry(index: number, patch: Partial<InvoiceInput["entries"][number]>) {
     change("entries", value.entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...patch } : entry));
   }
@@ -73,21 +82,23 @@ export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onI
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || loadFailed || (!id && nextValue === undefined)) return;
+    if (busy || loading || numberLoading || loadFailed || (!id && nextValue === undefined)) return;
     setBusy(true); setError("");
     try {
       const path = id ? `/api/admin/invoices/${id}` : orderNumber !== undefined ? `/api/admin/invoices/from-order/${orderNumber}` : "/api/admin/invoices";
       const response = await fetch(path, { method: id ? "PUT" : "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
       const body = await response.json() as { data?: AdminInvoiceDto; error?: { message?: string } };
       if (!response.ok || !body.data) { setError(body.error?.message ?? "Rechnung konnte nicht gespeichert werden."); return; }
+      setValue(body.data);
+      setDirty(false);
       if (!id) navigate(`/invoices/${body.data.id}`); else setSuccess("Rechnung gespeichert.");
     } catch { setError("Rechnung konnte nicht gespeichert werden."); } finally { setBusy(false); }
   }
   function renderCustomerFields() {
-    return <Grid container spacing={2}><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Firma" value={value.company} onChange={(e) => change("company", e.target.value)} /><TextField label="Kunde" required value={value.customerName} onChange={(e) => change("customerName", e.target.value)} /><TextField label="Straße, Nr." value={value.customerStreet} onChange={(e) => change("customerStreet", e.target.value)} /><TextField label="PLZ, Ort" value={value.customerPostalCity} onChange={(e) => change("customerPostalCity", e.target.value)} /></Stack></Grid><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Rechnungsdatum" type="date" required value={value.invoiceDate} onChange={(e) => change("invoiceDate", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /><InvoiceNumberField invoiceNumber={value.invoiceNumber} nextValue={nextValue} editing={!!id} onChange={(number) => change("invoiceNumber", number)} /><TextField label="Umsatzsteuer (%)" type="number" value={value.taxPercent} onChange={(e) => change("taxPercent", Number(e.target.value))} /></Stack></Grid></Grid>;
+    return <Grid container spacing={2}><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Firma" value={value.company} onChange={(e) => change("company", e.target.value)} /><TextField label="Kunde" required value={value.customerName} onChange={(e) => change("customerName", e.target.value)} /><TextField label="Straße, Nr." value={value.customerStreet} onChange={(e) => change("customerStreet", e.target.value)} /><TextField label="PLZ, Ort" value={value.customerPostalCity} onChange={(e) => change("customerPostalCity", e.target.value)} /></Stack></Grid><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Rechnungsdatum" type="date" required value={value.invoiceDate} onChange={(e) => change("invoiceDate", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /><InvoiceNumberField invoiceNumber={value.invoiceNumber} nextValue={nextValue} editing={!!id} onChange={(number) => change("invoiceNumber", number)} /><InvoiceTaxField taxPercent={value.taxPercent} onChange={(percent) => change("taxPercent", percent)} /></Stack></Grid></Grid>;
   }
   function renderEntries() {
-    return <><Typography variant="h6">Leistungen</Typography>{value.entries.map((entry, index) => <Stack key={index} direction={{ xs: "column", md: "row" }} spacing={1}><TextField label="Beschreibung" value={entry.description} onChange={(e) => updateEntry(index, { description: e.target.value })} fullWidth /><TextField label="Menge" type="number" value={entry.quantity} onChange={(e) => updateEntry(index, { quantity: Number(e.target.value) })} /><TextField label="Einzelpreis" type="number" value={entry.unitPrice} onChange={(e) => updateEntry(index, { unitPrice: Number(e.target.value) })} /><IconButton onClick={() => removeEntry(index)}><DeleteOutlined /></IconButton></Stack>)}<Button onClick={addEntry} sx={{ alignSelf: "flex-start" }}>Leistung hinzufügen</Button></>;
+    return <><Typography variant="h6">Leistungen</Typography>{value.entries.map((entry, index) => <Stack key={index} direction={{ xs: "column", md: "row" }} spacing={1}><TextField label="Beschreibung" value={entry.description} onChange={(e) => updateEntry(index, { description: e.target.value })} fullWidth /><TextField label="Menge" type="number" value={entry.quantity} onChange={(e) => updateEntry(index, { quantity: Number(e.target.value) })} /><TextField label="Einzelpreis" type="number" value={entry.unitPrice} onChange={(e) => updateEntry(index, { unitPrice: Number(e.target.value) })} /><IconButton onClick={() => removeEntry(index)}><DeleteOutlined /></IconButton></Stack>)}<Button onClick={addEntry} sx={{ alignSelf: "flex-end" }}>Leistung hinzufügen</Button></>;
   }
   function renderFormFields() {
     return <>{renderCustomerFields()}{renderEntries()}<TextField label="Rechnungstext" multiline minRows={4} value={value.text} onChange={(e) => change("text", e.target.value)} /></>;

@@ -18,6 +18,13 @@ export interface OrderPdfInput {
 const euro = (value: number | undefined) => value === undefined ? "" : new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value);
 const number = (value: number | undefined) => value === undefined ? "" : new Intl.NumberFormat("de-DE").format(value);
 
+export function orderPdfEditDate(order: { createdAt: Date; updatedAt: Date }, latestActivity: { action: string; createdAt: Date } | null, lastEdit: { createdAt: Date } | null): Date {
+  if (latestActivity?.action === "ARCHIVED" || latestActivity?.action === "RESTORED") {
+    return lastEdit?.createdAt ?? order.createdAt;
+  }
+  return order.updatedAt;
+}
+
 function date(value: string, weekday = false): string {
   if (!value) return "";
   return new Intl.DateTimeFormat("de-DE", {
@@ -37,7 +44,7 @@ export function orderPdfFilename({ orderNumber, data }: Pick<OrderPdfInput, "ord
   return `${filename.replace(/[/\\\u0000-\u001f\u007f]/gu, "_")}.pdf`;
 }
 
-export function generateOrderPdf(input: OrderPdfInput, now = new Date()): Buffer {
+export function generateOrderPdf(input: OrderPdfInput, lastEditedAt: Date): Buffer {
   const { data, orderNumber } = input;
   const pdf = new OrderPdfBuilder();
   pdf.addPngImage(LEGACY_RZ24_LOGO, 20, 8, 34, 36);
@@ -48,7 +55,7 @@ export function generateOrderPdf(input: OrderPdfInput, now = new Date()): Buffer
     "info@umzugruckzuck24.de", "Steuernummer: 144/139/21180", "", "",
   ], 8);
   pdf.addSpace(5);
-  pdf.addLeftRight([], [`München, ${now.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })}`]);
+  pdf.addLeftRight([], [`München, ${lastEditedAt.toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })}`]);
   addTitle(pdf, data, orderNumber);
   addAddresses(pdf, data);
   addConditions(pdf, data);

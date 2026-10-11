@@ -41,6 +41,23 @@ test("renders the legacy-styled invoice layout as a server-side PDF", async () =
   assert.equal(invoicePdfFilename(invoice), "R-R-42 Beispiel GmbH.pdf");
 });
 
+test("invoice PDF uses the form invoice date even after editing or archiving", async (context) => {
+  const texts: string[] = [];
+  const original = PDFDocument.prototype.text;
+  context.mock.method(PDFDocument.prototype, "text", function (this: PDFKit.PDFDocument, value: string, x: number, y: number, options?: PDFKit.Mixins.TextOptions) {
+    texts.push(value);
+    return original.call(this, value, x, y, options);
+  });
+  await generateInvoicePdf({
+    ...invoiceFixture(),
+    updatedAt: new Date("2026-10-11T10:00:00Z"),
+    archivedAt: new Date("2026-10-12T10:00:00Z"),
+  });
+  assert.ok(texts.includes("Rechnungsdatum: 9.10.2026"));
+  assert.ok(!texts.includes("Rechnungsdatum: 11.10.2026"));
+  assert.ok(!texts.includes("Rechnungsdatum: 12.10.2026"));
+});
+
 test("postal sender and recipient start below the logo with the legacy header spacing", async (context) => {
   const calls: Array<{ text: string; y: number }> = [];
   const original = PDFDocument.prototype.text;

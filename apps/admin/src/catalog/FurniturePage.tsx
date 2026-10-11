@@ -5,14 +5,18 @@ import type { CatalogCategoryDto, CatalogFurnitureDto } from "@vega/domain";
 import { CatalogCrudPage, type CatalogColumn, type CatalogField } from "./CatalogCrudPage.js";
 import { useCatalogCollection } from "./useCatalogCollection.js";
 
-const money = (value: number) => value.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+export function furnitureCategoryChoices(categories: CatalogCategoryDto[]) {
+  return [...categories].sort((first, second) => first.sort - second.sort || first.id - second.id).map(({ id, name }) => ({ value: id, label: name }));
+}
+
+export const furnitureDefaults = { name: "", categoryIds: [], volume: 0, step: 1, sortOrder: 0 };
 
 export function FurniturePage() {
   const categories = useCatalogCollection<CatalogCategoryDto>("categories");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [showWithoutCategory, setShowWithoutCategory] = useState(false);
   const [filterBarVisible, setFilterBarVisible] = useState(false);
-  const categoryChoices = useMemo(() => categories.items.map(({ id, name }) => ({ value: id, label: name })), [categories.items]);
+  const categoryChoices = useMemo(() => furnitureCategoryChoices(categories.items), [categories.items]);
   const filterItem = useCallback((item: CatalogFurnitureDto) => {
     if (selectedCategoryIds.length === 0 && !showWithoutCategory) return true;
     if (showWithoutCategory && item.categoryIds.length === 0) return true;
@@ -20,28 +24,17 @@ export function FurniturePage() {
   }, [selectedCategoryIds, showWithoutCategory]);
   const fields: CatalogField[] = [
     { name: "name", label: "Name", type: "text" },
-    { name: "categoryIds", label: "Kategorien", type: "multiple", options: categoryChoices },
-    { name: "volume", label: "Volumen (m³)", type: "number", min: 0, step: 0.01 },
+    { name: "volume", label: "Volumen", type: "number", min: 0, step: 0.01, unit: "m³" },
     { name: "step", label: "Schrittgröße", type: "number", min: 1, step: 1 },
     { name: "sortOrder", label: "Sortierung", type: "number", min: 0, step: 1 },
-    { name: "weight", label: "Gewicht", type: "text" },
-    { name: "montagePrice", label: "Montagepreis (€)", type: "money", min: 0 },
-    { name: "extraPrice", label: "Aufpreis (€)", type: "money", min: 0 },
-    { name: "demontage", label: "Abbau erforderlich", type: "boolean" },
-    { name: "notDismountable", label: "Nicht demontierbar", type: "boolean" },
-    { name: "bulky", label: "Sperrig", type: "boolean" },
-    { name: "montage", label: "Montage erforderlich", type: "boolean" },
-    { name: "m100", label: "100 cm (Möbelaufzug)", type: "boolean" },
-    { name: "m150", label: "150 cm (Möbelaufzug)", type: "boolean" },
+    { name: "categoryIds", label: "Kategorien", type: "checkboxes", options: categoryChoices },
   ];
   const columns: CatalogColumn<CatalogFurnitureDto>[] = [
     { label: "ID", render: (item) => item.id },
     { label: "Name", render: (item) => item.name },
     { label: "Kategorien", render: (item) => item.categoryRefs.map(({ name }) => name).join(", ") || "Ohne Kategorie" },
     { label: "Volumen", render: (item) => `${item.volume} m³` },
-    { label: "Schritt", render: (item) => item.step ?? "—" },
-    { label: "Montage", render: (item) => money(item.montagePrice) },
-    { label: "Aufpreis", render: (item) => money(item.extraPrice) },
+    { label: "Schritt", render: (item) => item.step },
     { label: "Sortierung", render: (item) => item.sortOrder },
   ];
   const toolbarContent = (
@@ -88,7 +81,7 @@ export function FurniturePage() {
         toolbarContent={toolbarContent}
         filterPanel={filterPanel}
         filterItem={filterItem}
-        defaults={{ name: "", categoryIds: [], volume: 0, step: null, sortOrder: 0, weight: "", montagePrice: 0, extraPrice: 0, demontage: false, notDismountable: false, bulky: false, montage: false, m100: false, m150: false }}
+        defaults={furnitureDefaults}
       />
     </Stack>
   );
