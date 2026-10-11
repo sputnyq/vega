@@ -27,7 +27,7 @@ test("built single-process deployment serves API, both frontends and absolute lo
       BETTER_AUTH_SECRET: "deployment-test-only-secret-at-least-32-characters",
       HOSTINGER_MAIL_API_TOKEN: "deployment-test-only-token",
       HOSTINGER_MAILBOX_RESOURCE_ID: "deployment-test-mailbox",
-      HOSTINGER_MAIL_API_BASE_URL: "", GCS_BUCKET: "", GOOGLE_PLACES_API_KEY: "", GOOGLE_ROUTES_API_KEY: "",
+      HOSTINGER_MAIL_API_BASE_URL: "", GCS_BUCKET: "", GOOGLE_MAPS_API_KEY: "",
     },
   });
   child.stdout.resume();

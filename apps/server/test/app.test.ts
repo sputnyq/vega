@@ -90,6 +90,11 @@ test("Better Auth is mounted and protected admin APIs reject anonymous requests"
   assert.equal(protectedNumber.status, 401);
   const protectedRoutes = await fetch(`${baseUrl}/api/admin/routes/config`);
   assert.equal(protectedRoutes.status, 401);
+  const protectedPlaces = await fetch(`${baseUrl}/api/admin/places/autocomplete`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input: "Peschelanger", sessionToken: "123e4567-e89b-12d3-a456-426614174000" }),
+  });
+  assert.equal(protectedPlaces.status, 401);
   const protectedImages = await fetch(`${baseUrl}/api/admin/orders/1000/images`);
   assert.equal(protectedImages.status, 401);
   const unavailableUpload = await fetch(`${baseUrl}/api/public/uploads`, {

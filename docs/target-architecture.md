@@ -7,7 +7,7 @@ Kunde
   └─ umzugruckzuck24.de (WordPress / Content)
        └─ Loader von Vega-Node-App
             ├─ langes Formular (React/Vite-Bundle)
-            ├─ öffentliche API: Safe Catalog GET + Order POST
+            ├─ öffentliche API: Safe Catalog GET + Order POST plus eng begrenzter Places-Proxy
             └─ kurzlebige GCS Upload-Links
 
 Kundenberater/Admin
@@ -210,7 +210,14 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 
 - `public` Router enthalten ausschließlich Endpunkte, die der Gastflow tatsächlich braucht.
 - Der lange Formularflow erhält validierte Katalog-/Serviceprojektionen und kann eine Anfrage erstellen; er erhält niemals Order-Read-Zugriff.
+- Einzige öffentliche Google-Ausnahme: `POST /api/customer-form/places/autocomplete` und
+  `POST /api/customer-form/places/address` (DE/AT-Filter, Session-Token, Antwortprojektion auf
+  `street`/`postalCode`/`city`, Rate-Limit, `Cache-Control: no-store`, manueller Fallback).
+  Kein generischer Google-Proxy, kein Place-Speicher, kein öffentlicher Order-Read.
 - `admin` Router verlangen gültige Better-Auth-Session plus Rollen-/Capability-Check.
+- Die Streckenberechnung unter `/api/admin/routes` (Depot → 2–4 Umzugsadressen → Depot,
+  nur auf expliziten Klick, Kilometer gerundet in den ungespeicherten Entwurf) ist
+  ausschließlich authentifizierte Admin-API für Admin/Kundenberater.
 - Admin-only Finanzrouten liegen unter `/api/admin/invoices`; Kundenberater und
   öffentliche Clients erhalten keinen Finanzbeleg-Zugriff.
 - CORS Origins kommen aus Runtime-Umgebung. Origin-Prüfung begrenzt Browserzugriff, ersetzt aber keine Auth.

@@ -137,8 +137,8 @@ Schritte: [offizieller Prisma-v7-Upgrade-Guide](https://www.prisma.io/docs/guide
 | Hostinger Mail API | Nicht aufgerufen. API-Anfrage, Empfänger, HTML/Text, PDF-Anhang und Fehlerantwort benötigen nichtproduktive Zugangsdaten und Mock-/Testempfänger. |
 | EU-GCS | Nicht geprüft. Private Bucket-Region, Signed-URL-Beschränkung, Upload-Verifikation, Staging-Bereinigung und 180-Tage-Lifecycle benötigen Testprojekt/-bucket. |
 | WordPress-Loader/CORS | Nicht geprüft. WordPress-Test-Origin und nicht eingebrannte absolute Asset-/API-Pfade benötigen eine Testseite/-Origin. |
-| Google Places | Nicht geprüft. Serverseitige Keybeschränkung und DE/AT-Filter benötigen nichtproduktive Runtime-Zugänge. Der Browser erhält keinen Google-Key. |
-| Google Routes | Nicht geprüft. Serverseitige Depot-/Stop-Berechnung benötigt einen nichtproduktiven Runtime-Key und den tatsächlichen Standort. |
+| Google Places | Nicht geprüft. Serverseitige Keybeschränkung und DE/AT-Filter benötigen nichtproduktive Runtime-Zugänge. Der Browser erhält keinen Google-Key. Lokal sind Proxy-Projektion (`street`/`postalCode`/`city`), Session-Token-Format, Fehler-/Rate-Limit-Abbildung und Secret-Freiheit mit gemocktem Fetch getestet; der echte Provideraufruf bleibt offen. |
+| Google Routes | Nicht geprüft. Serverseitige Depot-/Stop-Berechnung benötigt einen nichtproduktiven Runtime-Key und den tatsächlichen Standort. Lokal sind Stoppreihenfolge (Depot → 2–4 Adressen → Depot), Validierung, Rundung auf ganze Kilometer, Fehlerabbildung und Autorisierungsgrenze (anonyme Requests erhalten `401` vor jeder Providerlogik) getestet; echte Distanz-/Preisabnahme bleibt offen. |
 
 ## Weiterhin offene Punkte (Issue 00)
 

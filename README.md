@@ -308,8 +308,7 @@ Provider-Verfügbarkeitsflags unter `/api/customer-form/config`, keine
 internen Standort-, Mail- oder Zugangsdaten.
 
 Google Places und die auf Benutzeraktion gestartete Admin-Streckenberechnung
-benötigen `GOOGLE_PLACES_API_KEY` bzw. `GOOGLE_ROUTES_API_KEY` ausschließlich
-in der Server-Runtime. Die Google-Aufrufe erfolgen serverseitig; manuelle
+benötigen `GOOGLE_MAPS_API_KEY` ausschließlich in der Server-Runtime. Die Google-Aufrufe erfolgen serverseitig; manuelle
 Adresseingabe und manuelle Streckenangabe bleiben ohne Provider möglich.
 
 Für Bilder `GCS_BUCKET`, optional `GOOGLE_CLOUD_PROJECT` und externe

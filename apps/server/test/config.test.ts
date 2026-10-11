@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadConfig } from "../src/config.js";
+import { legacyGoogleKeyVariables, loadConfig } from "../src/config.js";
+
+test("pre-consolidation Google variables are reported by name only", () => {
+  assert.deepEqual(legacyGoogleKeyVariables({ GOOGLE_PLACES_API_KEY: "secret-value", GOOGLE_MAPS_API_KEY: "x" }), ["GOOGLE_PLACES_API_KEY"]);
+  assert.deepEqual(legacyGoogleKeyVariables({ GOOGLE_PLACES_API_KEY: "a", GOOGLE_ROUTES_API_KEY: "b" }), ["GOOGLE_PLACES_API_KEY", "GOOGLE_ROUTES_API_KEY"]);
+  assert.deepEqual(legacyGoogleKeyVariables({ GOOGLE_ROUTES_API_KEY: " " }), []);
+  assert.deepEqual(legacyGoogleKeyVariables({}), []);
+});
 
 const testSecret = "test-only-secret-for-vega-auth-tests-32-chars";
 
