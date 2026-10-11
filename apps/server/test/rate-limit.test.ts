@@ -3,6 +3,8 @@ import { once } from "node:events";
 import test from "node:test";
 import express from "express";
 import { createAdminRateLimit, createAssetRateLimit, createProfileEmailRateLimit } from "../src/http-rate-limit.js";
+import { consumePublicApiRateLimit } from "../src/public-rate-limit.js";
+import { prisma } from "../src/prisma.js";
 import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 
@@ -72,6 +74,39 @@ test("profile e-mail limiter matches the five-per-minute password-confirmation p
   assert.equal((await limited.json()).error.code, "RATE_LIMITED");
 });
 
+test("public limiter survives the concurrent-create race instead of failing with 500", async (context) => {
+  const model = prisma.publicApiRateLimit;
+  const originalUpsert = model.upsert;
+  const originalUpdate = model.update;
+  let upserts = 0;
+  let updates = 0;
+  Reflect.set(model, "upsert", async () => {
+    upserts += 1;
+    if (upserts === 1) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+    return { count: 1 };
+  });
+  Reflect.set(model, "update", async () => {
+    updates += 1;
+    return { count: 2 };
+  });
+  context.after(() => {
+    Reflect.set(model, "upsert", originalUpsert);
+    Reflect.set(model, "update", originalUpdate);
+  });
+  assert.equal(await consumePublicApiRateLimit("127.0.0.1", "test-only-secret-32-characters-long", "race-test", 120), true);
+  assert.equal(updates, 1);
+});
+
+test("public limiter propagates unexpected database errors instead of masking them", async (context) => {
+  const model = prisma.publicApiRateLimit;
+  const originalUpsert = model.upsert;
+  Reflect.set(model, "upsert", async () => { throw new Error("connection lost"); });
+  context.after(() => { Reflect.set(model, "upsert", originalUpsert); });
+  await assert.rejects(
+    consumePublicApiRateLimit("127.0.0.1", "test-only-secret-32-characters-long", "race-test", 120),
+    /connection lost/,
+  );
+});
 test("asset limiter serves the loader below quota and limits repeated fetching", async (context) => {
   const app = express();
   const limiter = createAssetRateLimit({ max: 3 });

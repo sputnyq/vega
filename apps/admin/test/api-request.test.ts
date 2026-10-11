@@ -23,6 +23,21 @@ test("admin API requests preserve method, same-origin credentials, and optional 
   ]);
 });
 
+test("admin API requests forward an optional abort signal", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return Response.json({ data: { saved: true } });
+  };
+  context.after(() => { globalThis.fetch = originalFetch; });
+
+  const controller = new AbortController();
+  assert.deepEqual(await apiRequest("/api/admin/places/autocomplete", "POST", { input: "Ber" }, { signal: controller.signal }), { saved: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.init?.signal, controller.signal);
+});
+
 test("admin API requests preserve response, issue, network, and JSON error behavior", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });

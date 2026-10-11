@@ -43,7 +43,8 @@ export function AddressFields({ address, update, autocomplete }: { address: Addr
             .then((result) => { if (!controller.signal.aborted) { update(result); session.current = crypto.randomUUID(); setError(""); } })
             .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Die Adresse konnte nicht übernommen werden."); });
         }}
-        renderInput={(params) => <Field {...params} required label="Straße und Hausnummer" />}
+        renderInput={(params) => <Field {...params} required label="Straße und Hausnummer" size="small" margin="dense"
+          sx={{ "& input": { border: "none !important", padding: "0 10px !important" } }} />}
       />
     </Grid>
     <Grid size={{ xs: 12, sm: 4 }}><Field required label="PLZ" value={address.postalCode} onChange={(event) => update({ postalCode: event.target.value })} /></Grid>

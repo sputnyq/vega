@@ -3,11 +3,12 @@ export interface ApiEnvelope<T> {
   error?: { code?: string; message?: string; issues?: Array<{ field: string; message: string }> };
 }
 
-export async function apiRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+export async function apiRequest<T>(path: string, method = "GET", body?: unknown, init?: { signal?: AbortSignal }): Promise<T> {
   const request: RequestInit = {
     method,
     credentials: "same-origin",
     ...(body !== undefined ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+    ...(init?.signal ? { signal: init.signal } : {}),
   };
   const response = await fetch(path, request);
   const result = await response.json() as ApiEnvelope<T>;

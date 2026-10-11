@@ -1,5 +1,6 @@
 import { Alert, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
 import type { OrderAddressInput } from "@vega/domain";
+import { PlaceAutocompleteField } from "../places/PlaceAutocompleteField.js";
 
 const floors = ["UG", "EG", ...Array.from({ length: 8 }, (_, index) => `${index + 1}. Etage`), "9+ Etage"];
 const liftTypes = ["kein Aufzug", "2 Personen", "4 Personen", "6 Personen", "8+ Personen"];
@@ -17,7 +18,8 @@ export function AddressFields({ title, value, onChange }: AddressFieldsProps) {
   return (
     <Stack spacing={1.25}>
       {title && <Typography component="h3" variant="h6">{title}</Typography>}
-      <TextField label="Adresse" value={value.street} onChange={(event) => onChange({ street: event.target.value })} slotProps={{ htmlInput: { maxLength: 160 } }} />
+      <PlaceAutocompleteField label="Adresse" value={value.street} maxLength={160}
+        onInput={(street) => onChange({ street })} onSelect={onChange} />
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
         <TextField label="PLZ" value={value.postalCode} onChange={(event) => onChange({ postalCode: event.target.value })} slotProps={{ htmlInput: { maxLength: 16 } }} sx={{ flex: 1 }} />
         <TextField label="Ort" value={value.city} onChange={(event) => onChange({ city: event.target.value })} slotProps={{ htmlInput: { maxLength: 100 } }} sx={{ flex: 2 }} />

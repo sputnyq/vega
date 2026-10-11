@@ -53,6 +53,12 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 
 - Kunden benötigen keinen Login.
 - Öffentliche API: nur POST zum Einreichen einer Anfrage sowie GET für ausdrücklich kundenrelevante Katalog-/Angebotsdaten.
+- Enge Google-Ausnahme (Plan `docs/google-maps-places-plan.md`): nur
+  `POST /api/customer-form/places/autocomplete` und `POST /api/customer-form/places/address`
+  als minimale öffentliche Service-API (DE/AT-Vorschläge, Session-Token, danach nur
+  `street`/`postalCode`/`city`; rate-limitiert, `Cache-Control: no-store`, manueller
+  Fallback bei `503`/`502`). Kein generischer Google-Proxy, kein Place-/Auftragsspeicher,
+  kein öffentlicher Order-Read.
 - Öffentliche Datenantworten enthalten ausschließlich freigegebene Felder, beispielsweise Name, Beschreibung, Auswahloption und Kundenpreis. Es gibt keine öffentlichen Auftrags-/Kundenlese-Endpunkte und keine generischen Optionsendpunkte.
 - Der Formular-POST wird serverseitig validiert und vor Mailversand dauerhaft gespeichert.
 - CORS wird auf die konfigurierte WordPress-Origin begrenzt. CORS ist kein Authentifizierungs- oder Zugriffsschutz.
@@ -140,8 +146,10 @@ Die exakten DTOs werden vor paralleler API-/Frontend-Arbeit gemeinsam versionier
 - `GET /api/public/catalog/...`: kundensichere Listen/Preise für die tatsächlich aktiven Schritte des langen Formulars.
 - `POST /api/public/orders`: Validierung, Preis-/Domänenprüfung soweit relevant, persistente Anfrageanlage und anschließende E-Mail-Outbox.
 - `POST /api/public/uploads/...`: Upload-Sitzung/kurzlebige GCS-Berechtigungen; Uploadobjekte müssen dem finalen Auftrag zuordenbar sein.
+- `POST /api/customer-form/places/...`: einzige öffentliche Google-Ausnahme (Autocomplete + Adressdetails, siehe § 4.1); keine weiteren Proxy-Routen.
 - `/api/auth/*`: Better Auth.
 - `/api/admin/orders`, `/api/admin/catalog`, `/api/admin/invoices`, `/api/admin/credits`, `/api/admin/reminders`: ausschließlich autorisierte Bereiche.
+- `/api/admin/routes` (Streckenberechnung Depot → Umzugsadressen → Depot): authentifizierte Admin-API für Admin/Kundenberater, nur auf expliziten Klick.
 - Keine Alt-WordPress-REST-Route als Zielvertrag übernehmen.
 
 ## 6. Empfohlene Code-/Deployment-Struktur
@@ -384,6 +392,12 @@ Mindestens erforderlich (konkrete Namen dürfen die implementierenden Agents ver
 - `BETTER_AUTH_TRUSTED_ORIGINS`
 - `APP_BASE_URL`, `PUBLIC_SITE_ORIGIN`, `CORS_ALLOWED_ORIGINS`
 - `HOSTINGER_MAIL_API_TOKEN`, `HOSTINGER_MAILBOX_RESOURCE_ID`
+- Google-Maps-Schlüssel ausschließlich serverseitig: ein einziger `GOOGLE_MAPS_API_KEY`
+  für Places API (New) (öffentlicher Proxy `/api/customer-form/places/*`) und
+  Routes API (Admin-API `/api/admin/routes/*`); auf genau diese zwei APIs beschränkt,
+  keine `VITE_*`-Variablen, keine Schlüssel in Builds, Antworten oder Logs.
+  IP-Beschränkung nur bei nachgewiesener fester Hostinger-Egress-IP, sonst
+  API-Beschränkung plus Quoten-/Kostenmonitoring.
 - GCS-Projekt-/Bucket-/Credentials über sichere Serverkonfiguration
 - Externe Archiv- und nichtproduktive Providerzugänge ausschließlich als serverseitige Runtime-Umgebungsvariablen; Variablennamen erst mit Auswahl der konkreten Integration festlegen.
 - optionaler Secret/Signatur für interne Cron-Aufrufe

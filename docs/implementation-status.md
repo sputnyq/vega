@@ -1,8 +1,9 @@
 # Implementierungsstand und offene Arbeit
 
-**Stand:** 2026-10-09  
+**Stand:** 2026-10-11  
 **Quelle:** Dieser Status konkretisiert `implementation-plan.md`; bei Konflikten
-gilt der dortige Plan zusammen mit den ADRs.
+gilt der dortige Plan zusammen mit den ADRs. Details zum Google-Umfang stehen in
+`docs/google-maps-places-plan.md`; der echte Google-/Hostinger-Proof bleibt offen.
 
 ## Umgesetzt
 
@@ -19,6 +20,7 @@ gilt der dortige Plan zusammen mit den ADRs.
 | A6 Admin | Legacy-nahe Auftragsübersicht mit zehn Einträgen je Seite und URL-Paginierung; Auftragseditor mit Dirty-Indikator und Save-Toast vorhanden. |
 | A7 Mail | Hostinger-Adapter, codebasierte Mailhülle, Outbox, Retry-Zustand und Reset-Mailvorlage vorhanden. Provider-End-to-End-Test und Versanddialoge fehlen. |
 | A7 Rechnungen | Admin-only Blanco- und Auftragsrechnungen, optionale 1:1-Order-Relation, Nummernkreis, CRUD, Archiv/Restore, Suche und serverseitiges Rechnungs-PDF im Legacy-Layout vorhanden. |
+| Google Places/Routes | Lokal charakterisiert und getestet: öffentlicher DE/AT-Places-Proxy (nur Autocomplete + `street`/`postalCode`/`city`, Session-Token, Rate-Limit, `no-store`, manueller Fallback, sichere `502`/`503`-Abbildung ohne Secret-Leaks) und Admin-Depot-Rundreise (nur auf Klick, 2–4 Stopps, gerundete Kilometer in den Dirty-Entwurf, Teilstrecken mit km + Dauer und Gesamtzeile als reine Anzeige wie in der alten App). Ein einziger serverseitiger Runtime-Key `GOOGLE_MAPS_API_KEY`, keine `VITE_*`-Schlüssel. Echter Provider-/WordPress-Origin-/Quoten-Proof offen. |
 
 ## Nächste fachliche Arbeit
 
@@ -38,7 +40,13 @@ gilt der dortige Plan zusammen mit den ADRs.
    nachweisen; verwaiste DB-Claims in die Maintenance integrieren.
 6. **Kundenformular/WordPress:** Den portierten langen Flow und Loader in
    realem WordPress mit dessen Styles, CSP und Origin-Allowlist abnehmen.
-   Google Places und Google Routes benötigen serverseitige Providerzugänge.
+   Lokal sind Places-Vorschläge (Auszug/Einzug), Session-Token-Rotation,
+   Request-Abbruch, manueller Fallback sowie Depot-Route auf Klick mit
+   Dirty-Entwurf-Übernahme getestet. Der Staging-Proof mit
+   WordPress-Test-Origin, echten beschränkten Google-Testzugängen
+   (DE/AT-Filter, Stoppreihenfolge, Quoten/Kosten) bleibt offen.
+   Fachlich bestätigt: Ganzkilometer-Rundung. Offen bleibt die Bestätigung der
+   Mehrfachadress-Reihenfolge.
 7. **E2E/Sicherheitsprüfung:** Vollständige Order-/Copy-/Archive-/Mail-/PDF-
    Szenarien, IDOR, HTML-Mail-Editor, CORS, Rate-Limits und Uploads testen.
 
@@ -49,8 +57,10 @@ gilt der dortige Plan zusammen mit den ADRs.
 - Hostinger Mail API mit Testempfänger, HTML/Text, PDF-Anhang und
   Fehlerantworten nachweisen.
 - Cron-Ausführung und Proxy-IP-Verhalten im gebuchten Tarif nachweisen.
-- WordPress-Loader/CORS, EU-GCS und Google Places mit nichtproduktiven
-  Zugängen nachweisen.
+- WordPress-Loader/CORS, EU-GCS sowie Google Places und Google Routes mit
+  nichtproduktiven Zugängen nachweisen (Adressauswahl, vollständige
+  Depot-Route, Quotenverhalten und Kostenmetriken; Mocking ersetzt diesen
+  externen Proof nicht).
 - Vor dem Produktivbetrieb externes Rechnungs-/Gutschriftenarchiv mit
   Buchhaltung/Steuerberatung bestätigen. Die App ersetzt die gesetzliche
   Aufbewahrung nicht.
@@ -58,7 +68,8 @@ gilt der dortige Plan zusammen mit den ADRs.
 ## Lokale Verifikation
 
 Die lokale Prüfung umfasst `npm run lint`, `npm run typecheck`, `npm test`
-(57 Tests), `npm run test:database` (6 DB-Tests einschließlich des vollständigen
+(183 Tests, darunter die Google-Places-/Routes-Charakterisierung),
+`npm run test:database` (serielle DB-Tests einschließlich des vollständigen
 A3-Auth-/Konto-Lifecycle), `npm run build`,
 `npm run test:deployment` (1 Produktions-Smoke-Test) und Schema-Drift-Prüfung.
 DB-Tests laufen nur gegen eine ausdrücklich benannte separate `_test`-Datenbank;

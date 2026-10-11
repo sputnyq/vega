@@ -29,7 +29,7 @@ test("settings reject malformed prices, credential URLs, email headers, missing 
     { boxCbm: 0 }, { boxCbm: -1 }, { boxCbm: 11 }, { boxCbm: "1" }, { boxCbm: 0.12345 },
     { dataPrivacyUrl: "javascript:alert(1)" }, { dataPrivacyUrl: "https://user:password@example.test" },
     { emailFromName: "Sender\nBcc: someone@example.test" }, { companyEmail: "invalid" },
-    { GOOGLE_PLACES_API_KEY: "not-approved" }, { toString: "not-approved" }, { constructor: "not-approved" },
+    { GOOGLE_MAPS_API_KEY: "not-approved" }, { toString: "not-approved" }, { constructor: "not-approved" },
     { revision: -1 }, { origin: "x".repeat(301) },
   ]) assert.equal(validateSettings({ ...EMPTY_SETTINGS, ...patch }).ok, false, JSON.stringify(patch));
   assert.equal(validateSettings({}).ok, false);
@@ -45,13 +45,13 @@ test("invoice sequence accepts only bounded positive integers and rejects malfor
   }
 });
 test("public config is an explicit allowlist and never exposes internal settings or provider keys", () => {
-  const config = loadConfig({ BETTER_AUTH_SECRET: "test-only-secret-32-characters-long", GOOGLE_PLACES_API_KEY: "places-test-key", GCS_BUCKET: "test-bucket" });
+  const config = loadConfig({ BETTER_AUTH_SECRET: "test-only-secret-32-characters-long", GOOGLE_MAPS_API_KEY: "maps-test-key", GCS_BUCKET: "test-bucket" });
   const publicConfig = customerFormSettings({ ...EMPTY_SETTINGS, companyEmail: "internal@example.test", origin: "Private depot", emailFromAddress: "mailbox@example.test" }, config);
   assert.deepEqual(Object.keys(publicConfig).sort(), ["boxCalculatorUrl", "boxVolume", "placesAvailable", "privacyUrl", "successUrl", "uploadsAvailable", "wardrobeBoxVolume"]);
   assert.equal(publicConfig.privacyUrl, null);
   assert.equal(publicConfig.uploadsAvailable, true);
   assert.equal(JSON.stringify(publicConfig).includes("internal@example.test"), false);
-  assert.equal(JSON.stringify(publicConfig).includes("places-test-key"), false);
+  assert.equal(JSON.stringify(publicConfig).includes("maps-test-key"), false);
 });
 test("route input only accepts the two to four business stops, never a client-selected depot", () => {
   assert.deepEqual(routeAddresses({ addresses: [" Straße 1 ", "Straße 2"] }), ["Straße 1", "Straße 2"]);

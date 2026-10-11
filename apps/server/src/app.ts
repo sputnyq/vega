@@ -23,6 +23,7 @@ import { createUploadService, UploadError } from "./uploads/upload-service.js";
 import { createCustomerFormRouter } from "./customer-form-routes.js";
 import { createSettingsRouter } from "./settings/settings-routes.js";
 import { createRouteRouter } from "./maps/route-routes.js";
+import { createAdminPlacesRouter } from "./maps/admin-places-routes.js";
 import { createStaffRouter } from "./staff/staff-routes.js";
 
 const adminBuild = fileURLToPath(new URL("../../admin/dist", import.meta.url));
@@ -173,6 +174,7 @@ export function createApp(config: AppConfig) {
   app.use("/api/admin", createAdminRateLimit());
   app.use("/api/admin/settings", requireAdmin(auth), createSettingsRouter(config));
   app.use("/api/admin/staff", requireAdmin(auth), createStaffRouter(auth, config));
+  app.use("/api/admin/places", createAdminPlacesRouter(config));
   app.use("/api/admin/routes", createRouteRouter(config));
   app.get("/api/admin/orders/:orderNumber/images", async (req, res, next) => {
     try {

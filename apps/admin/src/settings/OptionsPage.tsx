@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Grid, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
 import type { AppSettingsDto } from "@vega/domain";
 import { apiRequest } from "../api/api-request.js";
+import { PlaceAutocompleteField } from "../places/PlaceAutocompleteField.js";
+import type { PlaceAddress } from "../places/usePlaceAutocomplete.js";
 
 type SettingKey = Exclude<keyof AppSettingsDto, "revision">;
 type SettingsDraft = Record<SettingKey, string>;
@@ -25,6 +27,23 @@ const groups: Array<{ title: string; fields: Array<{ key: SettingKey; label: str
 const keys = groups.flatMap((group) => group.fields.map((field) => field.key));
 function toDraft(settings: AppSettingsDto): SettingsDraft {
   return Object.fromEntries(keys.map((key) => [key, settings[key] === null ? "" : String(settings[key])])) as SettingsDraft;
+}
+
+function formatSingleLineAddress(address: PlaceAddress): string {
+  const locality = [address.postalCode, address.city].filter(Boolean).join(" ");
+  return [address.street, locality].filter(Boolean).join(", ");
+}
+
+function OriginField({ value, disabled, error, helper, onInput, onCommit }: {
+  value: string; disabled: boolean; error: string | undefined; helper: string | undefined;
+  onInput: (value: string) => void; onCommit: (badInput: boolean) => void;
+}) {
+  return <PlaceAutocompleteField label="Standort" value={value} maxLength={300} disabled={disabled}
+    error={error} helperText={helper} onInput={onInput} onBlur={onCommit}
+    onSelect={(address) => {
+      onInput(formatSingleLineAddress(address));
+      onCommit(false);
+    }} />;
 }
 
 export function OptionsPage() {
@@ -76,6 +95,14 @@ export function OptionsPage() {
     }).catch((reason: unknown) => { if (active) setInvoiceError(reason instanceof Error ? reason.message : "Nummernkreis konnte nicht geladen werden."); });
     return () => { active = false; };
   }, []);
+  function updateDraft(key: SettingKey, nextValue: string) {
+    const current = draftRef.current;
+    if (!current) return;
+    const next = { ...current, [key]: nextValue };
+    draftRef.current = next;
+    setDraft(next);
+    setError("");
+  }
   async function saveOnBlur(hasBadInput = false) {
     settingsBadInputPending.current ||= hasBadInput;
     if (settingsSaveInFlight.current) {
@@ -173,18 +200,17 @@ export function OptionsPage() {
       <Grid container spacing={2}>{groups.map((group) => <Grid key={group.title} size={{ xs: 12, lg: 6 }}>
         <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, height: "100%" }}><Stack spacing={1.5}>
           <Typography component="h2" variant="h6">{group.title}</Typography>
-          {group.fields.map((field) => <TextField key={field.key} label={field.label} type={field.type ?? "text"} fullWidth
+          {group.fields.map((field) => field.key === "origin"
+            ? <OriginField key={field.key} value={draft?.[field.key] ?? ""} disabled={loading || draft === null}
+              error={issues[field.key]} helper={field.helper}
+              onInput={(nextValue) => updateDraft(field.key, nextValue)}
+              onCommit={(badInput) => void saveOnBlur(badInput)} />
+            : <TextField key={field.key} label={field.label} type={field.type ?? "text"} fullWidth
             value={draft?.[field.key] ?? ""} disabled={loading || draft === null}
             error={Boolean(issues[field.key])} helperText={issues[field.key] ?? field.helper}
-            onChange={(event) => setDraft((current) => {
-              if (!current) return current;
-              const next = { ...current, [field.key]: event.target.value };
-              draftRef.current = next;
-              setError("");
-              return next;
-            })}
+            onChange={(event) => updateDraft(field.key, event.target.value)}
             onBlur={(event) => void saveOnBlur(event.currentTarget.validity.badInput)}
-            slotProps={field.type === "number" ? { htmlInput: { min: 0.0001, max: 10, step: 0.0001 }, input: { endAdornment: <InputAdornment position="end">m³</InputAdornment> } } : { htmlInput: { maxLength: field.type === "url" ? 2048 : field.key === "origin" ? 300 : field.key === "emailFromName" ? 191 : 254 } }}
+            slotProps={field.type === "number" ? { htmlInput: { min: 0.0001, max: 10, step: 0.0001 }, input: { endAdornment: <InputAdornment position="end">m³</InputAdornment> } } : { htmlInput: { maxLength: field.type === "url" ? 2048 : field.key === "emailFromName" ? 191 : 254 } }}
           />)}
         </Stack></Paper>
       </Grid>)}

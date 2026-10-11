@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, CircularProgress, Grid, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
 import DeleteOutlined from "@mui/icons-material/DeleteOutlined";
 import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type AdminInvoiceDto, type InvoiceInput } from "@vega/domain";
+import { PlaceAutocompleteField } from "../places/PlaceAutocompleteField.js";
 
 const emptyInvoice = (): InvoiceInput => ({ invoiceDate: new Date().toISOString().slice(0, 10), company: "", customerName: "", customerStreet: "", customerPostalCity: "", taxPercent: 19, text: "", entries: [], dueDates: [] });
 
@@ -19,6 +20,14 @@ export function InvoiceNumberField({ invoiceNumber, nextValue, editing, onChange
 export function InvoiceTaxField({ taxPercent, onChange }: { taxPercent: number; onChange: (value: number) => void }) {
   const valid = taxPercent === 19 || taxPercent === 0;
   return <TextField label="Umsatzsteuer (%)" select required error={!valid} value={valid ? taxPercent : ""} onChange={(e) => onChange(Number(e.target.value))} slotProps={{ select: { native: true } }}>{!valid && <option value="" disabled>Bitte wählen</option>}<option value={19}>19 %</option><option value={0}>0 %</option></TextField>;
+}
+
+export function InvoiceStreetField({ street, onStreet, onSelect }: {
+  street: string; onStreet: (value: string) => void;
+  onSelect: (street: string, postalCity: string) => void;
+}) {
+  return <PlaceAutocompleteField label="Straße, Nr." value={street} maxLength={191} onInput={onStreet}
+    onSelect={(address) => onSelect(address.street, [address.postalCode, address.city].filter(Boolean).join(" "))} />;
 }
 
 export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onDirtyChange, onInvoiceNumberChange }: { id?: string; orderNumber?: number; navigate: (path: string) => void; onBusyChange?: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void; onInvoiceNumberChange?: (invoiceNumber: string | undefined) => void }) {
@@ -95,7 +104,7 @@ export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onD
     } catch { setError("Rechnung konnte nicht gespeichert werden."); } finally { setBusy(false); }
   }
   function renderCustomerFields() {
-    return <Grid container spacing={2}><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Firma" value={value.company} onChange={(e) => change("company", e.target.value)} /><TextField label="Kunde" required value={value.customerName} onChange={(e) => change("customerName", e.target.value)} /><TextField label="Straße, Nr." value={value.customerStreet} onChange={(e) => change("customerStreet", e.target.value)} /><TextField label="PLZ, Ort" value={value.customerPostalCity} onChange={(e) => change("customerPostalCity", e.target.value)} /></Stack></Grid><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Rechnungsdatum" type="date" required value={value.invoiceDate} onChange={(e) => change("invoiceDate", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /><InvoiceNumberField invoiceNumber={value.invoiceNumber} nextValue={nextValue} editing={!!id} onChange={(number) => change("invoiceNumber", number)} /><InvoiceTaxField taxPercent={value.taxPercent} onChange={(percent) => change("taxPercent", percent)} /></Stack></Grid></Grid>;
+    return <Grid container spacing={2}><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Firma" value={value.company} onChange={(e) => change("company", e.target.value)} /><TextField label="Kunde" required value={value.customerName} onChange={(e) => change("customerName", e.target.value)} /><InvoiceStreetField street={value.customerStreet} onStreet={(customerStreet) => change("customerStreet", customerStreet)} onSelect={(customerStreet, customerPostalCity) => { change("customerStreet", customerStreet); change("customerPostalCity", customerPostalCity); }} /><TextField label="PLZ, Ort" value={value.customerPostalCity} onChange={(e) => change("customerPostalCity", e.target.value)} /></Stack></Grid><Grid size={{ xs: 12, md: 6 }}><Stack spacing={1.5}><TextField label="Rechnungsdatum" type="date" required value={value.invoiceDate} onChange={(e) => change("invoiceDate", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /><InvoiceNumberField invoiceNumber={value.invoiceNumber} nextValue={nextValue} editing={!!id} onChange={(number) => change("invoiceNumber", number)} /><InvoiceTaxField taxPercent={value.taxPercent} onChange={(percent) => change("taxPercent", percent)} /></Stack></Grid></Grid>;
   }
   function renderEntries() {
     return <><Typography variant="h6">Leistungen</Typography>{value.entries.map((entry, index) => <Stack key={index} direction={{ xs: "column", md: "row" }} spacing={1}><TextField label="Beschreibung" value={entry.description} onChange={(e) => updateEntry(index, { description: e.target.value })} fullWidth /><TextField label="Menge" type="number" value={entry.quantity} onChange={(e) => updateEntry(index, { quantity: Number(e.target.value) })} /><TextField label="Einzelpreis" type="number" value={entry.unitPrice} onChange={(e) => updateEntry(index, { unitPrice: Number(e.target.value) })} /><IconButton onClick={() => removeEntry(index)}><DeleteOutlined /></IconButton></Stack>)}<Button onClick={addEntry} sx={{ alignSelf: "flex-end" }}>Leistung hinzufügen</Button></>;

@@ -9,8 +9,7 @@ export interface AppConfig {
   port: number;
   mail: HostingerMailConfig | null;
   gcs?: { bucket: string; projectId?: string };
-  googlePlacesKey?: string;
-  googleRoutesKey?: string;
+  googleMapsKey?: string;
 }
 
 export interface HostingerMailConfig {
@@ -46,6 +45,13 @@ function parseOriginList(value: string | undefined): string[] {
 
     return parsed.origin;
   });
+}
+
+const LEGACY_GOOGLE_KEY_VARIABLES = ["GOOGLE_PLACES_API_KEY", "GOOGLE_ROUTES_API_KEY"] as const;
+
+/** Names only, never values: lets startup point out ignored pre-consolidation variables. */
+export function legacyGoogleKeyVariables(env: NodeJS.ProcessEnv = process.env): string[] {
+  return LEGACY_GOOGLE_KEY_VARIABLES.filter((name) => Boolean(env[name]?.trim()));
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -161,7 +167,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       bucket: env.GCS_BUCKET.trim(),
       ...(env.GOOGLE_CLOUD_PROJECT?.trim() ? { projectId: env.GOOGLE_CLOUD_PROJECT.trim() } : {}),
     } } : {}),
-    ...(env.GOOGLE_PLACES_API_KEY?.trim() ? { googlePlacesKey: env.GOOGLE_PLACES_API_KEY.trim() } : {}),
-    ...(env.GOOGLE_ROUTES_API_KEY?.trim() ? { googleRoutesKey: env.GOOGLE_ROUTES_API_KEY.trim() } : {}),
+    ...(env.GOOGLE_MAPS_API_KEY?.trim() ? { googleMapsKey: env.GOOGLE_MAPS_API_KEY.trim() } : {}),
   };
 }
