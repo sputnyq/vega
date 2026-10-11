@@ -391,17 +391,8 @@ model CatalogFurniture {
   id              Int                        @id @default(autoincrement())
   name            String                     @db.VarChar(191)
   volume          Decimal                    @default(0) @db.Decimal(10, 2)
-  step            Int?
+  step            Int                        @default(1)
   sortOrder       Int                        @default(0)
-  weight          String?                    @db.VarChar(64)
-  montagePrice    Decimal                    @default(0) @db.Decimal(10, 2)
-  extraPrice      Decimal                    @default(0) @db.Decimal(10, 2)
-  demontage       Boolean                    @default(false)
-  notDismountable Boolean                    @default(false)
-  bulky           Boolean                    @default(false)
-  montage         Boolean                    @default(false)
-  m100            Boolean                    @default(false)
-  m150            Boolean                    @default(false)
   categories      CatalogFurnitureCategory[]
 
   @@index([sortOrder])

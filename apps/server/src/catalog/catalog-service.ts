@@ -23,17 +23,8 @@ function toFurnitureDto(furniture: {
   id: number;
   name: string;
   volume: unknown;
-  step: number | null;
+  step: number;
   sortOrder: number;
-  weight: string | null;
-  montagePrice: unknown;
-  extraPrice: unknown;
-  demontage: boolean;
-  notDismountable: boolean;
-  bulky: boolean;
-  montage: boolean;
-  m100: boolean;
-  m150: boolean;
   categories: Array<{ category: { id: number; name: string } }>;
 }): CatalogFurnitureDto {
   const categoryRefs = furniture.categories.map(({ category }) => ({ id: category.id, name: category.name }));
@@ -45,15 +36,6 @@ function toFurnitureDto(furniture: {
     volume: Number(furniture.volume),
     step: furniture.step,
     sortOrder: furniture.sortOrder,
-    weight: furniture.weight,
-    montagePrice: Number(furniture.montagePrice),
-    extraPrice: Number(furniture.extraPrice),
-    demontage: furniture.demontage,
-    notDismountable: furniture.notDismountable,
-    bulky: furniture.bulky,
-    montage: furniture.montage,
-    m100: furniture.m100,
-    m150: furniture.m150,
   };
 }
 

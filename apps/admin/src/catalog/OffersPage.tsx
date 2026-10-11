@@ -200,15 +200,15 @@ function OfferCard({ trucks, workers, offers, loading, disabled, create, update,
               />
             </Grid>
           </Grid>
-          <Box>
+          <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
             <Button
               size="small"
               startIcon={<AddOutlined />}
-              aria-label={`Angebot hinzufügen (${trucks} LKW, ${workers} Träger)`}
+              aria-label={`Angebot anlegen (${trucks} LKW, ${workers} Träger)`}
               disabled={disabled || saving}
               onClick={() => void addOffer()}
             >
-              Angebot hinzufügen
+              Angebot anlegen
             </Button>
           </Box>
           {loading ? (

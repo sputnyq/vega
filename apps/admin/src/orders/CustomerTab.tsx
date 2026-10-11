@@ -1,4 +1,4 @@
-import { Alert, FormControlLabel, MenuItem, Paper, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Box, FormControlLabel, MenuItem, Paper, Stack, Switch, TextField, Typography } from "@mui/material";
 import { CustomerFields } from "./CustomerFields.js";
 import type { OrderFormValue } from "./order-form-types.js";
 
@@ -9,11 +9,11 @@ interface CustomerTabProps {
 
 export function CustomerTab({ value, update }: CustomerTabProps) {
   return (
-    <Stack spacing={2}>
-      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 760 }}>
+    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, minWidth: 0, gridRow: { md: "span 2" } }}>
         <CustomerFields value={value.customer} onChange={(customer) => update({ customer: { ...value.customer, ...customer } })} />
       </Paper>
-      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 760 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, minWidth: 0 }}>
         <Stack spacing={1.5}>
           <Typography component="h2" variant="h6">Notiz</Typography>
           <TextField
@@ -32,7 +32,7 @@ export function CustomerTab({ value, update }: CustomerTabProps) {
           {value.privacyAccepted && <Typography variant="body2" color="text.secondary">Datenschutzerklärung bei der Anfrage bestätigt.</Typography>}
         </Stack>
       </Paper>
-      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 760 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, minWidth: 0 }}>
         <Stack spacing={1.5}>
           <Typography component="h2" variant="h6">Auftrag</Typography>
           <Typography variant="body2" color="text.secondary">Erstellt: {new Date().toLocaleString("de-DE")}</Typography>
@@ -54,6 +54,6 @@ export function CustomerTab({ value, update }: CustomerTabProps) {
           )}
         </Stack>
       </Paper>
-    </Stack>
+    </Box>
   );
 }

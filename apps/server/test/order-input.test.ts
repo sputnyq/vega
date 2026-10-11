@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateOrderCreateInput } from "../src/orders/order-input.js";
+import { hasUnchangedCustomerDateRange, validateOrderCreateInput } from "../src/orders/order-input.js";
 import { orderFixture } from "./fixtures/order.js";
 
 const validOrder = {
@@ -18,6 +18,18 @@ const validOrder = {
   note: "Bitte vorher anrufen.",
   price: 0.01,
 };
+
+test("staff updates cannot set, replace or remove customer date ranges", () => {
+  const range = { dateFrom: "2026-11-02", dateTo: "2026-11-04" };
+  assert.equal(hasUnchangedCustomerDateRange(range, range), true);
+  assert.equal(hasUnchangedCustomerDateRange({ ...range, dateFrom: "2026-11-03" }, range), false);
+  assert.equal(hasUnchangedCustomerDateRange({ ...range, dateTo: "2026-11-05" }, range), false);
+  assert.equal(hasUnchangedCustomerDateRange({}, range), false);
+  assert.equal(hasUnchangedCustomerDateRange(range, {}), false);
+  assert.equal(hasUnchangedCustomerDateRange({ dateFrom: "", dateTo: "" }, {}), true);
+  assert.equal(hasUnchangedCustomerDateRange({}, null), true);
+  assert.equal(validateOrderCreateInput({ ...validOrder, ...range }).ok, true);
+});
 
 test("validates order submission and strips fields outside the approved input contract", () => {
   const result = validateOrderCreateInput(validOrder);

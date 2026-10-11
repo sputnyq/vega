@@ -27,6 +27,54 @@ Nutzer (`/settings/users`) gegliedert. Legacy-Content-Pfade bleiben
 als weitergeleitete Aliase verfügbar; archivierte Orders/Rechnungen und Profil
 haben eigene Routen.
 
+Nach erfolgreicher Neuanlage öffnet die Admin-App direkt den gespeicherten
+Auftrag unter `/edit/<Auftragsnummer>`. Es gibt keine separate Erfolgsansicht.
+
+Auftrags- und Rechnungseditoren zeigen Speichern, PDF, E-Mail und Archivieren
+in der Toolbar; Aufträge zusätzlich Kopie und Rechnungserstellung. Neue
+Dokumente gelten immer als ungespeichert. Änderungen setzen den Dirty-Indikator
+am Speichern-Icon. Solange ein Dokument dirty ist, ist nur Speichern verfügbar;
+PDF, Kopie, Archivieren und Rechnungserstellung werden erst nach erfolgreichem
+Speichern freigegeben und speichern nicht implizit. Während Lade-/Speichervorgängen
+oder bei Ladefehlern sind alle Dokumentaktionen gesperrt. E-Mail bleibt bis zum
+umgesetzten Versanddialog deaktiviert.
+
+Archivierte Aufträge und Rechnungen sind nicht bearbeitbar. Die Archivlisten
+bieten PDF-Download zum Drucken sowie Wiederherstellung; direkte Editoraufrufe
+archivierter Dokumente führen zurück ins Archiv. Auftrags-PDFs zeigen das Datum
+der letzten Bearbeitung (`updatedAt`); Archivieren und Wiederherstellen verändern
+diesen Zeitpunkt nicht. Für zuvor archivierte oder wiederhergestellte Aufträge,
+deren `updatedAt` noch durch diese Aktionen verändert wurde, wird das Datum
+aus dem letzten `UPDATED`-/`COPIED`-Journalereignis ermittelt. Ohne solche
+Bearbeitungsereignisse gilt das Anlagedatum. Rechnungs-PDFs verwenden das im Admin-Formular gesetzte
+Rechnungsdatum (`invoiceDate`).
+
+Die Auftragsbearbeitung ordnet passende Cards auf größeren Bildschirmen
+nebeneinander an; auf kleinen Bildschirmen stehen sie untereinander.
+Der alternative Zeitraum (`dateFrom`, `dateTo`) stammt aus dem Kundenformular
+und ist in der Admin-Bearbeitung schreibgeschützt. Die Admin-API weist
+Änderungen dieses Zeitraums zurück; Umzugsdatum und Uhrzeit bleiben editierbar.
+Erstellen-Aktionen stehen rechts und verwenden „Objekt anlegen“;
+Formularpositionen verwenden „Objekt hinzufügen“, ebenfalls rechtsbündig.
+Katalogtabellen bündeln Bearbeiten und Löschen in Drei-Punkte-Menüs.
+
+Der Möbelkatalog enthält neben ID und Kategoriezuordnungen nur Name, Volumen,
+Schrittgröße (Standard 1) und Sortierung (Standard 0). Im Bearbeitungsdialog
+folgen unter diesen Feldern die Kategorien als vertikale Checkbox-Liste,
+geordnet nach Kategorie-Sortierung und bei Gleichstand nach ID.
+Gewicht, Montage-/Aufpreise und die bisherigen Möbel-Flags entfallen aus
+DTOs, Eingaben und Datenbank. Die Migration setzt bisher leere Schrittgrößen
+auf 1; vorhandene Kategoriezuordnungen bleiben erhalten.
+
+Die Profilseite zeigt Profil, Passwort und OTP-Einstellungen als drei getrennte,
+dauerhaft sichtbare Cards im gleichen Layout wie die Auftragsbearbeitung.
+Es gibt dort keine Tab-Navigation; die drei Änderungsformulare bleiben getrennt.
+
+Die Nutzerverwaltung zeigt alle Mitarbeiterkonten ohne Suchfeld und ohne
+Seitennavigation. Kontoaktionen sind je Zeile in einem Drei-Punkte-Menü gebündelt.
+Die Oberfläche lädt bei Bedarf alle Seiten der weiterhin
+begrenzten Admin-API automatisch nach.
+
 Die Katalognavigation öffnet standardmäßig Leistungen (`/settings/services`),
 und wird ausschließlich über das Seitenmenü bedient; in den Seiten selbst gibt
 es keine zweite Tab-Navigation. Alte `/settings/content/*`-URLs leiten per

@@ -27,6 +27,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function hasUnchangedCustomerDateRange(input: Pick<CreateOrderInput, "dateFrom" | "dateTo">, storedData: unknown): boolean {
+  const stored = isRecord(storedData) ? storedData : {};
+  return (["dateFrom", "dateTo"] as const).every((field) => (
+    (input[field] ?? "") === (typeof stored[field] === "string" ? stored[field] : "")
+  ));
+}
+
 function text(
   source: Record<string, unknown>,
   key: string,

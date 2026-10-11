@@ -31,7 +31,25 @@
   `R-2147483646`, damit `Nummer + 1` darstellbar bleibt; größere Werte werden
   mit Validierungsfehler abgewiesen. Die bisherige Editierbarkeit bleibt erhalten.
 - Rechnung ist einfache CRUD; keine Versionshistorie. Änderungen überschreiben den aktuellen DB-Stand.
+- Nach erfolgreichem Speichern übernimmt der Editor die bestätigten API-Daten
+  in das Formular, bevor der Dirty-State zurückgesetzt wird. Normalisierte
+  Werte und die verbindliche Rechnungsnummer bleiben so mit dem PDF konsistent.
+- Rechnungsentwürfe und Rechnungsanlagen aus archivierten Aufträgen werden mit
+  `409 ORDER_ARCHIVED` abgewiesen. Die Erstellung prüft den Archivstatus unter
+  einer Zeilensperre in derselben Transaktion wie Nummernvergabe und Anlage.
+  Der Auftrag muss zuerst wiederhergestellt werden; Blanco-Rechnungen bleiben
+  unabhängig davon möglich.
+- Rechnungen verwenden ausschließlich 19 % oder 0 % Umsatzsteuer; die API
+  weist andere Steuersätze zurück. Vorhandene abweichende Werte werden nicht
+  automatisch umgerechnet. Der Editor verlangt dafür eine ausdrückliche
+  Auswahl eines zulässigen Satzes, bevor erneut gespeichert werden kann.
+- Wird eine Rechnung während des Speicherns archiviert, antwortet die API
+  mit `409 INVOICE_ARCHIVED`; bei zwischenzeitlicher Löschung mit `404`.
 - PDF wird bei Bedarf aus dem aktuellen DB-Stand im Backend erzeugt und vom Admin lokal gespeichert. App speichert keine PDF-Dateien.
+- Archivierte Rechnungen sind nicht bearbeitbar; die Archivliste bietet nur
+  PDF-Download und Wiederherstellung. Das PDF-Rechnungsdatum ist stets das im
+  Admin-Formular gesetzte `invoiceDate`, nicht das Bearbeitungs-, Export- oder
+  Archivierungsdatum.
 - Admins können Rechnungen, Gutschriften und Mahnungsdatensätze/-ereignisse explizit archivieren und bis zur endgültigen Löschung wiederherstellen. Für alle drei Finanzdatentypen gilt dieselbe Frist: 30 Tage nach Archivierung werden sie aus der App-Datenbank gelöscht; erneutes Archivieren startet die Frist neu.
 - Externe Archivierung ausgestellter Rechnungen/Gutschriften organisiert der Betreiber. Benötigte technische Konfiguration/Zugänge werden bei Bedarf ausschließlich serverseitig als Runtime-Umgebungsvariablen bereitgestellt. Die App zeigt nur eine allgemeine Bestätigung und prüft nicht, ob ein externes Archiv tatsächlich existiert.
 - Gutschrift: separat, optional und höchstens eine je Rechnung; Nummerierungsverhalten wie Bestand. Mahnungen als Ereignisse an der Rechnung.

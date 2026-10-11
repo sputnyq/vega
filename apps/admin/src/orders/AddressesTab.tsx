@@ -58,7 +58,7 @@ export function AddressesTab({ value, update, onDetailsChange }: AddressesTabPro
         </Stack>
       </Paper>
       <Grid container spacing={2} sx={{ alignItems: "stretch" }}>
-        <Grid size={{ xs: 12, xl: 6 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, height: "100%" }}>
             <Stack spacing={2}>
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -88,7 +88,7 @@ export function AddressesTab({ value, update, onDetailsChange }: AddressesTabPro
             </Stack>
           </Paper>
         </Grid>
-        <Grid size={{ xs: 12, xl: 6 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, height: "100%" }}>
             <Stack spacing={2}>
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

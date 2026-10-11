@@ -15,22 +15,23 @@ test("catalog category names and sorting are validated and only approved fields 
   assert.equal(validateCategoryInput({ name: " ", sort: -1 }).ok, false);
 });
 
-test("furniture rejects malformed category references, negative measures, and bad prices", () => {
+test("furniture uses only required catalog fields with step and sorting defaults", () => {
+  assert.deepEqual(validateFurnitureInput({ name: "Sofa", categoryIds: [2, 2, 3], volume: 1.5, weight: "unused", montagePrice: 99, montage: true }), {
+    ok: true, value: { name: "Sofa", categoryIds: [2, 3], volume: 1.5, step: 1, sortOrder: 0 },
+  });
+  assert.deepEqual(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 0.5, step: 2, sortOrder: 7 }), {
+    ok: true, value: { name: "Stuhl", categoryIds: [], volume: 0.5, step: 2, sortOrder: 7 },
+  });
+  for (const step of [null, 0, -1, 1.5, "1"]) assert.equal(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 1, step }).ok, false);
+});
+
+test("furniture rejects malformed category references, negative measures, and invalid steps", () => {
   const result = validateFurnitureInput({
     name: "Sofa",
     categoryIds: [2, "3"],
     volume: -1,
     step: null,
     sortOrder: 0,
-    weight: "",
-    montagePrice: 5.555,
-    extraPrice: 0,
-    demontage: false,
-    notDismountable: false,
-    bulky: false,
-    montage: true,
-    m100: false,
-    m150: false,
   });
   assert.equal(result.ok, false);
 });

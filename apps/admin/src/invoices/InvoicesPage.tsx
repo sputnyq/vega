@@ -1,7 +1,10 @@
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
+import AddOutlined from "@mui/icons-material/AddOutlined";
+import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
+import RestoreOutlined from "@mui/icons-material/RestoreOutlined";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField } from "@mui/material";
+import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip } from "@mui/material";
 import type { AdminInvoiceDto } from "@vega/domain";
 
 const currencyFormatter = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
@@ -85,8 +88,8 @@ export function InvoicesPage({ archived = false, navigate }: { archived?: boolea
         </Stack>
       </Box>
       {!archived && (
-        <Button variant="contained" onClick={() => navigate("/invoices/new")} sx={{ alignSelf: { xs: "flex-end", sm: "auto" } }}>
-          Neue Rechnung
+        <Button variant="contained" startIcon={<AddOutlined />} onClick={() => navigate("/invoices/new")} sx={{ alignSelf: "flex-end" }}>
+          Rechnung anlegen
         </Button>
       )}
     </Stack>
@@ -97,12 +100,15 @@ export function InvoicesPage({ archived = false, navigate }: { archived?: boolea
         <TableBody>
           {items.map((invoice) => (
             <TableRow key={invoice.id}>
-              <TableCell><Button onClick={() => navigate(`/invoices/${invoice.id}`)}>{invoice.invoiceNumber}</Button></TableCell>
+              <TableCell>{archived ? invoice.invoiceNumber : <Button onClick={() => navigate(`/invoices/${invoice.id}`)}>{invoice.invoiceNumber}</Button>}</TableCell>
               <TableCell>{invoice.customerName}</TableCell>
               <TableCell>{invoice.orderNumber ?? "–"}</TableCell>
               <TableCell>{new Date(`${invoice.invoiceDate}T00:00:00`).toLocaleDateString("de-DE")}</TableCell>
               <TableCell>{currencyFormatter.format(invoiceTotal(invoice))}</TableCell>
-              {archived && <TableCell><Button size="small" onClick={() => void archive(invoice.id)}>Wiederherstellen</Button></TableCell>}
+              {archived && <TableCell sx={{ whiteSpace: "nowrap" }}>
+                <Tooltip title="PDF herunterladen"><IconButton component="a" href={`/api/admin/invoices/${invoice.id}/pdf`} aria-label="Rechnungs-PDF herunterladen"><FileDownloadOutlined /></IconButton></Tooltip>
+                <Tooltip title="Wiederherstellen"><IconButton onClick={() => void archive(invoice.id)} aria-label="Rechnung wiederherstellen"><RestoreOutlined /></IconButton></Tooltip>
+              </TableCell>}
             </TableRow>
           ))}
           {items.length === 0 && <TableRow><TableCell colSpan={archived ? 6 : 5} align="center">Keine Rechnungen vorhanden.</TableCell></TableRow>}

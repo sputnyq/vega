@@ -93,29 +93,13 @@ export function validateFurnitureInput(input: unknown): CatalogValidation<Catalo
   if (typeof volume !== "number" || !Number.isFinite(volume) || volume < 0 || volume > 100_000 || Math.abs(volume * 100 - Math.round(volume * 100)) > 0.00001) {
     issues.push({ field: "volume", message: "Bitte geben Sie ein gültiges Volumen mit höchstens zwei Nachkommastellen ein." });
   }
-  let weight: string | null = null;
-  if (record.weight !== undefined && record.weight !== null) {
-    if (typeof record.weight !== "string" || record.weight.length > 64) issues.push({ field: "weight", message: "Ungültiges Gewicht." });
-    else weight = record.weight.trim() || null;
-  }
-  const rawStep = record.step;
-  let step: number | null = null;
-  if (rawStep !== undefined && rawStep !== null) step = parseInteger(record, "step", issues, { min: 1, max: 100_000 });
+  const step = record.step === undefined ? 1 : parseInteger(record, "step", issues, { min: 1, max: 100_000 }) ?? 1;
   const value: CatalogFurnitureInput = {
     name,
     categoryIds,
     volume: typeof volume === "number" && Number.isFinite(volume) && volume >= 0 && volume <= 100_000 ? volume : 0,
     step,
-    sortOrder: parseSort(record, issues, "sortOrder"),
-    weight,
-    montagePrice: parsePrice(record, "montagePrice", issues),
-    extraPrice: parsePrice(record, "extraPrice", issues),
-    demontage: parseBoolean(record, "demontage", issues),
-    notDismountable: parseBoolean(record, "notDismountable", issues),
-    bulky: parseBoolean(record, "bulky", issues),
-    montage: parseBoolean(record, "montage", issues),
-    m100: parseBoolean(record, "m100", issues),
-    m150: parseBoolean(record, "m150", issues),
+    sortOrder: record.sortOrder === undefined ? 0 : parseSort(record, issues, "sortOrder"),
   };
   return issues.length ? { ok: false, issues } : { ok: true, value };
 }

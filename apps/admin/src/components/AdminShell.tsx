@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   AccountCircleOutlined,
+  CategoryOutlined,
+  ChairOutlined,
+  HandymanOutlined,
+  ViewModuleOutlined,
+  LocalOfferOutlined,
+  PaymentsOutlined,
   ArchiveOutlined,
   ContentCopyOutlined,
   ExpandLess,
@@ -43,15 +49,15 @@ interface AdminShellProps {
   route: AdminRoute;
   pathname: string;
   navigate: (path: string) => void;
-  orderSaved?: boolean;
   orderDirty?: boolean;
   orderBusy?: boolean;
   invoiceBusy?: boolean;
+  invoiceDirty?: boolean;
   invoiceNumber?: string | undefined;
   children: ReactNode;
 }
 
-export function AdminShell({ user, route, pathname, navigate, orderSaved = false, orderDirty = false, orderBusy = false, invoiceBusy = false, invoiceNumber, children }: AdminShellProps) {
+export function AdminShell({ user, route, pathname, navigate, orderDirty = false, orderBusy = false, invoiceBusy = false, invoiceDirty = false, invoiceNumber, children }: AdminShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [contentOpen, setContentOpen] = useState(route.settingsArea === "content");
   const [archiveOpen, setArchiveOpen] = useState(
@@ -62,8 +68,12 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
   const isContentArea = route.settingsArea === "content";
   const isArchivePath = pathname === "/orders/archived" || pathname === "/invoices/archived";
   const editedOrderNumber = pathname.match(/^\/edit\/(-?\d+)$/u)?.[1];
-  const editedInvoiceId = pathname === "/invoices/new" ? undefined : pathname.match(/^\/invoices\/([^/]+)$/u)?.[1];
+  const editedInvoiceId = pathname === "/invoices/new" || pathname === "/invoices/archived" ? undefined : pathname.match(/^\/invoices\/([^/]+)$/u)?.[1];
   const isInvoiceEditor = editedInvoiceId !== undefined || pathname === "/invoices/new" || pathname === "/blanco" || route.sourceOrderNumber !== undefined;
+  const orderHasChanges = orderDirty || editedOrderNumber === "-1";
+  const invoiceHasChanges = invoiceDirty || (isInvoiceEditor && !editedInvoiceId);
+  const orderActionsDisabled = orderBusy || orderHasChanges;
+  const invoiceActionsDisabled = invoiceBusy || invoiceHasChanges;
   const headerTitle = editedOrderNumber
     ? `Auftrag | ${editedOrderNumber === "-1" ? "Neu" : editedOrderNumber}`
     : isInvoiceEditor
@@ -85,7 +95,7 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
   }
 
   async function copyOrder() {
-    if (!editedOrderNumber) return;
+    if (!editedOrderNumber || orderActionsDisabled) return;
     const response = await fetch(`/api/admin/orders/${editedOrderNumber}/copy`, { method: "POST", credentials: "same-origin" });
     if (!response.ok) return;
     const body = await response.json() as { data?: { orderNumber?: number } };
@@ -93,13 +103,13 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
   }
 
   async function archiveOrder() {
-    if (!editedOrderNumber || !window.confirm("Auftrag wirklich archivieren?")) return;
+    if (!editedOrderNumber || orderActionsDisabled || !window.confirm("Auftrag wirklich archivieren?")) return;
     const response = await fetch(`/api/admin/orders/${editedOrderNumber}/archive`, { method: "POST", credentials: "same-origin" });
     if (response.ok) navigate("/");
   }
 
   async function archiveInvoice() {
-    if (!editedInvoiceId || !window.confirm("Rechnung vor dem Archivieren extern sichern. Rechnung wirklich archivieren?")) return;
+    if (!editedInvoiceId || invoiceActionsDisabled || !window.confirm("Rechnung vor dem Archivieren extern sichern. Rechnung wirklich archivieren?")) return;
     const response = await fetch(`/api/admin/invoices/${editedInvoiceId}/archive`, { method: "POST", credentials: "same-origin" });
     if (response.ok) {
       navigate("/invoices");
@@ -116,33 +126,34 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
             <MenuOutlined />
           </IconButton>
           <Typography component="h1" variant="h6" sx={{ flexGrow: 1, ml: 2 }}>{headerTitle}</Typography>
-          {pathname.startsWith("/edit/") && !orderSaved && <>
-            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" disabled={orderBusy} aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderDirty}><SaveOutlined /></Badge></IconButton></span></Tooltip>
+          {pathname.startsWith("/edit/") && <>
+            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" disabled={orderBusy} aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
             {editedOrderNumber && <>
-              <Tooltip title="Angebotskopie erstellen"><IconButton color="inherit" onClick={() => void copyOrder()} aria-label="Angebotskopie erstellen"><ContentCopyOutlined /></IconButton></Tooltip>
-              <Tooltip title="Als PDF speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="pdf" disabled={orderBusy} aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
+              <Tooltip title="Angebotskopie anlegen"><span><IconButton color="inherit" disabled={orderActionsDisabled} onClick={() => void copyOrder()} aria-label="Angebotskopie anlegen"><ContentCopyOutlined /></IconButton></span></Tooltip>
+              <Tooltip title="Als PDF speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="pdf" disabled={orderActionsDisabled} aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
               <Tooltip title="E-Mail-Versand wird mit PDF-Anhang und Versanddialog aktiviert"><span><IconButton color="inherit" disabled aria-label="E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
               <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
-              <Tooltip title="Archivieren"><IconButton color="warning" onClick={() => void archiveOrder()} aria-label="Auftrag archivieren"><ArchiveOutlined /></IconButton></Tooltip>
+              <Tooltip title="Archivieren"><span><IconButton color="warning" disabled={orderActionsDisabled} onClick={() => void archiveOrder()} aria-label="Auftrag archivieren"><ArchiveOutlined /></IconButton></span></Tooltip>
               {isAdmin && <>
                 <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
-                <Tooltip title="Rechnung aus Auftrag anlegen"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="invoice" disabled={orderBusy} aria-label="Rechnung aus Auftrag anlegen"><ReceiptLongOutlined /></IconButton></span></Tooltip>
+                <Tooltip title="Rechnung aus Auftrag anlegen"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="invoice" disabled={orderActionsDisabled} aria-label="Rechnung aus Auftrag anlegen"><ReceiptLongOutlined /></IconButton></span></Tooltip>
               </>}
             </>}
           </>}
-          {editedInvoiceId && <>
-            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="invoice-editor-form" disabled={invoiceBusy} aria-label="Rechnung speichern"><SaveOutlined /></IconButton></span></Tooltip>
-            <Tooltip title="PDF speichern"><IconButton color="inherit" component="a" href={`/api/admin/invoices/${editedInvoiceId}/pdf`} aria-label="Rechnungs-PDF speichern"><FileDownloadOutlined /></IconButton></Tooltip>
+          {isInvoiceEditor && <>
+            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="invoice-editor-form" disabled={invoiceBusy} aria-label="Rechnung speichern"><Badge color="error" variant="dot" invisible={!invoiceHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
+            <Tooltip title="PDF speichern"><span><IconButton color="inherit" component="a" href={!invoiceActionsDisabled && editedInvoiceId ? `/api/admin/invoices/${editedInvoiceId}/pdf` : undefined} disabled={invoiceActionsDisabled} aria-label="Rechnungs-PDF speichern"><FileDownloadOutlined /></IconButton></span></Tooltip>
             <Tooltip title="Rechnungsversand wird mit Versanddialog und PDF-Anhang aktiviert"><span><IconButton color="inherit" disabled aria-label="Rechnung per E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
             <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
-            <Tooltip title="Archivieren"><IconButton color="warning" onClick={() => void archiveInvoice()} aria-label="Rechnung archivieren"><ArchiveOutlined /></IconButton></Tooltip>
+            <Tooltip title="Archivieren"><span><IconButton color="warning" disabled={invoiceActionsDisabled} onClick={() => void archiveInvoice()} aria-label="Rechnung archivieren"><ArchiveOutlined /></IconButton></span></Tooltip>
           </>}
         </Toolbar>
       </AppBar>
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <Box sx={{ width: 300, pt: 2, height: "100%", display: "flex", flexDirection: "column" }} role="navigation" aria-label="Hauptmenü">
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ "& .MuiDivider-root": { mx: 2 } }}>
+        <Box sx={{ width: 300, pt: 0.5, height: "100%", display: "flex", flexDirection: "column" }} role="navigation" aria-label="Hauptmenü">
           <Box>
-            <Typography variant="subtitle1" color="primary" sx={{ px: 2, display: "block", fontWeight: 700 }}>Vega</Typography>
+            <Typography variant="subtitle1" color="primary" align="center" sx={{ px: 1, py: 0.5, display: "block", fontFamily: "ui-monospace, monospace", fontSize: "2rem", lineHeight: 1.2, fontWeight: 700 }}>VEGA</Typography>
+            <Divider />
             <List>
               <ListItemButton selected={pathname === "/"} onClick={() => { setDrawerOpen(false); navigate("/"); }}>
                 <ListItemIcon><FormatListNumberedOutlined /></ListItemIcon>
@@ -195,19 +206,19 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
                     <ListItemText primary="Optionen" />
                   </ListItemButton>
                   <ListItemButton selected={isContentArea} onClick={() => setContentOpen((open) => !open)}>
-                    <ListItemIcon><Inventory2Outlined /></ListItemIcon>
+                    <ListItemIcon><ViewModuleOutlined /></ListItemIcon>
                     <ListItemText primary="Content" />
                     {contentOpen ? <ExpandLess /> : <ExpandMore />}
                   </ListItemButton>
                   <Collapse in={contentOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
                       {[
-                        { label: "Angebote", path: "/settings/offers", section: "offers" },
-                        { label: "Preise", path: "/settings/prices", section: "prices" },
-                        { label: "Verpackung", path: "/settings/packings", section: "packings" },
-                        { label: "Leistungen", path: "/settings/services", section: "services" },
-                        { label: "Kategorien", path: "/settings/categories", section: "categories" },
-                        { label: "Möbel", path: "/settings/furniture", section: "furniture" },
+                        { label: "Angebote", path: "/settings/offers", section: "offers", icon: <LocalOfferOutlined /> },
+                        { label: "Preise", path: "/settings/prices", section: "prices", icon: <PaymentsOutlined /> },
+                        { label: "Verpackung", path: "/settings/packings", section: "packings", icon: <Inventory2Outlined /> },
+                        { label: "Leistungen", path: "/settings/services", section: "services", icon: <HandymanOutlined /> },
+                        { label: "Kategorien", path: "/settings/categories", section: "categories", icon: <CategoryOutlined /> },
+                        { label: "Möbel", path: "/settings/furniture", section: "furniture", icon: <ChairOutlined /> },
                       ].map((item) => (
                         <ListItemButton
                           key={item.path}
@@ -215,6 +226,7 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
                           selected={route.contentSection === item.section}
                           onClick={() => { setDrawerOpen(false); navigate(item.path); }}
                         >
+                          <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
                           <ListItemText primary={item.label} />
                         </ListItemButton>
                       ))}

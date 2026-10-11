@@ -3,6 +3,7 @@ import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type InvoiceInput }
 
 export function validateInvoice(value: unknown, creating = false): { ok: true; value: InvoiceInput } | { ok: false; message: string } {
   if (!isRecord(value)) return { ok: false, message: "Ungültige Rechnungsdaten." };
+  if (value.taxPercent !== 19 && value.taxPercent !== 0) return { ok: false, message: "Umsatzsteuer muss 19 % oder 0 % sein." };
   const strings = ["invoiceDate", "company", "customerName", "customerStreet", "customerPostalCity", "text"] as const;
   if (strings.some((key) => typeof value[key] !== "string") || typeof value.taxPercent !== "number" || !Number.isFinite(value.taxPercent) || value.taxPercent < 0 || value.taxPercent > 100 || !Array.isArray(value.entries) || !Array.isArray(value.dueDates)) return { ok: false, message: "Bitte prüfen Sie die Rechnungsdaten." };
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(value.invoiceDate as string) || (value.customerName as string).trim().length === 0) return { ok: false, message: "Rechnungsdatum und Kunde sind erforderlich." };
