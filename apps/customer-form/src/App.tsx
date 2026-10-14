@@ -5,11 +5,12 @@ import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { de } from "date-fns/locale";
 import { theme } from "./theme.js";
 import { Column } from "./components.js";
-import { createPayload, initialDraft, paths, steps, validateStep, type FormResources, type ImageDraft } from "./form-model.js";
+import { createPayload, initialDraft, paths, steps, validateStep, validationFieldLabel, type FormResources, type ImageDraft } from "./form-model.js";
 import { loadResources, request } from "./api.js";
 import { Contact, MovingStep } from "./MovingSteps.js";
 import { Packaging, RequestStep, Success } from "./FinalSteps.js";
 import { ImageUploader } from "./ImageUploader.js";
+import { ValidationFieldProvider } from "./components.js";
 
 export function App() {
   const [draft, setDraft] = useState(initialDraft);
@@ -18,6 +19,7 @@ export function App() {
   const [retry, setRetry] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState("");
+  const [validationField, setValidationField] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [imagesBusy, setImagesBusy] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -40,7 +42,13 @@ export function App() {
       if (index >= 0) {
         for (let step = 0; step < index; step++) {
           const message = validateStep(draftRef.current, step);
-          if (message) { setError(message); setActiveStep(step); history.replaceState(null, "", `#/${paths[step]}`); return; }
+          if (message) {
+            setError(message);
+            setValidationField(validationFieldLabel(draftRef.current, step, message));
+            setActiveStep(step);
+            history.replaceState(null, "", `#/${paths[step]}`);
+            return;
+          }
         }
         setActiveStep(index);
       } else if (path !== "erfolg") { setActiveStep(0); }
@@ -49,12 +57,27 @@ export function App() {
     window.addEventListener("hashchange", hash);
     return () => window.removeEventListener("hashchange", hash);
   }, []);
+  useEffect(() => {
+    if (!validationField || !root.current) return;
+    const normalize = (value: string) => value.replace(/[＊*]/gu, "").trim().toLocaleLowerCase("de-DE");
+    const control = Array.from(root.current.querySelectorAll<HTMLElement>(".MuiFormControl-root"))
+      .find((candidate) => normalize(candidate.querySelector("label")?.textContent ?? "") === normalize(validationField));
+    if (!control) return;
+    const input = control.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, [role="combobox"], [contenteditable="true"]');
+    input?.focus({ preventScroll: true });
+    control.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [validationField, activeStep]);
   const navigate = (index: number) => {
     if (submitting) return;
     if (index > activeStep) {
       const message = validateStep(draft, activeStep);
-      if (message) { setError(message); return; }
+      if (message) {
+        setError(message);
+        setValidationField(validationFieldLabel(draft, activeStep, message));
+        return;
+      }
     }
+    setValidationField(null);
     setActiveStep(index);
     window.location.hash = `/${paths[index]}`;
     root.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -66,7 +89,12 @@ export function App() {
     if (!resources || submitLock.current || imagesBusy) return;
     for (let step = 0; step < 3; step++) {
       const message = validateStep(draft, step);
-      if (message) { setError(message); navigate(step); return; }
+      if (message) {
+        setError(message);
+        setValidationField(validationFieldLabel(draft, step, message));
+        navigate(step);
+        return;
+      }
     }
     if (!draft.privacyAccepted || !resources.config.privacyUrl) { setError("Bitte bestätigen Sie die Datenschutzerklärung."); return; }
     submitLock.current = true; setSubmitting(true); setError("");
@@ -89,14 +117,16 @@ export function App() {
           : <Column gap={4}>
             {!success && <Stepper activeStep={activeStep} sx={{ alignSelf: "center", width: "100%" }}>{steps.map((label) => <Step key={label}><StepLabel>{narrow ? null : label}</StepLabel></Step>)}</Stepper>}
             {success ? <Success /> : <Box component="fieldset" disabled={submitting} sx={{ border: 0, m: 0, p: 0, minWidth: 0 }}>
-              {activeStep === 0 && <Contact {...props!} />}
-              {activeStep === 1 && <MovingStep {...props!} departure />}
-              {activeStep === 2 && <MovingStep {...props!} departure={false} />}
-              {activeStep === 3 && <Packaging {...props!} />}
-              <Box sx={{ display: activeStep === 4 ? "block" : "none" }}>
-                <RequestStep {...props!} submitting={submitting} imagesBusy={imagesBusy} onSubmit={() => void submit()}
-                  uploader={<ImageUploader available={resources.config.uploadsAvailable} onImages={onImages} onBusy={onBusy} />} />
-              </Box>
+              <ValidationFieldProvider label={validationField} clear={() => setValidationField(null)}>
+                {activeStep === 0 && <Contact {...props!} />}
+                {activeStep === 1 && <MovingStep {...props!} departure />}
+                {activeStep === 2 && <MovingStep {...props!} departure={false} />}
+                {activeStep === 3 && <Packaging {...props!} />}
+                <Box sx={{ display: activeStep === 4 ? "block" : "none" }}>
+                  <RequestStep {...props!} submitting={submitting} imagesBusy={imagesBusy} onSubmit={() => void submit()}
+                    uploader={<ImageUploader available={resources.config.uploadsAvailable} onImages={onImages} onBusy={onBusy} />} />
+                </Box>
+              </ValidationFieldProvider>
             </Box>}
             {!success && <Box sx={{ display: "flex", gap: 4, justifyContent: "center" }}>
               <Button size="large" variant="outlined" disabled={activeStep === 0 || submitting} onClick={() => navigate(activeStep - 1)}>zurück</Button>

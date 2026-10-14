@@ -8,6 +8,7 @@ export const areas = Array.from({ length: 15 }, (_, i) => `${(i + 1) * 10} m²`)
 export const liftTypes = ["kein Aufzug", "2 Personen", "4 Personen", "6 Personen", "8+ Personen"];
 export const steps = ["Kontakt", "Auszug", "Einzug", "Verpackung", "Fertig"];
 export const paths = ["", "auszug", "einzug", "verpackung", "absenden"];
+export const EMAIL_PATTERN = String.raw`^[^\s@]+@[^\s@.]+(?:\.[^\s@.]*)*\.[^\s@.]+$`;
 export const euro = (value: number) => new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value);
 
 export interface SpecialItem {
@@ -108,6 +109,46 @@ export function validateStep(draft: FormDraft, step: number): string | null {
       if (address[key] && (!Number.isFinite(Number(address[key])) || Number(address[key]) < 0)) return "Bitte geben Sie eine gültige positive Zahl ein.";
     }
   }
+  return null;
+}
+
+export function validationFieldLabel(draft: FormDraft, step: number, message: string): string | null {
+  const requiredField = message.match(/Das Feld "([^"]+)"/);
+  if (requiredField?.[1]) return requiredField[1];
+  if (message.includes("E-Mail")) return "E-Mail";
+  if (message.includes("Telefon")) return "Telefon";
+  if (message.includes("Straße und Hausnummer")) return "Straße und Hausnummer";
+  if (message.includes("Anzahl der Zimmer")) return "Anzahl der Zimmer";
+
+  if (step === 0 && message.includes("Umzugstermin")) {
+    if (message.includes("späteste")) return "spätester Umzugstermin";
+    const dates = draft.dateFixed
+      ? [{ value: draft.movingDate, label: "Umzugstermin" }]
+      : [
+        { value: draft.dateFrom, label: "frühester Umzugstermin" },
+        { value: draft.dateTo, label: "spätester Umzugstermin" },
+      ];
+    return dates.find(({ value }) => message.includes("Vergangenheit")
+      ? value < localDate()
+      : !/^\d{4}-\d{2}-\d{2}$/.test(value)
+        || Number.isNaN(Date.parse(value))
+        || new Date(`${value}T12:00:00`).toISOString().slice(0, 10) !== value)?.label ?? dates[0]?.label ?? null;
+  }
+
+  if (step === 1 || step === 2) {
+    const address = step === 1 ? draft.from : draft.to;
+    if (message.includes("positive Zahl")) {
+      const numericFields = [
+        ["kitchenWidth", "Küchenbreite"],
+        ["wardrobeWidth", "Gesamtbreite der Schränke"],
+        ["bedNumber", "Betten"],
+        ["roomsToRelocate", "Anzahl der Zimmer zum Umziehen"],
+      ] as const;
+      return numericFields.find(([key]) => address[key] && (!Number.isFinite(Number(address[key])) || Number(address[key]) < 0))?.[1]
+        ?? "Anzahl der Zimmer zum Umziehen";
+    }
+  }
+
   return null;
 }
 

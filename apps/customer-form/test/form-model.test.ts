@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateVolume, createPayload, initialDraft, localDate, suggestVisit, validateStep, type FormResources } from "../src/form-model.js";
+import { calculateVolume, createPayload, EMAIL_PATTERN, initialDraft, localDate, suggestVisit, validateStep, validationFieldLabel, type FormResources } from "../src/form-model.js";
 import { validateCustomerFormInput, validateOrderCreateInput } from "../../server/src/orders/order-input.js";
 import { imageDimensions } from "../src/ImageUploader.js";
 
@@ -44,6 +44,33 @@ test("validates full contact, date ranges, addresses and conditional lift fields
   assert.match(validateStep(draft, 1)!, /Fahrstuhl/);
   draft.from.movementObject = "Haus";
   assert.equal(validateStep(draft, 1), null);
+});
+test("maps validation messages to the corresponding visible form field", () => {
+  const empty = initialDraft();
+  const firstNameError = validateStep(empty, 0)!;
+  assert.equal(validationFieldLabel(empty, 0, firstNameError), "Vorname");
+
+  const complete = completeDraft();
+  complete.customer.email = "invalid";
+  assert.equal(validationFieldLabel(complete, 0, validateStep(complete, 0)!), "E-Mail");
+
+  complete.customer.email = "ada@example.test";
+  complete.dateFixed = false;
+  complete.dateFrom = "not-a-date";
+  assert.equal(validationFieldLabel(complete, 0, validateStep(complete, 0)!), "frühester Umzugstermin");
+
+  complete.dateFrom = "2099-11-20";
+  complete.dateTo = "2099-11-19";
+  assert.equal(validationFieldLabel(complete, 0, validateStep(complete, 0)!), "spätester Umzugstermin");
+});
+test("email input pattern rejects malformed addresses while accepting ordinary ones", () => {
+  const pattern = new RegExp(EMAIL_PATTERN);
+  for (const email of ["ada@example.test", "nka@gmx.net", "first.last+tag@example.co.uk"]) {
+    assert.equal(pattern.test(email), true, email);
+  }
+  for (const email of ["", "missing-at.example.test", "name@localhost", "name @example.test", "name@example.test."]) {
+    assert.equal(pattern.test(email), false, email);
+  }
 });
 test("visit recommendation is shown for houses and four or more rooms", () => {
   const draft = completeDraft();

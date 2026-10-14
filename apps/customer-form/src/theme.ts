@@ -7,6 +7,7 @@ export const theme = createTheme({
   typography: { fontFamily: '"Montserrat","Arial",sans-serif', fontSize: 14, fontWeightRegular: 400 },
   components: {
     MuiFormLabel: { styleOverrides: { root: { color: "#1a1a1a", fontWeight: 400 } } },
-    MuiTextField: { defaultProps: { margin: "dense", size: "small", fullWidth: true, variant: "outlined" } },
+    MuiTextField: { defaultProps: { size: "small", fullWidth: true, variant: "outlined" } },
+    MuiOutlinedInput: { styleOverrides: { root: { minHeight: 43 } } },
   },
 }, deDE);

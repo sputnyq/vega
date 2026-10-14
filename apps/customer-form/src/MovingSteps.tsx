@@ -5,7 +5,7 @@ import DeleteOutline from "@mui/icons-material/DeleteOutlineOutlined";
 import type { OrderAddressInput } from "@vega/domain";
 import { AddressFields, SelectField } from "./AddressFields.js";
 import { Column, DateField, Field, Heading, Info, Section, SwitchField } from "./components.js";
-import { areas, euro, floors, liftTypes, movementObjects, newSpecialItem, parkingDistances, suggestVisit, type FormDraft, type FormResources, type SpecialItem } from "./form-model.js";
+import { areas, EMAIL_PATTERN, euro, floors, liftTypes, movementObjects, newSpecialItem, parkingDistances, suggestVisit, type FormDraft, type FormResources, type SpecialItem } from "./form-model.js";
 
 export interface StepProps { draft: FormDraft; setDraft: Dispatch<SetStateAction<FormDraft>>; resources: FormResources }
 
@@ -23,6 +23,11 @@ export function Contact({ draft, setDraft }: StepProps) {
           <Field required label={["Vorname", "Nachname", "E-Mail", "Telefon"][index]} value={draft.customer[key]}
             type={key === "email" ? "email" : key === "phone" ? "tel" : "text"}
             autoComplete={{ firstName: "given-name", lastName: "family-name", email: "email", phone: "tel" }[key]}
+            {...(key === "email" ? { slotProps: { htmlInput: {
+              maxLength: 254,
+              pattern: EMAIL_PATTERN,
+              title: "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
+            } } } : {})}
             onChange={(event) => customer({ [key]: event.target.value })} />
         </Grid>)}
       </Grid>
