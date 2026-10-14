@@ -108,13 +108,13 @@ Zugriff auf Produktionsbilder.
    Accounts kopieren.
 3. **Cloud Storage → Buckets → `vega-eu-images-dev` → Permissions → Grant
    access** öffnen. Die kopierte Service-Account-E-Mail als Principal
-  hinzufügen und **beide** Rollen direkt auf diesem Bucket zuweisen:
-  **Storage Object Admin** für Lesen/Schreiben/Kopieren von Objekten sowie
-  **Storage Legacy Bucket Reader** für `storage.buckets.get` (der Server liest
-  damit die Bucket-Metadaten, um Region, Public-Access-Prevention,
-  Uniform-Bucket-Level-Access und Lifecycle-Regel zu prüfen). Nur
-  `Storage Object Admin` reicht für diese Bucket-Metadatenabfrage nicht aus
-  und führt zu `403 storage.buckets.get denied`. Nicht stattdessen Rollen auf
+   hinzufügen und **beide** Rollen direkt auf diesem Bucket zuweisen:
+   **Storage Object Admin** für Lesen/Schreiben/Kopieren von Objekten sowie
+   **Storage Legacy Bucket Reader** für `storage.buckets.get` (der Server liest
+   damit die Bucket-Metadaten, um Region, Public-Access-Prevention,
+   Uniform-Bucket-Level-Access und Lifecycle-Regel zu prüfen). Nur
+   `Storage Object Admin` reicht für diese Bucket-Metadatenabfrage nicht aus
+   und führt zu `403 storage.buckets.get denied`. Nicht stattdessen Rollen auf
    Projektebene vergeben. Falls die Console-Rollensuche die Rolle nicht
    anbietet, kann die Bucket-Bindung mit der vordefinierten Rollen-ID gesetzt
    werden (Service-Account-Adresse ersetzen):
@@ -127,6 +127,7 @@ Zugriff auf Produktionsbilder.
 
    Die Rollen-ID `roles/storage.legacyBucketReader` ist die vordefinierte
    **Storage Legacy Bucket Reader**-Rolle und enthält `storage.buckets.get`.
+
 4. Authentifizierung bevorzugt ohne herunterladbaren Schlüssel einrichten,
    sofern die Serverumgebung Workload Identity/ADC unterstützt. Für einen
    lokalen Dev-Server oder Hostinger, wenn keine solche Integration verfügbar
