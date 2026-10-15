@@ -32,6 +32,11 @@ function object(value: unknown): asserts value is Record<string, unknown> {
   assert.ok(typeof value === "object" && value !== null && !Array.isArray(value));
 }
 
+async function avoidRateLimitWindowRollover() {
+  const remainingMs = 60_000 - Date.now() % 60_000;
+  if (remainingMs < 10_000) await new Promise((resolve) => setTimeout(resolve, remainingMs + 100));
+}
+
 test("A3 real auth lifecycle: provisioning, password/TOTP gates, recovery, role enforcement and session revocation", async (context) => {
   const ids: string[] = [];
   const password = "Test-only-admin-password1";
@@ -221,6 +226,7 @@ test("A3 real auth lifecycle: provisioning, password/TOTP gates, recovery, role 
   await repeat.request("/api/auth/sign-in/email", { email: `${adminId}@example.test`, password });
   assert.notEqual((await repeat.request("/api/auth/two-factor/verify-backup-code", { code: backup[0], trustDevice: false })).status, 200);
   await clearRate();
+  await avoidRateLimitWindowRollover();
   for (let i = 0; i < 5; i++) assert.equal((await admin.request("/api/admin/staff", { ...createInput, currentPassword: "wrong" })).status, 403);
   assert.equal((await admin.request("/api/admin/staff", { ...createInput, currentPassword: password })).status, 429);
   await assert.rejects(recoverSoleAdmin(userId), (error) => error instanceof StaffError && error.code === "NOT_SOLE_ADMIN");
