@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Chip, Grid, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { Button, Chip, Grid, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { CatalogOfferDto, OrderDetailsInput } from "@vega/domain";
 import { AppointmentFields } from "./AppointmentFields.js";
 import { apiRequest } from "../api/api-request.js";
@@ -30,7 +31,7 @@ export function BasisTab({ value, update, onBasisChange }: BasisTabProps) {
   return (
     <Stack spacing={2}>
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 12, lg: 4 }}>
           <Paper variant="outlined" sx={{ p: 2.5, height: "100%" }}>
             <AppointmentFields
               value={{
@@ -44,7 +45,7 @@ export function BasisTab({ value, update, onBasisChange }: BasisTabProps) {
             />
           </Paper>
         </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <Paper variant="outlined" sx={{ p: 2.5, height: "100%" }}>
             <Stack spacing={1.5}>
               <Typography component="h2" variant="h6">Träger und LKW</Typography>
@@ -54,7 +55,7 @@ export function BasisTab({ value, update, onBasisChange }: BasisTabProps) {
             </Stack>
           </Paper>
         </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <Paper variant="outlined" sx={{ p: 2.5, height: "100%" }}>
             <Stack spacing={1.5}>
               <Typography component="h2" variant="h6">Preis</Typography>

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Alert, Box, Button, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import { authClient } from "../auth-client.js";
 import { AuthCard } from "./AuthCard.js";
 
@@ -37,7 +38,7 @@ export function ForgotPasswordPage({ onBack }: { onBack: () => void }) {
       <Typography component="h1" variant="h4">Passwort zurücksetzen</Typography>
       {sent ? (
         <Stack spacing={2}>
-          <Alert severity="success">Falls ein Konto zu dieser E-Mail-Adresse existiert, wurde ein Link zum Zurücksetzen versendet.</Alert>
+            <AdminAlert severity="success">Falls das Konto existiert, wurde ein Link versendet.</AdminAlert>
           <Button onClick={onBack}>Zur Anmeldung</Button>
         </Stack>
       ) : (
@@ -45,7 +46,7 @@ export function ForgotPasswordPage({ onBack }: { onBack: () => void }) {
           <Typography color="text.secondary">Geben Sie Ihre Mitarbeiter-E-Mail-Adresse ein. Der Link ist nur einmal und zeitlich begrenzt verwendbar.</Typography>
           <Box component="form" onSubmit={submit}>
             <Stack spacing={2}>
-              {error && <Alert severity="error">{error}</Alert>}
+              {error && <AdminAlert severity="error">{error}</AdminAlert>}
               <TextField autoFocus autoComplete="email" label="E-Mail-Adresse" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
               <Button type="submit" variant="contained" size="large" disabled={busy}>
                 {busy ? <CircularProgress size={24} color="inherit" /> : "Reset-Link anfordern"}

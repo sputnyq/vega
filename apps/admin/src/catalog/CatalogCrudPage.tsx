@@ -1,6 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  Alert,
   Button,
   Checkbox,
   Dialog,
@@ -9,7 +8,13 @@ import {
   DialogTitle,
   FormControl,
   FormControlLabel,
+  FormGroup,
+  FormLabel,
+  IconButton,
+  InputAdornment,
   InputLabel,
+  ListItemIcon,
+  Menu,
   MenuItem,
   Paper,
   Select,
@@ -21,9 +26,11 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { AddOutlined, DeleteOutlined, EditOutlined } from "@mui/icons-material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
+import { AddOutlined, DeleteOutlined, EditOutlined, MoreVert } from "@mui/icons-material";
 import { useCatalogCollection, type IdentifiedCatalogRecord } from "./useCatalogCollection.js";
 
 export interface CatalogChoice {
@@ -34,11 +41,12 @@ export interface CatalogChoice {
 export interface CatalogField {
   name: string;
   label: string;
-  type: "text" | "number" | "money" | "multiline" | "boolean" | "multiple";
+  type: "text" | "number" | "money" | "multiline" | "boolean" | "multiple" | "checkboxes";
   options?: CatalogChoice[];
   min?: number;
   max?: number;
   step?: number;
+  unit?: string;
 }
 
 export interface CatalogColumn<T> {
@@ -49,7 +57,6 @@ export interface CatalogColumn<T> {
 interface CatalogCrudPageProps<T extends IdentifiedCatalogRecord> {
   resource: string;
   title: string;
-  description: string;
   fields: CatalogField[];
   columns: CatalogColumn<T>[];
   defaults: Record<string, unknown>;
@@ -61,7 +68,6 @@ interface CatalogCrudPageProps<T extends IdentifiedCatalogRecord> {
 export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
   resource,
   title,
-  description,
   fields,
   columns,
   defaults,
@@ -74,8 +80,9 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
   const [editing, setEditing] = useState<T | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>(defaults);
   const [saving, setSaving] = useState(false);
+  const [actionMenu, setActionMenu] = useState<{ anchor: HTMLElement; item: T } | null>(null);
 
-  const dialogTitle = useMemo(() => editing ? `Eintrag bearbeiten · ${title}` : `Eintrag hinzufügen · ${title}`, [editing, title]);
+  const dialogTitle = useMemo(() => editing ? `Eintrag bearbeiten · ${title}` : `Eintrag anlegen · ${title}`, [editing, title]);
   const visibleItems = useMemo(() => filterItem ? catalog.items.filter(filterItem) : catalog.items, [catalog.items, filterItem]);
 
   function openCreate() {
@@ -87,7 +94,7 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
 
   function openEdit(item: T) {
     setEditing(item);
-    setForm(Object.fromEntries(fields.map((field) => [field.name, (item as Record<string, unknown>)[field.name] ?? defaults[field.name] ?? (field.type === "multiple" ? [] : "")])));
+    setForm(Object.fromEntries(fields.map((field) => [field.name, (item as Record<string, unknown>)[field.name] ?? defaults[field.name] ?? (field.type === "multiple" || field.type === "checkboxes" ? [] : "")])));
     catalog.setError(null);
     setDialogOpen(true);
   }
@@ -118,6 +125,24 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
 
   function renderField(field: CatalogField) {
     const value = form[field.name];
+    if (field.type === "checkboxes") {
+      const selected = Array.isArray(value) ? value.map(String) : [];
+      return (
+        <FormControl key={field.name} component="fieldset" fullWidth margin="dense">
+          <FormLabel component="legend">{field.label}</FormLabel>
+          <FormGroup>
+            {(field.options ?? []).map((option) => (
+              <FormControlLabel key={String(option.value)} label={option.label} control={
+                <Checkbox checked={selected.includes(String(option.value))} onChange={(event) => setForm((current) => {
+                  const previous = Array.isArray(current[field.name]) ? current[field.name] as Array<string | number> : [];
+                  return { ...current, [field.name]: event.target.checked ? [...previous, option.value] : previous.filter((entry) => String(entry) !== String(option.value)) };
+                })} />
+              } />
+            ))}
+          </FormGroup>
+        </FormControl>
+      );
+    }
     if (field.type === "boolean") {
       return (
         <FormControlLabel
@@ -155,7 +180,7 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
       <TextField
         key={field.name}
         fullWidth
-        label={field.label}
+        label={field.type === "money" ? field.label.replace(/\s*\(€\)$/u, "") : field.label}
         type={field.type === "money" || field.type === "number" ? "number" : "text"}
         multiline={field.type === "multiline"}
         minRows={field.type === "multiline" ? 3 : undefined}
@@ -165,6 +190,7 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
           [field.name]: field.type === "money" || field.type === "number" ? (event.target.value === "" ? 0 : Number(event.target.value)) : event.target.value,
         }))}
         slotProps={{
+          ...(field.type === "money" || field.unit ? { input: { endAdornment: <InputAdornment position="end">{field.type === "money" ? "€" : field.unit}</InputAdornment> } } : {}),
           htmlInput: {
             ...(field.min !== undefined ? { min: field.min } : {}),
             ...(field.max !== undefined ? { max: field.max } : {}),
@@ -177,15 +203,9 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
 
   return (
     <Stack spacing={2}>
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
-        <Stack spacing={0.5}>
-          <Typography component="h2" variant="h5">{title}</Typography>
-          <Typography color="text.secondary">{description}</Typography>
-        </Stack>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          {toolbarContent}
-          <Button variant="contained" startIcon={<AddOutlined />} onClick={openCreate}>Hinzufügen</Button>
-        </Stack>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+        {toolbarContent && <Stack direction="row" sx={{ flexGrow: 1, alignItems: "center" }}>{toolbarContent}</Stack>}
+        <Button variant="contained" startIcon={<AddOutlined />} onClick={openCreate}>Eintrag anlegen</Button>
       </Stack>
       {filterPanel}
       {catalog.error && !dialogOpen && <Alert severity="error">{catalog.error}</Alert>}
@@ -203,8 +223,11 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
                 <TableRow key={item.id} hover>
                   {columns.map((column) => <TableCell key={column.label}>{column.render(item)}</TableCell>)}
                   <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
-                    <Button size="small" startIcon={<EditOutlined />} onClick={() => openEdit(item)}>Bearbeiten</Button>
-                    <Button size="small" color="error" aria-label="Eintrag löschen" onClick={() => void remove(item)}><DeleteOutlined /></Button>
+                    <Tooltip title="Eintragsaktionen">
+                      <IconButton size="small" id={`catalog-actions-${item.id}`} aria-label={`Aktionen für Eintrag ${item.id}`} aria-haspopup="menu" aria-controls={actionMenu?.item.id === item.id ? "catalog-actions-menu" : undefined} aria-expanded={actionMenu?.item.id === item.id ? true : undefined} onClick={(event) => setActionMenu({ anchor: event.currentTarget, item })}>
+                        <MoreVert />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
@@ -213,6 +236,14 @@ export function CatalogCrudPage<T extends IdentifiedCatalogRecord>({
           </Table>
         </TableContainer>
       )}
+      <Menu id="catalog-actions-menu" anchorEl={actionMenu?.anchor ?? null} open={actionMenu !== null} onClose={() => setActionMenu(null)} slotProps={{ list: { "aria-labelledby": actionMenu ? `catalog-actions-${actionMenu.item.id}` : undefined } }}>
+        <MenuItem onClick={() => { if (!actionMenu) return; const item = actionMenu.item; setActionMenu(null); openEdit(item); }}>
+          <ListItemIcon><EditOutlined fontSize="small" /></ListItemIcon>Bearbeiten
+        </MenuItem>
+        <MenuItem sx={{ color: "error.main" }} onClick={() => { if (!actionMenu) return; const item = actionMenu.item; setActionMenu(null); void remove(item); }}>
+          <ListItemIcon sx={{ color: "inherit" }}><DeleteOutlined fontSize="small" /></ListItemIcon>Löschen
+        </MenuItem>
+      </Menu>
       <Dialog open={dialogOpen} onClose={() => !saving && setDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>

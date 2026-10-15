@@ -23,6 +23,21 @@ test("admin API requests preserve method, same-origin credentials, and optional 
   ]);
 });
 
+test("admin API requests forward an optional abort signal", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input, init });
+    return Response.json({ data: { saved: true } });
+  };
+  context.after(() => { globalThis.fetch = originalFetch; });
+
+  const controller = new AbortController();
+  assert.deepEqual(await apiRequest("/api/admin/places/autocomplete", "POST", { input: "Ber" }, { signal: controller.signal }), { saved: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.init?.signal, controller.signal);
+});
+
 test("admin API requests preserve response, issue, network, and JSON error behavior", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });
@@ -34,7 +49,10 @@ test("admin API requests preserve response, issue, network, and JSON error behav
   await assert.rejects(apiRequest("/broken"), { message: "Serverfehler" });
 
   globalThis.fetch = async () => Response.json({ error: { issues: [{ field: "name", message: "Erforderlich" }, { field: "email", message: "Ungültig" }] } }, { status: 422 });
-  await assert.rejects(apiRequest("/broken"), { message: "name: Erforderlich · email: Ungültig" });
+  await assert.rejects(apiRequest("/broken"), { message: "Erforderlich · Ungültig" });
+
+  globalThis.fetch = async () => Response.json({ error: { issues: [{ field: "price", message: "Bitte geben Sie einen nicht-negativen Betrag mit höchstens zwei Nachkommastellen ein." }] } }, { status: 422 });
+  await assert.rejects(apiRequest("/broken"), { message: "Bitte geben Sie einen nicht-negativen Betrag mit höchstens zwei Nachkommastellen ein." });
 
   globalThis.fetch = async () => { throw new Error("network"); };
   await assert.rejects(apiRequest("/broken"), { message: "network" });

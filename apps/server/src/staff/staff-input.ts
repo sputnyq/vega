@@ -1,4 +1,5 @@
 import type { UserRole } from "@vega/domain";
+import { isValidEmailAddress } from "@vega/domain";
 import { meetsPasswordPolicy } from "../password-policy.js";
 
 export type StaffAction = { kind: "role"; role: UserRole } | { kind: "block"; blocked: boolean } | { kind: "reset-totp" } | { kind: "reset-password" };
@@ -10,7 +11,7 @@ export function record(value: unknown): value is Record<string, unknown> {
 export function validateStaffCreate(value: unknown): StaffCreate | null {
   if (!record(value) || Object.keys(value).some((key) => !["name", "email", "role", "initialPassword", "currentPassword"].includes(key))
     || typeof value.name !== "string" || !value.name.trim() || value.name.trim().length > 191 || /[\r\n]/u.test(value.name)
-    || typeof value.email !== "string" || value.email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.email.trim())
+    || typeof value.email !== "string" || !isValidEmailAddress(value.email.trim())
     || !isRole(value.role) || typeof value.initialPassword !== "string" || !meetsPasswordPolicy(value.initialPassword)) return null;
   return { name: value.name.trim(), email: value.email.trim().toLowerCase(), role: value.role, initialPassword: value.initialPassword };
 }

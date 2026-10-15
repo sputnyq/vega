@@ -16,7 +16,7 @@ export function customerFormSettings(settings: AppSettingsDto, config: AppConfig
   return {
     privacyUrl: settings.dataPrivacyUrl, boxCalculatorUrl: settings.boxCalculatorUrl, successUrl: settings.successUrl,
     boxVolume: settings.boxCbm, wardrobeBoxVolume: settings.kleiderboxCbm,
-    uploadsAvailable: Boolean(config.gcs), placesAvailable: Boolean(config.googlePlacesKey),
+    uploadsAvailable: Boolean(config.gcs), placesAvailable: Boolean(config.googleMapsKey),
   };
 }
 export async function saveAppSettings(settings: AppSettingsDto): Promise<AppSettingsDto | null> {

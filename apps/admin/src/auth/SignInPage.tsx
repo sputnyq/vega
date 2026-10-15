@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Box, Button, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import { authClient } from "../auth-client.js";
 import type { PendingInitialPassword } from "../types.js";
 import { AuthCard } from "./AuthCard.js";
 import { PasswordField } from "./PasswordField.js";
+import { isTotpRequired } from "@vega/domain";
 
 interface SignInPageProps {
   onInitialPassword: (pending: PendingInitialPassword) => void;
@@ -51,9 +53,10 @@ export function SignInPage({
       }
 
       const user = result.data?.user;
+      const totpRequired = isTotpRequired(String(user?.role));
       if (user?.mustChangePassword) {
-        onInitialPassword({ currentPassword: password });
-      } else if (user?.twoFactorEnabled !== true) {
+        onInitialPassword({ currentPassword: password, totpRequired });
+      } else if (totpRequired && user?.twoFactorEnabled !== true) {
         onTotpSetup(password);
       } else {
         window.location.reload();
@@ -102,7 +105,7 @@ export function SignInPage({
       </Typography>
       <Box component="form" onSubmit={twoFactorRequired ? verifyCode : submit}>
         <Stack spacing={2}>
-          {error && <Alert severity="error">{error}</Alert>}
+          {error && <AdminAlert severity="error">{error}</AdminAlert>}
           {twoFactorRequired ? (
             <TextField
               autoFocus

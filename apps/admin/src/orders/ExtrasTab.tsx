@@ -1,5 +1,6 @@
 import { AddOutlined, DeleteOutlined } from "@mui/icons-material";
-import { Alert, Button, FormControlLabel, Grid, MenuItem, Paper, Stack, Switch, Tab, Tabs, TextField, Typography } from "@mui/material";
+import { Button, FormControlLabel, Grid, IconButton, MenuItem, Paper, Stack, Switch, Tab, Tabs, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { CatalogPackingDto, CatalogServiceDto, OrderServiceInput } from "@vega/domain";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api/api-request.js";
@@ -57,7 +58,7 @@ export function ExtrasTab({ value, onExtrasChange }: ExtrasTabProps) {
 
   return (
     <Grid container spacing={2}>
-      <Grid size={{ xs: 12, xl: 5 }}>
+      <Grid size={{ xs: 12, md: 4 }}>
         <Paper variant="outlined" sx={{ p: 2.5, height: "100%" }}>
           <Stack spacing={1.5}>
             <Typography component="h2" variant="h6">Verpackung</Typography>
@@ -69,11 +70,11 @@ export function ExtrasTab({ value, onExtrasChange }: ExtrasTabProps) {
           </Stack>
         </Paper>
       </Grid>
-      <Grid size={{ xs: 12, xl: 7 }}>
+      <Grid size={{ xs: 12, md: 8 }}>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
           <Stack spacing={1.5}>
             <Typography component="h2" variant="h6">Leistungen</Typography>
-            <Tabs value={activeKind} onChange={(_, next: "packaging" | "service") => setActiveKind(next)}>
+            <Tabs value={activeKind} onChange={(_, next: "packaging" | "service") => setActiveKind(next)} variant="scrollable" allowScrollButtonsMobile>
               <Tab value="packaging" label="Packmaterial" />
               <Tab value="service" label="Bohrarbeiten / Leistungen" />
             </Tabs>
@@ -90,21 +91,21 @@ export function ExtrasTab({ value, onExtrasChange }: ExtrasTabProps) {
                     {catalog.filter((item) => item.kind === activeKind).map((item) => <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>)}
                   </TextField>
                 </Grid>
-                <Grid size={{ xs: 8, sm: 4 }}>
+                <Grid size={{ xs: 7, sm: 4 }}>
                   <TextField label="Leistung" value={service.name} onChange={(event) => updateService(index, { name: event.target.value })} />
                 </Grid>
                 <Grid size={{ xs: 3, sm: 2 }}>
                   <TextField type="number" label="Anzahl" value={service.quantity} onChange={(event) => updateService(index, { quantity: Number(event.target.value) })} />
                 </Grid>
-                <Grid size={{ xs: 9, sm: 1 }}>
+                <Grid size={{ xs: 2, sm: 1 }}>
                   <Typography variant="body2" color="text.secondary">
                     {service.catalogId === undefined ? "" : catalog.find((item) => item.id === service.catalogId && item.kind === activeKind)?.price.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
                   </Typography>
-                  <Button color="error" aria-label="Leistung entfernen" onClick={() => removeService(index)}><DeleteOutlined /></Button>
+                  <IconButton size="small" color="error" aria-label="Leistung entfernen" onClick={() => removeService(index)}><DeleteOutlined /></IconButton>
                 </Grid>
               </Grid>
             ))}
-            <Button startIcon={<AddOutlined />} onClick={addService} sx={{ alignSelf: "flex-start" }}>Leistung hinzufügen</Button>
+            <Button startIcon={<AddOutlined />} onClick={addService} sx={{ alignSelf: "flex-end" }}>Leistung hinzufügen</Button>
           </Stack>
         </Paper>
       </Grid>

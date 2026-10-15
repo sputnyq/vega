@@ -1,10 +1,13 @@
 generator client {
-  provider = "prisma-client-js"
+  provider               = "prisma-client"
+  output                 = "../apps/server/src/generated/prisma"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
 }
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -19,6 +22,8 @@ model User {
   role               String      @default("Kundenberater")
   mustChangePassword Boolean     @default(false)
   blocked            Boolean     @default(false)
+  /// Name in the greeting block of staff mails, e.g. "Max Meier".
+  signatureName      String?     @db.VarChar(100)
   sessions           Session[]
   accounts           Account[]
   twofactors         TwoFactor[]
@@ -118,7 +123,8 @@ model Order {
   originOrderId String?
   originOrder   Order?               @relation("OrderCopies", fields: [originOrderId], references: [id], onDelete: SetNull)
   copies        Order[]              @relation("OrderCopies")
-  emailOutbox   EmailOutbox[]
+  emailOutbox   EmailOutbox[]        @relation("EmailOutboxOrder")
+  emailOptions  EmailOutbox[]        @relation("EmailOutboxOption")
   emailEvents   EmailEvent[]
   activities    OrderActivityEvent[]
   invoice       Invoice?
@@ -253,23 +259,24 @@ model CreditNote {
 }
 
 model ReminderEvent {
-  id                    String    @id
+  id                    String        @id
   invoiceId             String?
-  invoice               Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  invoiceNumberSnapshot String    @db.VarChar(64)
+  invoice               Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceNumberSnapshot String        @db.VarChar(64)
   orderNumberSnapshot   Int?
-  customerNameSnapshot  String    @db.VarChar(300)
+  customerNameSnapshot  String        @db.VarChar(300)
   level                 Int
   dueDate               DateTime
-  outstandingAmount     Decimal   @db.Decimal(12, 2)
-  fee                   Decimal   @db.Decimal(12, 2)
-  text                  String    @db.Text
-  actorName             String    @db.VarChar(191)
+  outstandingAmount     Decimal       @db.Decimal(12, 2)
+  fee                   Decimal       @db.Decimal(12, 2)
+  text                  String        @db.Text
+  actorName             String        @db.VarChar(191)
   sentAt                DateTime?
   archivedAt            DateTime?
   purgeAt               DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  emails                EmailOutbox[]
 
   @@index([invoiceId, level])
   @@index([invoiceNumberSnapshot])
@@ -316,28 +323,38 @@ model OrderActivityEvent {
 }
 
 model EmailOutbox {
-  id             String       @id
-  orderId        String?
-  order          Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  kind           String       @db.VarChar(32)
-  recipients     Json
-  subject        String       @db.VarChar(998)
-  contentHtml    String       @db.LongText
-  attachments    Json?
-  actorName      String?      @db.VarChar(191)
-  idempotencyKey String       @unique @db.VarChar(191)
-  status         String       @default("PENDING") @db.VarChar(16)
-  attempts       Int          @default(0)
-  nextAttemptAt  DateTime
-  lockedAt       DateTime?
-  sentAt         DateTime?
-  lastErrorCode  String?      @db.VarChar(100)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  events         EmailEvent[]
+  id              String         @id
+  orderId         String?
+  order           Order?         @relation("EmailOutboxOrder", fields: [orderId], references: [id], onDelete: Cascade)
+  /// Second offer of a two-option mail; receives only a journal entry after SENT.
+  optionOrderId   String?
+  optionOrder     Order?         @relation("EmailOutboxOption", fields: [optionOrderId], references: [id], onDelete: SetNull)
+  /// Payment reminder sent with this mail; gets `sentAt` once the mail is SENT.
+  reminderEventId String?
+  reminderEvent   ReminderEvent? @relation(fields: [reminderEventId], references: [id], onDelete: SetNull)
+  kind            String         @db.VarChar(32)
+  recipients      Json
+  subject         String         @db.VarChar(998)
+  contentHtml     String         @db.LongText
+  attachments     Json?
+  actorName       String?        @db.VarChar(191)
+  /// Snapshot of the sender's signature name at queue time.
+  signatureName   String?        @db.VarChar(100)
+  idempotencyKey  String         @unique @db.VarChar(191)
+  status          String         @default("PENDING") @db.VarChar(16)
+  attempts        Int            @default(0)
+  nextAttemptAt   DateTime
+  lockedAt        DateTime?
+  sentAt          DateTime?
+  lastErrorCode   String?        @db.VarChar(100)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  events          EmailEvent[]
 
   @@index([status, nextAttemptAt])
   @@index([orderId])
+  @@index([optionOrderId])
+  @@index([reminderEventId])
   @@map("emailOutbox")
 }
 
@@ -385,21 +402,12 @@ model CatalogCategory {
 }
 
 model CatalogFurniture {
-  id              Int                        @id @default(autoincrement())
-  name            String                     @db.VarChar(191)
-  volume          Decimal                    @default(0) @db.Decimal(10, 2)
-  step            Int?
-  sortOrder       Int                        @default(0)
-  weight          String?                    @db.VarChar(64)
-  montagePrice    Decimal                    @default(0) @db.Decimal(10, 2)
-  extraPrice      Decimal                    @default(0) @db.Decimal(10, 2)
-  demontage       Boolean                    @default(false)
-  notDismountable Boolean                    @default(false)
-  bulky           Boolean                    @default(false)
-  montage         Boolean                    @default(false)
-  m100            Boolean                    @default(false)
-  m150            Boolean                    @default(false)
-  categories      CatalogFurnitureCategory[]
+  id         Int                        @id @default(autoincrement())
+  name       String                     @db.VarChar(191)
+  volume     Decimal                    @default(0) @db.Decimal(10, 2)
+  step       Int                        @default(1)
+  sortOrder  Int                        @default(0)
+  categories CatalogFurnitureCategory[]
 
   @@index([sortOrder])
   @@map("catalogFurniture")

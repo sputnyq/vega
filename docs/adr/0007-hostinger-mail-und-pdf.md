@@ -20,11 +20,19 @@
 - Rechnungs-PDFs werden serverseitig aus `Invoice` im übernommenen Legacy-Layout
   erzeugt und als Download ausgeliefert. Der PDF-Renderer ist serverseitig;
   die verwundbare Legacy-Browserbibliothek `jspdf` wird nicht übernommen.
-- Angebots-, Gutschrift- und Mahn-PDFs sowie editierbare Versanddialoge bleiben
-  offen.
+- Auftrags-/Angebots-PDFs werden serverseitig erzeugt. Editierbare
+  Versanddialoge für Angebot, „2 Angebote" (nur aus Kopien), Absage,
+  Rechnung, Gutschrift und Mahnung sind umgesetzt. PDF-Anhänge werden beim Einreihen erzeugt, base64
+  in `EmailOutbox.attachments` gehalten und nach erfolgreichem Versand auf
+  `NULL` gesetzt; dauerhaft gespeicherte PDFs entstehen nicht. Gutschrift- und
+  Mahnungsmails verknüpfen die Outbox mit Auftrag bzw. `ReminderEvent`.
+- Mitarbeitende pflegen im Profil einen optionalen Signaturnamen
+  (`User.signatureName`). Er wird beim Einreihen in `EmailOutbox.signatureName`
+  übernommen und im Grußblock der Mailhülle über „Ihr Umzug Ruck Zuck Team“
+  gesetzt. Ohne Signaturnamen bleibt der Standardgruß.
 
 ## Folgen
 
-- Hostinger API-Attachmentspezifikation muss gegen offizielle API/`api-1.json` verifiziert werden.
+- Hostinger API-Attachmentspezifikation muss gegen offizielle API/`hostinger-email-api-definition.json` verifiziert werden.
 - Browser erhält keinen Mail-API-Schlüssel.
 - Mail Outbox/Retry muss idempotent sein, um Doppelversand zu verhindern.

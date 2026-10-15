@@ -1,4 +1,4 @@
-# ADR 0002: Better Auth, verpflichtendes TOTP und zwei Rollen
+# ADR 0002: Better Auth, TOTP und zwei Rollen
 
 - **Status:** Akzeptiert
 - **Datum:** 2026-10-06
@@ -6,7 +6,7 @@
 
 ## Entscheidung
 
-Better Auth mit E-Mail/Passwort und verpflichtendem TOTP für Admins und Kundenberater. Neu gesetzte Passwörter müssen mindestens 8 Zeichen enthalten, darunter je einen Großbuchstaben, Kleinbuchstaben und eine Zahl. Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden. Es gibt keine öffentliche Registrierung. Ein einmaliger Prisma-Seed legt `root_user` als ersten Admin an. Die Login-E-Mail und das Initialpasswort kommen aus `INITIAL_ADMIN_EMAIL` und `INITIAL_ADMIN_PASSWORD` in der serverseitigen Runtime-Konfiguration. Beim ersten Login muss das Initialpasswort geändert und TOTP eingerichtet/verifiziert werden, bevor geschützte Admin-Funktionen freigeschaltet werden. Danach können Admins Konten anlegen und ihnen auch die Rolle `Admin` zuweisen. Admins können für ein Konto eine Passwort-Reset-Mail auslösen; das neue Passwort setzt der Kontoinhaber über den kurzlebigen Reset-Link selbst. Recovery-Codes und ein dokumentierter Admin-Reset-Prozess werden vorgesehen.
+Better Auth mit E-Mail/Passwort und TOTP: verpflichtend für Admins, optional für Kundenberater. Kundenberater können TOTP im Profil freiwillig einrichten und mit Passwortbestätigung selbst wieder deaktivieren. Bewusster Trade-off (Entscheidung des Produktinhabers): Ohne TOTP genügt bei Kundenberatern ein kompromittiertes Passwort für Zugriff auf Auftrags- und Kundendaten. Neu gesetzte Passwörter müssen mindestens 8 Zeichen enthalten, darunter je einen Großbuchstaben, Kleinbuchstaben und eine Zahl. Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden. Es gibt keine öffentliche Registrierung. Ein einmaliger Prisma-Seed legt `root_user` als ersten Admin an. Die Login-E-Mail und das Initialpasswort kommen aus `INITIAL_ADMIN_EMAIL` und `INITIAL_ADMIN_PASSWORD` in der serverseitigen Runtime-Konfiguration. Beim ersten Login muss das Initialpasswort geändert und – bei Admins – TOTP eingerichtet/verifiziert werden, bevor geschützte Admin-Funktionen freigeschaltet werden. Danach können Admins Konten anlegen und ihnen auch die Rolle `Admin` zuweisen. Admins können für ein Konto eine Passwort-Reset-Mail auslösen; das neue Passwort setzt der Kontoinhaber über den kurzlebigen Reset-Link selbst. Recovery-Codes und ein dokumentierter Admin-Reset-Prozess werden vorgesehen.
 
 Better Auth wird mit der exakt gepinnten Version und deren Prisma-Adapter-/Plugin-Schema betrieben. `twoFactor` Server- und Client-Plugin stellen TOTP bereit; Enrollment benötigt Passwortbestätigung und eine erste erfolgreiche Codeprüfung. Einmalige Recovery-Codes werden geschützt ausgegeben/gespeichert. Geschützte Kundendatenrouten verweigern Zugriff, bis 2FA aktiviert ist.
 
@@ -42,20 +42,24 @@ Rollen sind `Admin` und `Kundenberater`. Berechtigungen werden serverseitig auf 
 - `/settings/users` und `/api/admin/staff` bieten Suche/Paginierung, Anlage,
   Sperrung/Entsperrung, Rollenwechsel, Passwort-Reset-Mail und 2FA-Reset. Neue
   Accounts benötigen ein sicher separat übergebenes Initialpasswort,
-  Passwortwechsel und erfolgreiches TOTP-Enrollment.
+  Passwortwechsel; Admin-Konten zusätzlich erfolgreiches TOTP-Enrollment.
 - Rollenwechsel, Sperrung und 2FA-Reset widerrufen alle Sitzungen sowie offene
   Reset-/2FA-Challenges. Entsperrung stellt keine alten Sitzungen wieder her.
   Sperrung verhindert auch neue Better-Auth-Sitzungen. Die Lifecycle-Transaktion
   prüft den ausführenden Admin erneut und schützt vor Selbstsperrung,
   Selbstherabstufung und Verlust des letzten aktiven Admins.
-- TOTP kann nicht deaktiviert, durch OTP-Enrollment ersetzt oder per
-  `trustDevice` umgangen werden. Recovery-Codes bleiben case-sensitiv,
+- Admins können TOTP nicht deaktivieren; Kundenberater nur selbst über
+  `/two-factor/disable` mit Passwortbestätigung (serverseitige Rollenprüfung).
+  TOTP kann nicht durch OTP-Enrollment ersetzt oder per `trustDevice`
+  umgangen werden. Die Rollenregel steht in `isTotpRequired` in
+  `@vega/domain`; ein zum Admin beförderter Kundenberater ohne TOTP muss es
+  vor weiterem Zugriff einrichten. Recovery-Codes bleiben case-sensitiv,
   verschlüsselt und einmalig verwendbar. Ein Admin-2FA-Reset löscht Faktoren und
-  Codes; die erneute Anmeldung erfordert danach frisches Enrollment.
+  Codes; Admins müssen danach neu einrichten, Kundenberater können es.
 - Der einzige aktive Admin kann mit dem ausdrücklich bestätigten,
   serverseitigen `auth:recover-admin`-Befehl wiederhergestellt werden. Identität
   und Datenbanksicherung müssen vorab außerhalb der App geprüft werden;
-  Anleitung in `README.md`. Der Befehl ändert kein Passwort und ist kein
+  Anleitung in `docs/operations.md`. Der Befehl ändert kein Passwort und ist kein
   erneuter Bootstrap.
 - Der Admin-Mailpfad meldet Erfolg erst nach bestätigtem Hostinger-Versand;
   Better Auths generische Self-Service-Antwort bleibt unverändert. Reset-Links

@@ -53,7 +53,7 @@ export function FurnitureCalculator({ draft, setDraft, resources }: StepProps) {
       return <Column key={category.id}><Heading>{category.name}</Heading><Grid container spacing={4} sx={{ alignItems: "flex-end" }}>
         {furniture.map((item) => {
           const key = `${item.id}:${category.id}`;
-          return <Grid size={{ xs: 12, sm: 6 }} key={item.id}><NumberInput label={item.name} value={draft.furniture[key] ?? 0} step={item.step ?? 1}
+          return <Grid size={{ xs: 12, sm: 6 }} key={item.id}><NumberInput label={item.name} value={draft.furniture[key] ?? 0} step={item.step}
             onChange={(quantity) => setDraft((current) => ({ ...current, furniture: { ...current.furniture, [key]: quantity } }))} /></Grid>;
         })}
       </Grid></Column>;

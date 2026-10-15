@@ -7,21 +7,27 @@ import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
+import { isValidEmailAddress } from "@vega/domain";
 import { createAuth } from "./auth-config.js";
 import { requireAdmin, requireCompletedStaff } from "./auth-middleware.js";
+import { createAdminRateLimit, createAssetRateLimit, createProfileEmailRateLimit } from "./http-rate-limit.js";
 import type { AppConfig } from "./config.js";
 import { prisma } from "./prisma.js";
 import { meetsPasswordPolicy, PASSWORD_POLICY_MESSAGE } from "./password-policy.js";
 import { createOrderRouter } from "./orders/order-routes.js";
 import { createCatalogRouter } from "./catalog/catalog-routes.js";
 import { createAdminOrderRouter } from "./orders/admin-order-routes.js";
+import { createCreditNoteRouter } from "./invoices/credit-note-routes.js";
 import { createInvoiceRouter } from "./invoices/invoice-routes.js";
+import { createReminderRouter } from "./invoices/reminder-routes.js";
 import { createUploadRouter } from "./uploads/upload-routes.js";
 import { createUploadService, UploadError } from "./uploads/upload-service.js";
 import { createCustomerFormRouter } from "./customer-form-routes.js";
 import { createSettingsRouter } from "./settings/settings-routes.js";
 import { createRouteRouter } from "./maps/route-routes.js";
+import { createAdminPlacesRouter } from "./maps/admin-places-routes.js";
 import { createStaffRouter } from "./staff/staff-routes.js";
+import { loadSignatureName, validateSignatureName } from "./staff/signature-name.js";
 
 const adminBuild = fileURLToPath(new URL("../../admin/dist", import.meta.url));
 const customerFormBuild = fileURLToPath(new URL("../../customer-form/dist", import.meta.url));
@@ -165,9 +171,13 @@ export function createApp(config: AppConfig) {
   });
 
   // Every future admin API is denied until the password and mandatory TOTP setup are complete.
+  // The per-staff limiter runs after authentication so anonymous requests keep
+  // their 401/403 responses and only completed staff consume quota.
   app.use("/api/admin", requireCompletedStaff(auth));
+  app.use("/api/admin", createAdminRateLimit());
   app.use("/api/admin/settings", requireAdmin(auth), createSettingsRouter(config));
   app.use("/api/admin/staff", requireAdmin(auth), createStaffRouter(auth, config));
+  app.use("/api/admin/places", createAdminPlacesRouter(config));
   app.use("/api/admin/routes", createRouteRouter(config));
   app.get("/api/admin/orders/:orderNumber/images", async (req, res, next) => {
     try {
@@ -188,10 +198,38 @@ export function createApp(config: AppConfig) {
       return;
     }
   });
-  app.use("/api/admin/orders", createAdminOrderRouter());
-  app.use("/api/admin/invoices", requireAdmin(auth), createInvoiceRouter());
+  app.use("/api/admin/orders", createAdminOrderRouter(config));
+  app.use("/api/admin/invoices", requireAdmin(auth), createInvoiceRouter(config));
+  app.use("/api/admin/credits", requireAdmin(auth), createCreditNoteRouter(config));
+  app.use("/api/admin/reminders", requireAdmin(auth), createReminderRouter(config));
 
-  app.post("/api/admin/profile/email", async (req, res, next) => {
+  app.get("/api/admin/profile/signature", async (_req, res, next) => {
+    try {
+      const staffUser = res.locals.staffUser as { id: string };
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: { signatureName: await loadSignatureName(staffUser.id) } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/admin/profile/signature", async (req, res, next) => {
+    try {
+      const input = validateSignatureName((req.body as { signatureName?: unknown } | undefined)?.signatureName);
+      if (!input.ok) {
+        res.status(400).json({ error: { code: "INVALID_SIGNATURE_NAME", message: input.message } });
+        return;
+      }
+      const staffUser = res.locals.staffUser as { id: string };
+      await prisma.user.update({ where: { id: staffUser.id }, data: { signatureName: input.value } });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: { signatureName: input.value } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/admin/profile/email", createProfileEmailRateLimit(), async (req, res, next) => {
     try {
       const origin = req.headers.origin;
       if (origin !== undefined && !config.betterAuthTrustedOrigins.includes(origin)) {
@@ -236,7 +274,11 @@ export function createApp(config: AppConfig) {
     }
   });
 
-  app.get("/customer-form/loader.js", async (_req, res, next) => {
+  // Loader, static builds, and SPA entry routes touch the filesystem on every
+  // request. The IP-keyed limiter keeps repeated asset fetching from becoming
+  // a local availability vector without changing assets or loader contracts.
+  const assetRateLimit = createAssetRateLimit();
+  app.get("/customer-form/loader.js", assetRateLimit, async (_req, res, next) => {
     try {
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       const manifestPath = `${customerFormBuild}/.vite/manifest.json`;
@@ -263,17 +305,17 @@ import(${JSON.stringify(asset)}).catch(() => { root.textContent = "Das Umzugsfor
       return;
     } catch (error) { next(error); }
   });
-  app.use("/customer-form", (_req, res, next) => {
+  app.use("/customer-form", assetRateLimit, (_req, res, next) => {
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     next();
   }, express.static(customerFormBuild, { index: false, fallthrough: true }));
-  app.get(/^\/customer-form\/?$/, (_req, res, next) => {
+  app.get(/^\/customer-form\/?$/, assetRateLimit, (_req, res, next) => {
     if (!existsSync(`${customerFormBuild}/index.html`)) return next();
     return res.sendFile(`${customerFormBuild}/index.html`);
   });
 
-  app.use(express.static(adminBuild, { index: false, fallthrough: true }));
-  app.get("/", async (req, res, next) => {
+  app.use(assetRateLimit, express.static(adminBuild, { index: false, fallthrough: true }));
+  app.get("/", assetRateLimit, async (req, res, next) => {
     try {
       const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
       if (!session) {
@@ -286,7 +328,7 @@ import(${JSON.stringify(asset)}).catch(() => { root.textContent = "Das Umzugsfor
       next(error);
     }
   });
-  app.get("/login", async (req, res, next) => {
+  app.get("/login", assetRateLimit, async (req, res, next) => {
     try {
       const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
       if (session) {
@@ -299,17 +341,17 @@ import(${JSON.stringify(asset)}).catch(() => { root.textContent = "Das Umzugsfor
       next(error);
     }
   });
-  app.get("/two-factor", (_req, res, next) => {
+  app.get("/two-factor", assetRateLimit, (_req, res, next) => {
     if (!existsSync(`${adminBuild}/index.html`)) return next();
     res.sendFile(`${adminBuild}/index.html`);
   });
-  app.get(["/forgot-password", "/reset-password"], (_req, res, next) => {
+  app.get(["/forgot-password", "/reset-password"], assetRateLimit, (_req, res, next) => {
     if (!existsSync(`${adminBuild}/index.html`)) return next();
     return res.sendFile(`${adminBuild}/index.html`);
   });
-  app.get(/^\/admin\/?$/, (_req, res) => res.redirect(302, "/"));
+  app.get(/^\/admin\/?$/, assetRateLimit, (_req, res) => res.redirect(302, "/"));
 
-  app.get(/^(?!\/api(?:\/|$))(?!\/health(?:\/|$))(?!\/customer-form(?:\/|$))(?!\/assets(?:\/|$)).*/, (req, res, next) => {
+  app.get(/^(?!\/api(?:\/|$))(?!\/health(?:\/|$))(?!\/customer-form(?:\/|$))(?!\/assets(?:\/|$)).*/, assetRateLimit, (req, res, next) => {
     if (!req.accepts("html") || !existsSync(`${adminBuild}/index.html`)) return next();
     res.status(404).sendFile(`${adminBuild}/index.html`);
   });
@@ -331,7 +373,7 @@ import(${JSON.stringify(asset)}).catch(() => { root.textContent = "Das Umzugsfor
 }
 
 function isValidEmail(value: string): boolean {
-  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
+  return isValidEmailAddress(value);
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

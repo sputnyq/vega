@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { OrderAddress, OrderAddressRole, OrderPosition, Prisma } from "@prisma/client";
+import type { OrderAddress, OrderAddressRole, OrderPosition, Prisma } from "../generated/prisma/client.js";
 import type { CreateOrderInput, OrderAddressInput, OrderFurnitureInput, OrderServiceInput } from "@vega/domain";
 import { validateOrderCreateInput } from "./order-input.js";
 

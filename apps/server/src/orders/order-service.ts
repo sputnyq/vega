@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AppSettingsDto, CreateOrderInput } from "@vega/domain";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../prisma.js";
 import { emailDefaults } from "../mail/email-template.js";
 import { attachUploadClaims } from "../uploads/upload-service.js";

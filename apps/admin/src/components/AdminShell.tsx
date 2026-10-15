@@ -1,7 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import {
   AccountCircleOutlined,
-  AddOutlined,
+  CategoryOutlined,
+  ChairOutlined,
+  HandymanOutlined,
+  ViewModuleOutlined,
+  LocalOfferOutlined,
+  PaymentsOutlined,
   ArchiveOutlined,
   ContentCopyOutlined,
   ExpandLess,
@@ -30,38 +35,74 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
   Paper,
   Toolbar,
   Tooltip,
   Typography,
 } from "@mui/material";
 import { authClient } from "../auth-client.js";
+import { useAdminNotification } from "./AdminNotifications.js";
 import type { AdminRoute } from "../routes.js";
 import type { StaffUser } from "../types.js";
+import type { EmailTarget } from "../email/EmailDialog.js";
+
+// Loaded on demand so the rich-text editor stays out of the initial bundle.
+const EmailDialog = lazy(() => import("../email/EmailDialog.js").then((module) => ({ default: module.EmailDialog })));
 
 interface AdminShellProps {
   user: StaffUser;
   route: AdminRoute;
   pathname: string;
   navigate: (path: string) => void;
-  orderSaved?: boolean;
   orderDirty?: boolean;
+  orderBusy?: boolean;
+  orderIsCopy?: boolean;
+  invoiceBusy?: boolean;
+  invoiceDirty?: boolean;
+  invoiceNumber?: string | undefined;
   children: ReactNode;
 }
 
-export function AdminShell({ user, route, pathname, navigate, orderSaved = false, orderDirty = false, children }: AdminShellProps) {
+export function AdminShell({ user, route, pathname, navigate, orderDirty = false, orderBusy = false, orderIsCopy = false, invoiceBusy = false, invoiceDirty = false, invoiceNumber, children }: AdminShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [contentOpen, setContentOpen] = useState(route.settingsArea === "content");
   const [archiveOpen, setArchiveOpen] = useState(
     pathname === "/orders/archived" || pathname === "/invoices/archived",
   );
   const [busy, setBusy] = useState(false);
+  const [emailMenuAnchor, setEmailMenuAnchor] = useState<HTMLElement | null>(null);
+  const [emailTarget, setEmailTarget] = useState<EmailTarget | null>(null);
+  const notify = useAdminNotification();
   const isAdmin = user.role === "Admin";
+  const isContentArea = route.settingsArea === "content";
   const isArchivePath = pathname === "/orders/archived" || pathname === "/invoices/archived";
-  const editedOrderNumber = pathname.match(/^\/edit\/(\d+)$/u)?.[1];
+  const editedOrderNumber = pathname.match(/^\/edit\/(-?\d+)$/u)?.[1];
+  const editedInvoiceId = pathname === "/invoices/new" || pathname === "/invoices/archived" ? undefined : pathname.match(/^\/invoices\/([^/]+)$/u)?.[1];
+  const isInvoiceEditor = editedInvoiceId !== undefined || pathname === "/invoices/new" || pathname === "/blanco" || route.sourceOrderNumber !== undefined;
+  const orderHasChanges = orderDirty || editedOrderNumber === "-1";
+  const invoiceHasChanges = invoiceDirty || (isInvoiceEditor && !editedInvoiceId);
+  const orderActionsDisabled = orderBusy || orderHasChanges;
+  const invoiceActionsDisabled = invoiceBusy || invoiceHasChanges;
+  const headerTitle = editedOrderNumber
+    ? `Auftrag | ${editedOrderNumber === "-1" ? "Neu" : editedOrderNumber}`
+    : isInvoiceEditor
+      ? editedInvoiceId ? invoiceNumber ? `Rechnung | ${invoiceNumber}` : "Rechnung" : "Rechnung | Neu"
+      : route.title;
+
+  useEffect(() => {
+    if (isContentArea) setContentOpen(true);
+  }, [isContentArea]);
 
   useEffect(() => {
     if (isArchivePath) setArchiveOpen(true);
   }, [isArchivePath]);
+
+  useEffect(() => {
+    setEmailMenuAnchor(null);
+    setEmailTarget(null);
+  }, [pathname]);
 
   async function signOut() {
     setBusy(true);
@@ -70,7 +111,7 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
   }
 
   async function copyOrder() {
-    if (!editedOrderNumber) return;
+    if (!editedOrderNumber || orderActionsDisabled) return;
     const response = await fetch(`/api/admin/orders/${editedOrderNumber}/copy`, { method: "POST", credentials: "same-origin" });
     if (!response.ok) return;
     const body = await response.json() as { data?: { orderNumber?: number } };
@@ -78,9 +119,24 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
   }
 
   async function archiveOrder() {
-    if (!editedOrderNumber || !window.confirm("Auftrag wirklich archivieren?")) return;
+    if (!editedOrderNumber || orderActionsDisabled || !window.confirm("Auftrag wirklich archivieren?")) return;
     const response = await fetch(`/api/admin/orders/${editedOrderNumber}/archive`, { method: "POST", credentials: "same-origin" });
     if (response.ok) navigate("/");
+  }
+
+  function openOrderEmail(kind: "offer" | "offer-pair" | "decline") {
+    setEmailMenuAnchor(null);
+    if (editedOrderNumber && !orderActionsDisabled) setEmailTarget({ type: "order", orderNumber: Number(editedOrderNumber), kind });
+  }
+
+  async function archiveInvoice() {
+    if (!editedInvoiceId || invoiceActionsDisabled || !window.confirm("Rechnung vor dem Archivieren extern sichern. Rechnung wirklich archivieren?")) return;
+    const response = await fetch(`/api/admin/invoices/${editedInvoiceId}/archive`, { method: "POST", credentials: "same-origin" });
+    if (response.ok) {
+      navigate("/invoices");
+      return;
+    }
+    notify("error", "Rechnung konnte nicht archiviert werden.");
   }
 
   return (
@@ -90,38 +146,49 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
           <IconButton color="inherit" onClick={() => setDrawerOpen(true)} aria-label="Menü öffnen">
             <MenuOutlined />
           </IconButton>
-          <Typography component="h1" variant="h6" sx={{ flexGrow: 1, ml: 2 }}>{route.title}</Typography>
-          {pathname.startsWith("/edit/") && !orderSaved && <>
-            <Tooltip title="Speichern"><IconButton color="inherit" type="submit" form="order-create-form" aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderDirty}><SaveOutlined /></Badge></IconButton></Tooltip>
+          <Typography component="h1" variant="h6" sx={{ flexGrow: 1, ml: 2 }}>{headerTitle}</Typography>
+          {pathname.startsWith("/edit/") && <>
+            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" disabled={orderBusy} aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
             {editedOrderNumber && <>
-              <Tooltip title="Angebotskopie erstellen"><IconButton color="inherit" onClick={() => void copyOrder()} aria-label="Angebotskopie erstellen"><ContentCopyOutlined /></IconButton></Tooltip>
-              <Tooltip title="PDF-Erzeugung wird mit dem Backend-PDF-Service aktiviert"><span><IconButton color="inherit" disabled aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
-              <Tooltip title="E-Mail-Versand wird mit PDF-Anhang und Versanddialog aktiviert"><span><IconButton color="inherit" disabled aria-label="E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
-              <Tooltip title="Archivieren"><IconButton color="warning" onClick={() => void archiveOrder()} aria-label="Auftrag archivieren"><ArchiveOutlined /></IconButton></Tooltip>
+              <Tooltip title="Angebotskopie anlegen"><span><IconButton color="inherit" disabled={orderActionsDisabled} onClick={() => void copyOrder()} aria-label="Angebotskopie anlegen"><ContentCopyOutlined /></IconButton></span></Tooltip>
+              <Tooltip title="Als PDF speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="pdf" disabled={orderActionsDisabled} aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
+              <Tooltip title="E-Mail versenden"><span><IconButton color="inherit" disabled={orderActionsDisabled} onClick={(event) => setEmailMenuAnchor(event.currentTarget)} aria-label="E-Mail versenden" aria-haspopup="menu"><EmailOutlined /></IconButton></span></Tooltip>
+              <Menu anchorEl={emailMenuAnchor} open={emailMenuAnchor !== null} onClose={() => setEmailMenuAnchor(null)}>
+                <MenuItem onClick={() => openOrderEmail("offer")}>Angebot versenden</MenuItem>
+                {orderIsCopy && <MenuItem onClick={() => openOrderEmail("offer-pair")}>2 Angebote versenden</MenuItem>}
+                <MenuItem onClick={() => openOrderEmail("decline")}>Absage versenden</MenuItem>
+              </Menu>
+              <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
+              <Tooltip title="Archivieren"><span><IconButton color="warning" disabled={orderActionsDisabled} onClick={() => void archiveOrder()} aria-label="Auftrag archivieren"><ArchiveOutlined /></IconButton></span></Tooltip>
+              {isAdmin && <>
+                <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
+                <Tooltip title="Rechnung aus Auftrag anlegen"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="invoice" disabled={orderActionsDisabled} aria-label="Rechnung aus Auftrag anlegen"><ReceiptLongOutlined /></IconButton></span></Tooltip>
+              </>}
             </>}
+          </>}
+          {isInvoiceEditor && <>
+            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="invoice-editor-form" disabled={invoiceBusy} aria-label="Rechnung speichern"><Badge color="error" variant="dot" invisible={!invoiceHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
+            <Tooltip title="PDF speichern"><span><IconButton color="inherit" component="a" href={!invoiceActionsDisabled && editedInvoiceId ? `/api/admin/invoices/${editedInvoiceId}/pdf` : undefined} disabled={invoiceActionsDisabled} aria-label="Rechnungs-PDF speichern"><FileDownloadOutlined /></IconButton></span></Tooltip>
+            <Tooltip title="Rechnung per E-Mail versenden"><span><IconButton color="inherit" disabled={invoiceActionsDisabled || !editedInvoiceId} onClick={() => { if (editedInvoiceId) setEmailTarget({ type: "invoice", id: editedInvoiceId }); }} aria-label="Rechnung per E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
+            <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
+            <Tooltip title="Archivieren"><span><IconButton color="warning" disabled={invoiceActionsDisabled} onClick={() => void archiveInvoice()} aria-label="Rechnung archivieren"><ArchiveOutlined /></IconButton></span></Tooltip>
           </>}
         </Toolbar>
       </AppBar>
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <Box sx={{ width: 300, pt: 2, height: "100%", display: "flex", flexDirection: "column" }} role="navigation" aria-label="Hauptmenü">
+      {emailTarget && <Suspense fallback={null}><EmailDialog target={emailTarget} onClose={() => setEmailTarget(null)} /></Suspense>}
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ "& .MuiDivider-root": { mx: 2 } }}>
+        <Box sx={{ width: 300, pt: 0.5, height: "100%", display: "flex", flexDirection: "column" }} role="navigation" aria-label="Hauptmenü">
           <Box>
-            <Typography variant="overline" color="primary" sx={{ px: 2 }}>Vega · Verwaltung</Typography>
+            <Typography variant="subtitle1" color="primary" align="center" sx={{ px: 1, py: 0.5, display: "block", fontFamily: "ui-monospace, monospace", fontSize: "2rem", lineHeight: 1.2, fontWeight: 700 }}>VEGA</Typography>
+            <Divider />
             <List>
-              <ListItemButton selected={pathname === "/edit/-1"} onClick={() => { setDrawerOpen(false); navigate("/edit/-1"); }}>
-                <ListItemIcon><AddOutlined /></ListItemIcon>
-                <ListItemText primary="Auftrag anlegen" />
-              </ListItemButton>
               <ListItemButton selected={pathname === "/"} onClick={() => { setDrawerOpen(false); navigate("/"); }}>
                 <ListItemIcon><FormatListNumberedOutlined /></ListItemIcon>
-                <ListItemText primary="Alle Aufträge" />
+                <ListItemText primary="Aufträge" />
               </ListItemButton>
               <Divider sx={{ my: 1 }} />
               {isAdmin && (
                 <>
-                  <ListItemButton selected={pathname === "/blanco" || pathname === "/invoices/new"} onClick={() => { setDrawerOpen(false); navigate("/blanco"); }}>
-                    <ListItemIcon><ReceiptLongOutlined /></ListItemIcon>
-                    <ListItemText primary="Neue Rechnung" />
-                  </ListItemButton>
                   <ListItemButton selected={pathname === "/invoices"} onClick={() => { setDrawerOpen(false); navigate("/invoices"); }}>
                     <ListItemIcon><ReceiptLongOutlined /></ListItemIcon>
                     <ListItemText primary="Rechnungen" />
@@ -165,19 +232,39 @@ export function AdminShell({ user, route, pathname, navigate, orderSaved = false
                     <ListItemIcon><SettingsOutlined /></ListItemIcon>
                     <ListItemText primary="Optionen" />
                   </ListItemButton>
-                  <ListItemButton
-                    selected={route.settingsArea === "content"}
-                    onClick={() => { setDrawerOpen(false); navigate("/settings/content"); }}
-                  >
-                    <ListItemIcon><Inventory2Outlined /></ListItemIcon>
-                    <ListItemText primary="Content Management" />
+                  <ListItemButton selected={isContentArea} onClick={() => setContentOpen((open) => !open)}>
+                    <ListItemIcon><ViewModuleOutlined /></ListItemIcon>
+                    <ListItemText primary="Content" />
+                    {contentOpen ? <ExpandLess /> : <ExpandMore />}
                   </ListItemButton>
+                  <Collapse in={contentOpen} timeout="auto" unmountOnExit>
+                    <List component="div" disablePadding>
+                      {[
+                        { label: "Angebote", path: "/settings/offers", section: "offers", icon: <LocalOfferOutlined /> },
+                        { label: "Preise", path: "/settings/prices", section: "prices", icon: <PaymentsOutlined /> },
+                        { label: "Verpackung", path: "/settings/packings", section: "packings", icon: <Inventory2Outlined /> },
+                        { label: "Leistungen", path: "/settings/services", section: "services", icon: <HandymanOutlined /> },
+                        { label: "Kategorien", path: "/settings/categories", section: "categories", icon: <CategoryOutlined /> },
+                        { label: "Möbel", path: "/settings/furniture", section: "furniture", icon: <ChairOutlined /> },
+                      ].map((item) => (
+                        <ListItemButton
+                          key={item.path}
+                          sx={{ pl: 4 }}
+                          selected={route.contentSection === item.section}
+                          onClick={() => { setDrawerOpen(false); navigate(item.path); }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+                          <ListItemText primary={item.label} />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  </Collapse>
                   <ListItemButton
                     selected={route.settingsArea === "users"}
                     onClick={() => { setDrawerOpen(false); navigate("/settings/users"); }}
                   >
                     <ListItemIcon><PeopleAltOutlined /></ListItemIcon>
-                    <ListItemText primary="User Management" />
+                    <ListItemText primary="Nutzer" />
                   </ListItemButton>
                 </>
               )}

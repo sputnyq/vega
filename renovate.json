@@ -6,6 +6,15 @@
   "minimumReleaseAge": "3 days",
   "packageRules": [
     {
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "mariadb"
+      ],
+      "allowedVersions": "/^10\\./"
+    },
+    {
       "matchUpdateTypes": [
         "patch"
       ],

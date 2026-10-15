@@ -12,8 +12,9 @@ zusätzlich dessen `AGENTS.md` lesen; insbesondere gelten die Legacy-Regeln in
 - `docs/` ist die maßgebliche und stets zu verwendende Produkt- und
   Architekturquelle für Vega. Vor jeder Implementierung die betroffenen
   Abschnitte in `docs/implementation-plan.md`,
-  `docs/target-architecture.md` und den relevanten ADRs lesen. Glossar und
-  Integrations-Proofs in `docs/` ergänzen bei Bedarf Begriffe und
+  `docs/target-architecture.md` und den relevanten ADRs lesen. Den aktuellen
+  Stand führt `docs/implementation-status.md`, Betrieb/Konfiguration
+  `docs/operations.md`. Glossar und Integrations-Proofs in `docs/` ergänzen bei Bedarf Begriffe und
   technische Randbedingungen. Für Vega keine parallelen Dokumentkopien
   außerhalb von `docs/` als Quelle verwenden.
 - `old-app/` enthält das zu modernisierende Bestandssystem. Untersuche dort
@@ -34,7 +35,7 @@ zusätzlich dessen `AGENTS.md` lesen; insbesondere gelten die Legacy-Regeln in
   konkrete Serverversion. `docker-compose.yml` pinnt lokal MariaDB 10.11.19
   als Kompatibilitätsbasis; den tatsächlichen Hostinger-Patchstand bei Bedarf
   auf der Ziel-Datenbank mit `SELECT VERSION()` prüfen. Details und Quelle stehen
-  in `README.md`.
+  in `docs/operations.md`.
 
 ## Vorgehen bei Änderungen
 
@@ -49,8 +50,10 @@ zusätzlich dessen `AGENTS.md` lesen; insbesondere gelten die Legacy-Regeln in
    Zielruntime ist Node.js 24; Architekturvorgaben sind Express 5, TypeScript 7,
    React 19, Vite und MUI. Ein Express-Prozess liefert API und getrennte
    Admin- und Kundenformular-Builds aus.
-4. Nach Codeänderungen mindestens `npm run typecheck`, `npm test` und
-   `npm run build` ausführen (Node 24, Installation aus `package-lock.json`).
+4. Nach Codeänderungen mindestens `npm run typecheck`, `npm run lint`,
+   `npm test` und `npm run build` ausführen (Node 24, Installation aus
+   `package-lock.json`). Bei Schema- oder Auth-Änderungen zusätzlich
+   `npm run test:database` gegen eine separate `_test`-Datenbank.
    Ergänze oder ändere Tests für das betroffene Verhalten.
 
 ## Nicht verhandelbare Zielregeln
@@ -65,7 +68,8 @@ zusätzlich dessen `AGENTS.md` lesen; insbesondere gelten die Legacy-Regeln in
   `margin="dense"` und `size="small"` über das Admin-Theme. Für neue oder
   überarbeitete Formulare diese Voreinstellung beibehalten und keine einzelnen
   Felder auf `normal`/`medium` zurücksetzen.
-- Authentifizierung nutzt Better Auth mit verpflichtendem TOTP und den in den
+- Authentifizierung nutzt Better Auth mit TOTP (Pflicht für Admins, optional
+  für Kundenberater) und den in den
   Dokumenten festgelegten Rollen. Datenbank ist frisches Hostinger-MySQL mit
   Prisma und versionierten Migrationen; Bestandsdaten werden nicht migriert.
 - Mail, Auth, Google, GCS und Datenbank-Credentials bleiben ausschließlich in

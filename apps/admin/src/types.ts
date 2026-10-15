@@ -10,4 +10,5 @@ export type StaffUser = {
 
 export type PendingInitialPassword = {
   currentPassword: string;
+  totpRequired: boolean;
 };

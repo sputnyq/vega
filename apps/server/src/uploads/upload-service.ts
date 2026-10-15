@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Storage, type BucketMetadata } from "@google-cloud/storage";
 import sharp from "sharp";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { AppConfig } from "../config.js";
 import { prisma } from "../prisma.js";
 

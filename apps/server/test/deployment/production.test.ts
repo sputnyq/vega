@@ -20,13 +20,14 @@ test("built single-process deployment serves API, both frontends and absolute lo
     cwd: root, stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env, NODE_ENV: "production", HOST: "127.0.0.1", PORT: String(port),
+      DATABASE_URL: "mysql://deployment_test:deployment_test@127.0.0.1:1/vega_deployment_test",
       APP_BASE_URL: "https://vega.example.test", BETTER_AUTH_URL: "https://vega.example.test",
       BETTER_AUTH_TRUSTED_ORIGINS: "https://vega.example.test",
       CORS_ALLOWED_ORIGINS: "https://wordpress.example.test",
       BETTER_AUTH_SECRET: "deployment-test-only-secret-at-least-32-characters",
       HOSTINGER_MAIL_API_TOKEN: "deployment-test-only-token",
       HOSTINGER_MAILBOX_RESOURCE_ID: "deployment-test-mailbox",
-      HOSTINGER_MAIL_API_BASE_URL: "", GCS_BUCKET: "", GOOGLE_PLACES_API_KEY: "", GOOGLE_ROUTES_API_KEY: "",
+      HOSTINGER_MAIL_API_BASE_URL: "", GCS_BUCKET: "", GOOGLE_MAPS_API_KEY: "",
     },
   });
   child.stdout.resume();

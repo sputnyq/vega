@@ -1,16 +1,24 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../generated/prisma/client.js";
 import { Router, type Response } from "express";
 import { prisma } from "../prisma.js";
-import { validateOrderCreateInput } from "./order-input.js";
+import { createAdminRateLimit } from "../http-rate-limit.js";
+import { hasUnchangedCustomerDateRange, validateOrderCreateInput } from "./order-input.js";
 import { normalizeOrderCatalogInput } from "./order-service.js";
 import { orderDataWithRelations, orderRelationCreates, orderRelations } from "./order-relations.js";
+import { renderOrderPdf } from "./order-pdf-service.js";
+import { registerOrderEmailRoutes } from "./order-email-routes.js";
+import type { AppConfig } from "../config.js";
 
 const PAGE_SIZE_MAX = 100;
 const ARCHIVE_RETENTION_DAYS = 60;
 
-export function createAdminOrderRouter() {
+export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail: null }) {
   const router = Router();
+  // Standard per-staff limiter at the router boundary (app-level admin
+  // limiter also applies; both use generous quotas for staff workflows).
+  router.use(createAdminRateLimit());
+  registerOrderEmailRoutes(router, config);
 
   router.get("/", async (req, res, next) => {
     try {
@@ -65,6 +73,23 @@ export function createAdminOrderRouter() {
     } catch (error) { next(error); }
   });
 
+  router.get("/:orderNumber/pdf", async (req, res, next) => {
+    try {
+      const orderNumber = parseOrderNumber(req.params.orderNumber);
+      if (orderNumber === null) return notFound(res);
+      const order = await prisma.order.findUnique({ where: { orderNumber }, include: orderRelations });
+      if (!order) return notFound(res);
+      const { pdf, filename } = await renderOrderPdf(order);
+      await prisma.orderActivityEvent.create({
+        data: { id: randomUUID(), orderId: order.id, action: "PDF_EXPORTED", actorName: String(res.locals.staffUser.name) },
+      });
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.status(200).send(pdf);
+    } catch (error) { next(error); }
+  });
+
   router.post("/:orderNumber/copy", async (req, res, next) => {
     try {
       const orderNumber = parseOrderNumber(req.params.orderNumber);
@@ -112,11 +137,12 @@ export function createAdminOrderRouter() {
       const actorName = String(res.locals.staffUser.name);
       try {
         const order = await prisma.$transaction(async (tx) => {
-          const existing = await tx.order.findUnique({ where: { orderNumber }, select: { id: true, archivedAt: true } });
+          const existing = await tx.order.findUnique({ where: { orderNumber }, select: { id: true, archivedAt: true, data: true } });
           if (!existing) throw new Error("ORDER_NOT_FOUND");
           if (existing.archivedAt) throw new Error("ORDER_ARCHIVED");
+          if (!hasUnchangedCustomerDateRange(normalized, existing.data)) throw new Error("CUSTOMER_DATE_RANGE_READ_ONLY");
           const relations = orderRelationCreates(normalized);
-          const updated = await tx.order.update({ where: { id: existing.id }, data: {
+          const updated = await tx.order.update({ where: { id: existing.id, archivedAt: null }, data: {
             customerName, customerEmail: normalized.customer.email || null, customerPhone: normalized.customer.phone,
             source: normalized.orderSource ?? "individuelle", data: JSON.parse(JSON.stringify(normalized)) as Prisma.InputJsonValue, edited: true,
             addresses: { deleteMany: {}, ...relations.addresses },
@@ -130,6 +156,9 @@ export function createAdminOrderRouter() {
       } catch (error) {
         if (isMissingOrder(error)) return notFound(res);
         if (error instanceof Error && error.message === "ORDER_NOT_FOUND") return notFound(res);
+        if (error instanceof Error && error.message === "CUSTOMER_DATE_RANGE_READ_ONLY") {
+          return invalidOrder(res, [{ field: "dateFrom", message: "Von/Bis können nur im Kundenformular gesetzt werden." }]);
+        }
         if (error instanceof Error && error.message === "ORDER_ARCHIVED") {
           res.status(409).json({ error: { code: "ORDER_ARCHIVED", message: "Archivierte Aufträge müssen vor der Bearbeitung wiederhergestellt werden." } });
           return;
@@ -147,9 +176,9 @@ export function createAdminOrderRouter() {
       const purgeAt = new Date(now.getTime() + ARCHIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
       const actorName = String(res.locals.staffUser.name);
       const updated = await prisma.$transaction(async (tx) => {
-        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: null }, select: { id: true } });
+        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: null }, select: { id: true, updatedAt: true } });
         if (!existing) throw new Error("ORDER_NOT_FOUND");
-        const order = await tx.order.update({ where: { id: existing.id }, data: { archivedAt: now, purgeAt }, select: { id: true, orderNumber: true, archivedAt: true, purgeAt: true } });
+        const order = await tx.order.update({ where: { id: existing.id, archivedAt: null, updatedAt: existing.updatedAt }, data: { archivedAt: now, purgeAt, updatedAt: existing.updatedAt }, select: { id: true, orderNumber: true, archivedAt: true, purgeAt: true } });
         await tx.orderActivityEvent.create({ data: { id: randomUUID(), orderId: order.id, action: "ARCHIVED", actorName } });
         return order;
       }).catch((error: unknown) => isMissingOrder(error) || (error instanceof Error && error.message === "ORDER_NOT_FOUND") ? null : Promise.reject(error));
@@ -164,9 +193,9 @@ export function createAdminOrderRouter() {
       if (orderNumber === null) return notFound(res);
       const actorName = String(res.locals.staffUser.name);
       const updated = await prisma.$transaction(async (tx) => {
-        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: { not: null } }, select: { id: true } });
+        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: { not: null } }, select: { id: true, updatedAt: true } });
         if (!existing) throw new Error("ORDER_NOT_FOUND");
-        const order = await tx.order.update({ where: { id: existing.id }, data: { archivedAt: null, purgeAt: null }, select: { id: true, orderNumber: true } });
+        const order = await tx.order.update({ where: { id: existing.id, archivedAt: { not: null }, updatedAt: existing.updatedAt }, data: { archivedAt: null, purgeAt: null, updatedAt: existing.updatedAt }, select: { id: true, orderNumber: true } });
         await tx.orderActivityEvent.create({ data: { id: randomUUID(), orderId: order.id, action: "RESTORED", actorName } });
         return order;
       }).catch((error: unknown) => isMissingOrder(error) || (error instanceof Error && error.message === "ORDER_NOT_FOUND") ? null : Promise.reject(error));
@@ -199,7 +228,7 @@ function toOrderListItem(order: Prisma.OrderGetPayload<{ select: typeof orderLis
 }
 function toOrderDetail(order: Prisma.OrderGetPayload<{ select: typeof orderDetailSelect }>) {
   const { addresses: _addresses, positions: _positions, ...detail } = order;
-  return { ...detail, data: orderDataWithRelations(order) };
+  return { ...detail, isCopy: order.originOrderId !== null, data: orderDataWithRelations(order) };
 }
 function parsePositiveInteger(value: unknown): number | null { return typeof value === "string" && /^\d+$/u.test(value) && Number(value) > 0 ? Number(value) : null; }
 function parseOrderNumber(value: unknown): number | null { const parsed = parsePositiveInteger(value); return parsed && parsed <= 2_147_483_647 ? parsed : null; }

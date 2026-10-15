@@ -1,24 +1,53 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Pagination, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
+import MoreVert from "@mui/icons-material/MoreVert";
+import AddOutlined from "@mui/icons-material/AddOutlined";
 import type { StaffAccountDto, UserRole } from "@vega/domain";
 import { PasswordField } from "../auth/PasswordField.js";
 import { apiRequest } from "../api/api-request.js";
+import { isTotpRequired } from "@vega/domain";
 
 type Action = { kind: "role"; role: UserRole } | { kind: "block"; blocked: boolean } | { kind: "reset-totp" } | { kind: "reset-password" };
 type Pending = { type: "create" } | { type: "action"; user: StaffAccountDto; action: Action };
 const labels = { role: "Rolle ändern", block: "Kontosperre ändern", "reset-totp": "Authenticator zurücksetzen", "reset-password": "Passwort-Reset-Mail senden" };
 
+export function StaffAccountStatus({ blocked }: { blocked: boolean }) {
+  const label = blocked ? "Gesperrt" : "Aktiv";
+  return (
+    <Chip size="small" label={label} color={blocked ? "error" : "success"} sx={{ width: "fit-content" }} />
+  );
+}
+
+export function staffAccountActions(user: Pick<StaffAccountDto, "id" | "role" | "blocked">, currentUserId: string): { label: string; action: Action; disabled: boolean }[] {
+  const ownAccount = user.id === currentUserId;
+  const nextRole = user.role === "Admin" ? "Kundenberater" : "Admin";
+  return [
+    { label: `Als ${nextRole} setzen`, action: { kind: "role", role: nextRole }, disabled: ownAccount },
+    { label: user.blocked ? "Entsperren" : "Sperren", action: { kind: "block", blocked: !user.blocked }, disabled: ownAccount },
+    { label: "Passwort-Reset-Mail", action: { kind: "reset-password" }, disabled: false },
+    { label: "2FA zurücksetzen", action: { kind: "reset-totp" }, disabled: ownAccount },
+  ];
+}
+
+export async function loadStaffAccounts(): Promise<StaffAccountDto[]> {
+  const items: StaffAccountDto[] = [];
+  for (let page = 1; ; page += 1) {
+    const result = await apiRequest<{ items: StaffAccountDto[]; total: number }>(page === 1 ? "/api/admin/staff" : `/api/admin/staff?page=${page}`);
+    items.push(...result.items);
+    if (items.length >= result.total) return items;
+    if (result.items.length === 0) throw new Error("Konten konnten nicht vollständig geladen werden.");
+  }
+}
+
 export function UserManagementPage({ currentUserId }: { currentUserId: string }) {
   const [items, setItems] = useState<StaffAccountDto[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
   const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
+  const [actionMenu, setActionMenu] = useState<{ anchor: HTMLElement; user: StaffAccountDto } | null>(null);
   const [password, setPassword] = useState("");
   const [initialPassword, setInitialPassword] = useState("");
   const [name, setName] = useState("");
@@ -29,12 +58,12 @@ export function UserManagementPage({ currentUserId }: { currentUserId: string })
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
-    void apiRequest<{ items: StaffAccountDto[]; total: number }>(`/api/admin/staff?page=${page}&search=${encodeURIComponent(query)}`)
-      .then((result) => { if (active) { setItems(result.items); setTotal(result.total); } })
+    void loadStaffAccounts()
+      .then((result) => { if (active) setItems(result); })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Konten konnten nicht geladen werden."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [page, query, reload]);
+  }, [reload]);
   const open = (value: Pending) => {
     setPassword(""); setInitialPassword(""); setName(""); setEmail(""); setRole("Kundenberater"); setActionError(""); setPending(value);
   };
@@ -48,45 +77,48 @@ export function UserManagementPage({ currentUserId }: { currentUserId: string })
     try {
       if (pending.type === "create") {
         await apiRequest("/api/admin/staff", "POST", { name, email, role, initialPassword, currentPassword: password });
-        setMessage("Konto angelegt. Initialpasswort separat sicher übergeben; vor Zugriff sind Passwortwechsel und TOTP erforderlich.");
+        setMessage("Konto angelegt.");
       } else {
         await apiRequest(`/api/admin/staff/${encodeURIComponent(pending.user.id)}/actions`, "POST", { ...pending.action, currentPassword: password });
-        setMessage(pending.action.kind === "reset-password" ? "Passwort-Reset-Mail versendet."
-          : pending.action.kind === "reset-totp" ? "Authenticator und Recovery-Codes gelöscht. Neue Anmeldung und TOTP-Einrichtung erforderlich."
-          : "Konto aktualisiert. Bestehende Sitzungen wurden widerrufen.");
+        setMessage(pending.action.kind === "reset-password" ? "Reset-Mail versendet."
+          : pending.action.kind === "reset-totp" ? "TOTP zurückgesetzt."
+          : "Konto aktualisiert.");
       }
       setPending(null); setPassword(""); setInitialPassword(""); setReload((value) => value + 1);
     } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Die Aktion konnte nicht ausgeführt werden."); setPassword(""); }
     finally { setBusy(false); }
   }
   return <Stack spacing={2}>
-    <Typography component="h1" variant="h5">Mitarbeiterverwaltung</Typography>
-    <Alert severity="info">Jede Kontoaktion erfordert Ihr aktuelles Admin-Passwort. Der 2FA-Reset ist nur nach separat geprüfter Identität des Mitarbeiters auszuführen. Das eigene Konto kann hier nicht gesperrt, herabgestuft oder per 2FA-Reset zurückgesetzt werden.</Alert>
     {error && <Alert severity="error">{error}</Alert>}{message && <Alert severity="success">{message}</Alert>}
-    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} component="form" onSubmit={(event) => { event.preventDefault(); setPage(1); setQuery(search.trim()); }}>
-      <TextField label="Name oder E-Mail suchen" value={search} onChange={(event) => setSearch(event.target.value)} />
-      <Button type="submit">Suchen</Button><Button variant="contained" onClick={() => open({ type: "create" })}>Konto anlegen</Button>
-      <Button onClick={() => setReload((value) => value + 1)}>Neu laden</Button>
+    <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
+      <Button variant="contained" startIcon={<AddOutlined />} onClick={() => open({ type: "create" })}>Nutzer anlegen</Button>
     </Stack>
     {loading ? <Alert severity="info">Konten werden geladen …</Alert> : <TableContainer component={Paper} variant="outlined"><Table size="small">
-      <TableHead><TableRow><TableCell>Name / E-Mail</TableCell><TableCell>Rolle</TableCell><TableCell>Status</TableCell><TableCell>Aktionen</TableCell></TableRow></TableHead>
+      <TableHead><TableRow><TableCell align="center">Status</TableCell><TableCell>Name</TableCell><TableCell>E-Mail</TableCell><TableCell>Rolle</TableCell><TableCell>OTP</TableCell><TableCell>Aktionen</TableCell></TableRow></TableHead>
       <TableBody>{items.map((user) => <TableRow key={user.id}>
-        <TableCell>{user.name}<Typography variant="body2" color="text.secondary">{user.email}</Typography></TableCell>
+        <TableCell align="center"><StaffAccountStatus blocked={user.blocked} /></TableCell>
+        <TableCell>{user.name}</TableCell>
+        <TableCell>{user.email}</TableCell>
         <TableCell>{user.role}</TableCell>
-        <TableCell><Stack spacing={0.5}><Chip size="small" label={user.blocked ? "Gesperrt" : "Aktiv"} color={user.blocked ? "error" : "success"} />
+        <TableCell><Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
           {user.mustChangePassword && <Chip size="small" label="Passwortwechsel erforderlich" />}
-          <Chip size="small" label={user.twoFactorEnabled ? "TOTP eingerichtet" : "TOTP erforderlich"} /></Stack></TableCell>
-        <TableCell><Stack spacing={0.5}>
-          <Button size="small" disabled={user.id === currentUserId} onClick={() => open({ type: "action", user, action: { kind: "role", role: user.role === "Admin" ? "Kundenberater" : "Admin" } })}>Als {user.role === "Admin" ? "Kundenberater" : "Admin"} setzen</Button>
-          <Button size="small" disabled={user.id === currentUserId} onClick={() => open({ type: "action", user, action: { kind: "block", blocked: !user.blocked } })}>{user.blocked ? "Entsperren" : "Sperren"}</Button>
-          <Button size="small" onClick={() => open({ type: "action", user, action: { kind: "reset-password" } })}>Passwort-Reset-Mail</Button>
-          <Button size="small" disabled={user.id === currentUserId} onClick={() => open({ type: "action", user, action: { kind: "reset-totp" } })}>2FA zurücksetzen</Button>
-        </Stack></TableCell>
+          <Chip size="small" label={user.twoFactorEnabled ? "TOTP eingerichtet" : isTotpRequired(user.role) ? "TOTP erforderlich" : "Ohne TOTP"} /></Stack></TableCell>
+        <TableCell>
+          <Tooltip title="Kontoaktionen">
+            <IconButton size="small" id={`staff-actions-${user.id}`} aria-label={`Aktionen für ${user.name}`} aria-haspopup="menu" aria-controls={actionMenu?.user.id === user.id ? "staff-actions-menu" : undefined} aria-expanded={actionMenu?.user.id === user.id ? true : undefined} onClick={(event) => setActionMenu({ anchor: event.currentTarget, user })}>
+              <MoreVert />
+            </IconButton>
+          </Tooltip>
+        </TableCell>
       </TableRow>)}</TableBody>
     </Table>{items.length === 0 && <Typography sx={{ p: 2 }}>Keine Mitarbeiterkonten gefunden.</Typography>}</TableContainer>}
-    <Pagination count={Math.max(1, Math.ceil(total / 25))} page={page} onChange={(_, value) => setPage(value)} />
+    <Menu id="staff-actions-menu" anchorEl={actionMenu?.anchor ?? null} open={actionMenu !== null} onClose={() => setActionMenu(null)} slotProps={{ list: { "aria-labelledby": actionMenu ? `staff-actions-${actionMenu.user.id}` : undefined } }}>
+      {actionMenu && staffAccountActions(actionMenu.user, currentUserId).map(({ label, action, disabled }) => (
+        <MenuItem key={action.kind} disabled={disabled} onClick={() => { const user = actionMenu.user; setActionMenu(null); open({ type: "action", user, action }); }}>{label}</MenuItem>
+      ))}
+    </Menu>
     <Dialog open={pending !== null} onClose={close} fullWidth maxWidth="sm">
-      <DialogTitle>{pending?.type === "create" ? "Mitarbeiterkonto anlegen" : pending ? labels[pending.action.kind] : ""}</DialogTitle>
+      <DialogTitle>{pending?.type === "create" ? "Nutzer anlegen" : pending ? labels[pending.action.kind] : ""}</DialogTitle>
       <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
         {actionError && <Alert severity="error">{actionError}</Alert>}
         {pending?.type === "create" ? <>

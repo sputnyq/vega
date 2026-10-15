@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import { meetsPasswordPolicy, passwordPolicyError, passwordPolicyHelp } from "../password-policy.js";
 import { AuthCard } from "./AuthCard.js";
 import { PasswordField } from "./PasswordField.js";
@@ -61,7 +62,7 @@ export function InitialPasswordChangePage({ currentPassword: initialCurrentPassw
       </Typography>
       <Box component="form" onSubmit={submit}>
         <Stack spacing={2}>
-          {error && <Alert severity="error">{error}</Alert>}
+          {error && <AdminAlert severity="error">{error}</AdminAlert>}
           {!initialCurrentPassword && (
             <PasswordField
               autoComplete="current-password"
