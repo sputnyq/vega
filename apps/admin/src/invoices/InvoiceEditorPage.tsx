@@ -4,6 +4,7 @@ import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import DeleteOutlined from "@mui/icons-material/DeleteOutlined";
 import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type AdminInvoiceDto, type InvoiceInput } from "@vega/domain";
 import { PlaceAutocompleteField } from "../places/PlaceAutocompleteField.js";
+import { InvoiceAccountingTabs } from "./InvoiceAccountingTabs.js";
 
 const emptyInvoice = (): InvoiceInput => ({ invoiceDate: new Date().toISOString().slice(0, 10), company: "", customerName: "", customerStreet: "", customerPostalCity: "", taxPercent: 19, text: "", entries: [], dueDates: [] });
 
@@ -113,5 +114,7 @@ export function InvoiceEditorPage({ id, orderNumber, navigate, onBusyChange, onD
   function renderFormFields() {
     return <>{renderCustomerFields()}{renderEntries()}<TextField label="Rechnungstext" multiline minRows={4} value={value.text} onChange={(e) => change("text", e.target.value)} /></>;
   }
-  return <Paper id="invoice-editor-form" component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}><Stack spacing={2}>{orderNumber !== undefined && <Alert severity="info">Ungespeicherter Rechnungsentwurf aus Auftrag {orderNumber}. Die Rechnung wird erst mit „Speichern“ angelegt.</Alert>}{error && <Alert severity="error">{error}</Alert>}{success && <Alert severity="success">{success}</Alert>}{loading || numberLoading ? <CircularProgress /> : <fieldset disabled={busy || loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}><Stack spacing={2}>{renderFormFields()}</Stack></fieldset>}</Stack></Paper>;
+  const form = <Paper id="invoice-editor-form" component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}><Stack spacing={2}>{orderNumber !== undefined && <Alert severity="info">Ungespeicherter Rechnungsentwurf aus Auftrag {orderNumber}. Die Rechnung wird erst mit „Speichern“ angelegt.</Alert>}{error && <Alert severity="error">{error}</Alert>}{success && <Alert severity="success">{success}</Alert>}{loading || numberLoading ? <CircularProgress /> : <fieldset disabled={busy || loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}><Stack spacing={2}>{renderFormFields()}</Stack></fieldset>}</Stack></Paper>;
+  if (!id || loading || loadFailed) return form;
+  return <InvoiceAccountingTabs invoiceId={id} disabled={busy} invoiceForm={form} />;
 }

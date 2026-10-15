@@ -53,7 +53,7 @@ export function ResetPasswordPage({ onComplete }: { onComplete: () => void }) {
         </Stack>
       ) : complete ? (
         <Stack spacing={2}>
-            <AdminAlert severity="success">Passwort geändert. Melden Sie sich nun mit Ihrem neuen Passwort und Ihrem Zwei-Faktor-Code an.</AdminAlert>
+            <AdminAlert severity="success">Passwort geändert. Bitte neu anmelden.</AdminAlert>
           <Button variant="contained" onClick={onComplete}>Zur Anmeldung</Button>
         </Stack>
       ) : (

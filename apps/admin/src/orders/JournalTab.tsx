@@ -11,6 +11,11 @@ const ACTION_LABELS: Record<string, string> = {
   ARCHIVED: "Auftrag archiviert",
   RESTORED: "Auftrag wiederhergestellt",
   PDF_EXPORTED: "PDF exportiert",
+  OFFER_SENT_AS_OPTION: "Als zweites Angebot per E-Mail versendet",
+  EMAIL_SENT_INQUIRY_RECEIVED: "Eingangsbestätigung per E-Mail versendet",
+  EMAIL_SENT_OFFER: "Angebot per E-Mail versendet",
+  EMAIL_SENT_INQUIRY_DECLINED: "Absage per E-Mail versendet",
+  EMAIL_SENT_INVOICE: "Rechnung per E-Mail versendet",
 };
 
 export function JournalTab({ orderNumber }: { orderNumber?: number }) {
@@ -57,6 +62,8 @@ export function JournalTab({ orderNumber }: { orderNumber?: number }) {
 }
 
 function labelFor(action: string): string {
+  const label = ACTION_LABELS[action];
+  if (label) return label;
   if (action.startsWith("EMAIL_SENT_")) return `E-Mail versandt (${action.slice("EMAIL_SENT_".length)})`;
-  return ACTION_LABELS[action] ?? action;
+  return action;
 }

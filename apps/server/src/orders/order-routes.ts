@@ -1,3 +1,4 @@
+import { needsTotpSetup } from "@vega/domain";
 import { Router } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 import type { createAuth } from "../auth-config.js";
@@ -25,7 +26,7 @@ export function createOrderRouter(auth: AuthInstance, config: AppConfig) {
           res.status(403).json({ error: { code: "ACCOUNT_BLOCKED", message: "Dieses Konto ist gesperrt." } });
           return;
         }
-        if (session.user.mustChangePassword || !session.user.twoFactorEnabled) {
+        if (session.user.mustChangePassword || needsTotpSetup(session.user)) {
           res.status(403).json({ error: { code: "STAFF_SETUP_REQUIRED", message: "Bitte schließen Sie zuerst die Kontoeinrichtung ab." } });
           return;
         }

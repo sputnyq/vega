@@ -50,7 +50,7 @@
   PDF-Download und Wiederherstellung. Das PDF-Rechnungsdatum ist stets das im
   Admin-Formular gesetzte `invoiceDate`, nicht das Bearbeitungs-, Export- oder
   Archivierungsdatum.
-- Admins können Rechnungen, Gutschriften und Mahnungsdatensätze/-ereignisse explizit archivieren und bis zur endgültigen Löschung wiederherstellen. Für alle drei Finanzdatentypen gilt dieselbe Frist: 30 Tage nach Archivierung werden sie aus der App-Datenbank gelöscht; erneutes Archivieren startet die Frist neu.
+- Admins können Rechnungen und Gutschriften explizit archivieren (Mahnungen folgen ihrer Rechnung) und bis zur endgültigen Löschung wiederherstellen. Für alle drei Finanzdatentypen gilt dieselbe Frist: 30 Tage nach Archivierung werden sie aus der App-Datenbank gelöscht; erneutes Archivieren startet die Frist neu.
 - Externe Archivierung ausgestellter Rechnungen/Gutschriften organisiert der Betreiber. Benötigte technische Konfiguration/Zugänge werden bei Bedarf ausschließlich serverseitig als Runtime-Umgebungsvariablen bereitgestellt. Die App zeigt nur eine allgemeine Bestätigung und prüft nicht, ob ein externes Archiv tatsächlich existiert.
 - Gutschrift: separat, optional und höchstens eine je Rechnung; Nummerierungsverhalten wie Bestand. Mahnungen als Ereignisse an der Rechnung.
 
@@ -70,8 +70,13 @@ Ein bearbeiteter DB-Datensatz kann den früher ausgestellten PDF-Stand nicht rek
   Rechnungs-Purge schützt ihre unabhängige Aufbewahrung. Gutschriftennummern
   sind eindeutig, ohne eine neue Nummerierungsregel oder Dummy-Startwerte
   vorzugeben.
-- Die 30-Tage-Finanzbereinigung, Gutschriften-/Mahnungs-Fachfunktionen und externe
-  Archivintegration bleiben offen. Dieser ADR-Vorbehalt ist daher unverändert
+- Gutschriften (Admin-only, eine je Rechnung, Rechnungs-Snapshot) und
+  Mahnungen (Stufen 1–3 nur in Reihenfolge) sind mit PDF und Mailversand
+  umgesetzt. Mahnungen haben keine eigene Archivaktion: Archivieren bzw.
+  Wiederherstellen der Rechnung archiviert bzw. stellt alle ihre Mahnungen
+  mit derselben 30-Tage-Frist wieder her.
+  `ReminderEvent.sentAt` setzt ausschließlich der erfolgreiche Outbox-Versand.
+- Die 30-Tage-Finanzbereinigung und externe Archivintegration bleiben offen. Dieser ADR-Vorbehalt ist daher unverändert
   ein Produktiv-Release-Gate.
 
 ## Referenzen

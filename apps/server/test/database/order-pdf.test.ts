@@ -56,7 +56,8 @@ test("Admin and Kundenberater export current saved orders with auth gates, attac
     assert.equal(signedIn.status, 200);
     const cookie = signedIn.headers.getSetCookie().map((entry) => entry.split(";")[0]).join("; ");
     const headers = { Cookie: cookie };
-    assert.equal((await fetch(`${base}${path}`, { headers })).status, 403);
+    // TOTP is only mandatory for admins; the Kundenberater export is counted below.
+    if (role === "Admin") assert.equal((await fetch(`${base}${path}`, { headers })).status, 403);
     await prisma.user.update({ where: { id }, data: { twoFactorEnabled: true, mustChangePassword: true } });
     assert.equal((await fetch(`${base}${path}`, { headers })).status, 403);
     await prisma.user.update({ where: { id }, data: { mustChangePassword: false } });

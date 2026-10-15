@@ -1,10 +1,10 @@
 # Umzug Ruck Zuck – Umsetzungsplan
 
 **Status:** abgestimmte Zielplanung für die Umsetzung durch Agents  
-**Stand:** 2026-10-09
+**Stand:** 2026-10-15
 
-**Wichtig:** Dieser Plan beschreibt Zielarchitektur, Arbeitspakete und lokale
-Teilstände. Lokale Nachweise ersetzen keine externen Freigabe-Gates.
+**Wichtig:** Dieser Plan beschreibt Zielverhalten und offene Arbeitspakete.
+Lokale Nachweise ersetzen keine externen Freigabe-Gates.
 
 ## 1. Ziel
 
@@ -45,7 +45,7 @@ Die neue App startet mit einer **frischen Hostinger-MySQL-Datenbank**. Stammdate
 - Google Cloud Storage für neue Bilder.
 - Google Places für Adresssuche mit bisheriger Länderbeschränkung Deutschland/Österreich.
 
-Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines festzulegen. Hostinger dokumentiert Node 24.x als unterstützte Laufzeit; die Kompatibilität von TypeScript 7, Prisma, Better Auth, Express 5 und MUI ist trotzdem im Build-Proof zu verifizieren.
+Exakte Versionen sind in `package.json`/`package-lock.json` gepinnt; offen ist nur der Nachweis im echten CI-/Hostinger-Lauf (A1).
 
 ## 4. Zielverhalten
 
@@ -53,7 +53,7 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 
 - Kunden benötigen keinen Login.
 - Öffentliche API: nur POST zum Einreichen einer Anfrage sowie GET für ausdrücklich kundenrelevante Katalog-/Angebotsdaten.
-- Enge Google-Ausnahme (Plan `docs/google-maps-places-plan.md`): nur
+- Enge Google-Ausnahme (ADR 0003): nur
   `POST /api/customer-form/places/autocomplete` und `POST /api/customer-form/places/address`
   als minimale öffentliche Service-API (DE/AT-Vorschläge, Session-Token, danach nur
   `street`/`postalCode`/`city`; rate-limitiert, `Cache-Control: no-store`, manueller
@@ -68,7 +68,7 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 ### 4.2 Authentifizierung und Rechte
 
 - Rollen: `Admin` und `Kundenberater`.
-- Anmeldung mit E-Mail/Passwort; neu gesetzte Passwörter müssen mindestens 8 Zeichen einschließlich Großbuchstabe, Kleinbuchstabe und Zahl enthalten. Passwort-Reset über Hostinger-Mail; TOTP-Zwei-Faktor-Authentifizierung verpflichtend für beide Rollen. Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden.
+- Anmeldung mit E-Mail/Passwort; neu gesetzte Passwörter müssen mindestens 8 Zeichen einschließlich Großbuchstabe, Kleinbuchstabe und Zahl enthalten. Passwort-Reset über Hostinger-Mail; TOTP-Zwei-Faktor-Authentifizierung verpflichtend für Admins, optional für Kundenberater (selbst ein-/ausschaltbar mit Passwortbestätigung). Mitarbeiter-E-Mail-Adressen müssen nicht verifiziert werden.
 - Keine öffentliche Registrierung. Admins können Mitarbeiterkonten anlegen/sperren und auch die Rolle `Admin` vergeben; für ein Konto können sie eine Passwort-Reset-Mail auslösen.
 - Erneute Anmeldung ist spätestens alle 30 Tage erforderlich (absolute Session-Höchstdauer; Aktivität verlängert die Session nicht).
 - Erster Admin: einmaliger, serverseitiger Bootstrap, danach deaktiviert. Kein öffentliches Setup.
@@ -100,7 +100,7 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 - Wiederherstellen stoppt die 60-Tage-Frist; erneutes Archivieren startet sie neu.
 - Ein täglicher Hostinger-Cronjob entfernt Datensätze, die seit mindestens 60 Tagen archiviert sind. Er löscht nur den ausgewählten Auftrag/die Kopie und zugehörige Aktionsprotokolle, nicht Geschwister.
 - GCS-Bilder werden bei Auftragslöschung nicht aktiv gelöscht.
-- Admins archivieren Rechnungen, Gutschriften und Mahnungsdatensätze/-ereignisse einheitlich; alle sind bis zur endgültigen Löschung wiederherstellbar. Ein täglicher, idempotenter Purge entfernt jeden dieser Finanzdatensätze 30 Tage nach seiner Archivierung; erneutes Archivieren startet die Frist neu.
+- Admins archivieren Rechnungen und Gutschriften; Mahnungen werden mit ihrer Rechnung archiviert; alle sind bis zur endgültigen Löschung wiederherstellbar. Ein täglicher, idempotenter Purge entfernt jeden dieser Finanzdatensätze 30 Tage nach seiner Archivierung; erneutes Archivieren startet die Frist neu.
 - Die externe gesetzliche Aufbewahrung ausgestellter Rechnungen/Gutschriften liegt außerhalb der App und in der Verantwortung des Betreibers. Vor Änderungen, Archivierung oder Purge muss der externe Archivprozess durch Buchhaltung/Steuerberatung bestätigt sein; ein Confirmation-Dialog beweist keine externe Sicherung.
 
 ### 4.5 Datenmodell
@@ -141,20 +141,20 @@ Vor dem Scaffold sind die exakten Paketversionen gemeinsam in Lockfile/Engines f
 
 ## 5. Anwendungsschnittstellen (Planvertrag)
 
-Die exakten DTOs werden vor paralleler API-/Frontend-Arbeit gemeinsam versioniert. Grobe Trennung:
+Geteilte DTOs liegen in `packages/domain`. Trennung:
 
-- `GET /api/public/catalog/...`: kundensichere Listen/Preise für die tatsächlich aktiven Schritte des langen Formulars.
+- `GET /api/catalog/...`: kundensichere Listen/Preise für die tatsächlich aktiven Schritte des langen Formulars.
 - `POST /api/public/orders`: Validierung, Preis-/Domänenprüfung soweit relevant, persistente Anfrageanlage und anschließende E-Mail-Outbox.
 - `POST /api/public/uploads/...`: Upload-Sitzung/kurzlebige GCS-Berechtigungen; Uploadobjekte müssen dem finalen Auftrag zuordenbar sein.
 - `POST /api/customer-form/places/...`: einzige öffentliche Google-Ausnahme (Autocomplete + Adressdetails, siehe § 4.1); keine weiteren Proxy-Routen.
 - `/api/auth/*`: Better Auth.
-- `/api/admin/orders`, `/api/admin/catalog`, `/api/admin/invoices`, `/api/admin/credits`, `/api/admin/reminders`: ausschließlich autorisierte Bereiche.
+- `/api/admin/orders`, `/api/admin/catalog`, `/api/admin/invoices`, `/api/admin/settings`, `/api/admin/staff`, `/api/admin/profile`, `/api/admin/credits`, `/api/admin/reminders`: ausschließlich autorisierte Bereiche.
 - `/api/admin/routes` (Streckenberechnung Depot → Umzugsadressen → Depot): authentifizierte Admin-API für Admin/Kundenberater, nur auf expliziten Klick.
 - Keine Alt-WordPress-REST-Route als Zielvertrag übernehmen.
 
-## 6. Empfohlene Code-/Deployment-Struktur
+## 6. Code-/Deployment-Struktur
 
-Ein Root-Repository mit npm Workspaces, ein Build-/Releaseprozess und ein Hostinger-Prozess. Vorgeschlagene Grenzen:
+Ein Root-Repository mit npm Workspaces, ein Build-/Releaseprozess und ein Hostinger-Prozess:
 
 ```text
 apps/
@@ -169,228 +169,36 @@ docs/              Architektur, ADRs, Glossar, Betriebsanweisungen
 
 Express liefert Admin-SPA, öffentlichen Formular-Loader/-Bundles und APIs aus. WordPress enthält nur den Embed-Aufruf/Loader-Kontext und bleibt Content-CMS. Domains, Auth-Basis-URL, CORS-Origins und Geheimnisse kommen aus Hostinger-Runtime-Variablen, nicht aus dem Vite-Build.
 
-## 7. Arbeitspakete für Agents
+## 7. Arbeitspakete
 
-Die Reihenfolge ist verbindlich. Parallelisierung erst nach festgelegten API-/Prisma-Verträgen.
+Umgesetzte Details stehen im Code, in den Tests und in den ADRs; den aktuellen
+Stand führt `docs/implementation-status.md`. Hier bleiben nur offene Arbeit und
+Abnahmekriterien.
 
-### A0 – Integrations- und Kompatibilitäts-Proof
-
-**Abhängigkeit:** keine.  
-Prüfen: Hostinger Node 24/Build-/Start-/Cron-Verhalten; TypeScript 7/Prisma/Better Auth Paketkompatibilität; Hostinger Mail API Attachment-Vertrag; GCS Signed-URL-/Lifecycle-Konfiguration; WordPress-Loader mit absolut aufgelösten Pfaden und CORS. Genaue Werte dokumentieren, keine Produktionsdaten migrieren.
-
-**Abnahme:** Minimaler End-to-End-Proof läuft in nicht-produktiver Umgebung; bekannte Plan-/Tarifgrenzen sind notiert.
-
-### A1 – Root-App und Build
-
-**Abhängigkeit:** A0.  
-Root npm workspace, feste Engines/Lockfile, TypeScript-Konfiguration, Lint/Test/Build, Express-Startpunkt und Hostinger Healthcheck. Frontends als getrennte Vite-Builds, ein Node-Prozess.
-
-**Lokaler Abschluss:** Lockfile-Installation, Oxlint-Korrektheitsprüfung,
-Typecheck und Tests sind als Root-Befehle vorhanden. `.github/workflows/ci.yml`
-führt sie mit Node 24 und MariaDB 10.11.19 aus, einschließlich frischem
-Migrationslauf, Schema-Drift-Prüfung und Produktionsbuild. Der
-Deployment-Smoke-Test startet den tatsächlich kompilierten Server als einen
-Prozess und prüft Healthcheck, beide Frontends, Assets, Loader-Runtime-Pfade
-und die öffentliche/geschützte API-Grenze. Der tatsächliche GitHub-CI-Lauf und
-das nichtproduktive Hostinger-Deployment sind separat nachzuweisen.
-
-**ORM-Upgrade (2026-10-10):** Prisma CLI, Client und MariaDB-Adapter sind
-auf `7.10.0` gepinnt. CI generiert den serverseitigen ESM-Client explizit
-nach `npm ci`; Migrationsbefehle erzeugen ihn nicht mehr automatisch.
-Die lokalen Dev-Befehle nutzen den Server-Workspace mit `predev`-Generierung,
-damit auch ohne vorhandenen generierten Client der Server starten kann.
-Der gezielte `mariadb@3.5.4`-Override und der lokale Node-24-Proof sind
-in `docs/proof-01-integration-compatibility.md` dokumentiert.
-
-**Abnahme:** sauberer CI-Build; ein Deployment startet API und liefert Admin-/Formularassets aus.
-
-### A2 – Prisma-Schema und Migrationen
-
-**Abhängigkeit:** A1.  
-Fresh MySQL schema für Auth, Rollen, Aufträge/Kopien, Kataloge/Preisvorgaben, Bilderreferenzen, Events, Rechnungen, Gutschriften und Mahnungen. Uniqueness, FK-Regeln ohne unerwünschte Kaskaden, Indexe für Suchfelder, Nummernkreise, Archivfelder und `edited` definieren.
-
-**Lokaler Abschluss:** 14 versionierte Migrationen bauen eine leere
-MariaDB vollständig auf. `OrderAddress` und `OrderPosition` speichern die
-Adress-/Positionskerne relational; Anlage, Bearbeitung, Kopie, Detail-/Listenread
-und Rechnungsadressübernahme verwenden diese Beziehungen. Das validierte
-Order-JSON bleibt ein kompatibler Formularsnapshot für weitere, nicht
-suchkritische Details. Die additive Migration übernimmt ausschließlich bereits
-in Vega angelegte Entwürfe, keine Legacy-Daten.
-
-`CreditNote` und `ReminderEvent` enthalten eigene Geschäfts-/Snapshotfelder,
-Archiv-/Purge-Zeiten und indizierte Suchbezüge. Je Rechnung ist höchstens eine
-Gutschrift möglich; Geschäftsnummern sind eindeutig und von IDs getrennt.
-Beim Rechnungs-Purge werden Bezüge gelöst, nicht andere Finanzdatensätze
-kaskadierend gelöscht. Auftragseigene Adressen, Positionen, Bildreferenzen,
-Journal und Mailinhalte/-ereignisse werden dagegen mit dem Auftrag entfernt.
-Tests gegen eine explizit getrennte Testdatenbank prüfen diese FK-Regeln,
-Migration der Vega-Snapshots, atomaren Rollback und parallele Nummernvergabe.
-Gutschriften-/Mahnungs-Use-Cases, PDFs, Mail und Purge bleiben A7/A10-Arbeit.
-
-Der Prisma-7-Upgrade-Proof verwendet dieselben 14 SQL-Migrationen ohne
-Änderungen am Fachschema. Frische Migrationen und Drift-Prüfung sowie
-DB-/Auth-/Seed-/Recovery-Regressionen bestehen lokal auf MariaDB 10.11.19.
-Seeding bleibt ein expliziter Betreiberbefehl, keine Nebenwirkung einer
-Migration. Das ist kein Nachweis für den tatsächlichen Hostinger-Tarif.
-
-**Abnahme:** Migrationen bauen eine leere DB vollständig auf; Löschtests belegen, dass Auftrag/Kopie keine Geschwister oder Rechnungen kaskadierend entfernen.
-
-### A3 – Better Auth und Rollen
-
-**Abhängigkeit:** A2.  
-Better Auth Version pinnen; Prisma-Schema mit der passenden Better-Auth-CLI-Version und aktivierten Plugins generieren/aktualisieren. E-Mail/Passwort, Reset-Mail, TOTP-Plugin plus Client-Plugin, verschlüsselte Recovery-Codes, Admin-Einladung/-Sperrung, zwei Rollen, Berechtigungs-Middleware und einmaliger First-Admin-Bootstrap.
-
-**Lokaler Stand (2026-10-09):** Vollständig implementiert. Better Auth und CLI
-sind auf `1.7.7` gepinnt; das generierte Auth-/Plugin-Schema wurde separat
-abgeglichen und die additive Sperrungs-Migration ergänzt. `/settings/users`
-nutzt Admin-only Safe DTOs und Passwortbestätigung für jede Mutation.
-Lifecycle-Änderungen widerrufen Sitzungen/Challenges; Selbst-Lockout und der
-Verlust des letzten aktiven Admins sind verhindert. TOTP bleibt verpflichtend,
-inklusive nach 2FA-Reset; OTP-Enrollment und Trusted-Device-Bypass sind gesperrt.
-Der serverseitige Recovery-Befehl für den einzigen Admin ist dokumentiert.
-DB-/HTTP-Tests prüfen Enrollment, einmalige verschlüsselte Recovery-Codes,
-Rollen-/Origin-Grenzen, Kontoaktionen, Reset-Mails und persistente Auth-Limits.
-Echter Hostinger-Mailversand und Zielhosting-Abnahme bleiben externe Gates.
-
-**Abnahme:** kein öffentlicher Signup; Admin/Kundenberater-Matrix serverseitig getestet; Bootstrap nach Einrichtung nicht erneut nutzbar; 2FA ist vor Zugriff auf Kundendaten aktiviert; CSRF/Origin-Checks und Auth-Rate-Limits bleiben aktiv.
-
-### A4 – Geschäftslogik und API
-
-**Abhängigkeit:** A2; A3 für geschützte Routen.  
-Servervalidierung und autoritative Preise, Order-/Copy-/Archive-/Restore-Use-Cases, Nummernvergabe, `edited`, safe public DTOs, Rate-Limits, CORS, Upload-Sitzungen und Audit-/Email-Events.
-
-**Teilstatus:** `POST /api/orders` und die Legacy-nahe Admin-Neuanlage sind
-umgesetzt: validierte Kunden-, Mehrfachadress-, Umzugsgut-, Zusatzleistungs-,
-Termin- und Konditionsdaten können anonym oder mit abgeschlossener Staff-Session
-gespeichert werden; anonyme Aufrufe sind rate-limitiert und können keine
-Preisfelder setzen. Abgeschlossene Staff-Sessions dürfen wie im Legacy-Flow auch
-unvollständige Auftragsentwürfe speichern; öffentliche Anfragen müssen vollständig
-sein. Staff-Preisfelder werden serverseitig auf Typ und Wertebereich geprüft.
-Dies schließt A4 nicht ab; Katalog-CRUD und öffentliche Safe-GET-Projektionen
-sind inzwischen implementiert. Geschützte Admin-Auftragsliste/-suche,
-Einzelansicht/-bearbeitung sowie Archivierung und Wiederherstellung sind
-umgesetzt; sie setzen das Bearbeitungskennzeichen und schreiben minimale
-Aktionsereignisse. Angebotskopien, Rechnungs-API und Upload-Sitzungen sind
-ebenfalls implementiert. Vollständige autoritative Orderpreisberechnung,
-Gutschriften-/Mahnungs-API und der tägliche Purge bleiben offen.
-
-**Abnahme:** kein öffentlicher Order-Read; Manipulation von Browserpreisen wird abgewiesen/neu berechnet; Kopien und Archive wirken nur auf den jeweiligen Datensatz.
-
-### A5 – Kundenformular und WordPress-Loader
-
-**Abhängigkeit:** A0 und A4 API-Vertrag.  
-Nur langes deutsches Umzugsformular portieren. Auf ausdrückliche Freigabe vom
-2026-10-09 wird auch der darin eingebettete Möbel-/Volumenrechner übernommen;
-Express und eigenständige Möbelliste bleiben ausgeschlossen. Gestaltung,
-Felder und die fünf Schritte Kontakt, Auszug, Einzug, Verpackung und Fertig
-aus dem Legacy-Formular bewahren. Loader auf Vega stellt alle absoluten Pfade
-bereit; Formbundle enthält keine fest codierten API-/Provider-Domains.
-
-**Lokaler Teilstatus:** Der lange Flow, Rechner, Safe-Kataloganbindung,
-`POST /api/public/orders`, Consent-/Fehler-/Dankeseiten und
-`/customer-form/loader.js` sind implementiert. Nicht geheime Optionen kommen
-aus den gespeicherten Admin-Einstellungen, nicht aus Vite-Variablen oder
-Bestandsdaten. Ohne hinterlegte Datenschutz-URL bleibt das Absenden gesperrt.
-Der reale WordPress-/Hostinger-Proof bleibt offen.
-
-**Abnahme:** WordPress-Seite lädt den Loader; Formular liest nur benötigte freigegebene Daten und speichert Anfrage ohne Login; Privacy Consent und Success/Failure UX bleiben funktionsfähig.
-
-### A6 – Admin-SPA
-
-**Abhängigkeit:** A3 und A4 API-Vertrag.  
-Auftragsliste/-suche, Bearbeitung, unabhängige Kopien, Preis-/Katalogpflege für Admin, individuelle Einzelangebotspreise, Archivansicht/Restore, `edited`-Anzeige, Rollen-/Benutzerverwaltung.
-
-**Abnahme:** Rollenrechte greifen auf API-Ebene; Kundenberater können keine globalen Preis-/Katalogdaten ändern; Admin kann alle Bereiche bedienen.
-
-### A7 – Mail, PDFs und Buchhaltung
-
-**Abhängigkeit:** A2/A4.  
-Hostinger Mail API Adapter, DB-Outbox/Retry, Anfrage-E-Mails, Angebot/Absage/Rechnung/Mahnung, editierbarer Einzelmailtext, Backend-PDFs und bestehende Layouts. Rechnungen separat, 1:1 zu Angebot, Nummer/DB-ID getrennt, Suche nach Rechnungsnummer/Auftragsnummer/Kundenname. CRUD ohne Versionshistorie.
-
-**Teilstatus:** Admin-only Rechnungs-CRUD ist umgesetzt: Rechnungen können als
-Blanco-Beleg oder mit optionalem 1:1-Auftragsbezug angelegt, bearbeitet,
-gesucht, archiviert und wiederhergestellt werden. Über den
-Auftrags-Toolbar-Button kann zunächst eine ungespeicherte, vorausgefüllte Vorlage
-geöffnet werden; erst explizites Speichern im Rechnungseditor legt den Beleg an
-und vergibt die Rechnungsnummer gemäß ADR 0005. Der Vorlagen-GET verändert keine Daten.
-Der neue Editor zeigt die verwendete Nummer ohne Helper-Texte am
-Rechnungsnummernfeld und ohne Hinweis zur nächsten automatischen Nummer. Die geladene nächste
-Nummer steht initial als überschreibbarer TextField-Eingabewert im neuen
-Blanco- oder auftragsbezogenen Entwurf und wird beim Speichern mitgesendet.
-Ein Admin-only
-GET `/api/admin/invoices/next-number` liefert ausschließlich `nextValue`
-mit `Cache-Control: no-store`; die Vorschau reserviert keine Nummer und kann
-sich bei paralleler Anlage bis zum Speichern ändern. Manuelle sequenzwirksame
-Anlagen sind auf `R-2147483646` begrenzt, damit der folgende DB-`Int` darstellbar
-bleibt. Nummernkreis und Rechnung werden gemeinsam transaktional geschrieben;
-Konflikte rollen beide zurück. Das Bearbeiten bestehender Rechnungen bleibt
-ohne Nummernkreisänderung.
-Die Rechnung kann aus dem
-aktuellen Datenstand serverseitig im übernommenen Legacy-Layout als PDF
-heruntergeladen werden; jeder Export wird beim verknüpften Auftrag protokolliert.
-Die Positionen des Rechnungs-PDFs sind an der bereitgestellten Legacy-PDF-
-Referenz abgeglichen (A4, Text-Oberkanten von oben in pt): Absender 154,4,
-Kunde mit Auftragsnummer 225,3, Titel 356,0, Tabellenkopf 379,9,
-erste Position 394,3, Summen ab 462,2, Schlussvermerk 711,3 und
-Bankblock ab 732,5. Der rechte Kontaktblock bleibt oben (ab 36,7).
-Mehrzeilige Positionen wachsen weiterhin dynamisch; Summen und Fußbereich
-werden bei längeren Inhalten entsprechend nach unten verschoben.
-Auch Aufträge und Angebotskopien können Admins und Kundenberater aus dem
-aktuellen gespeicherten Stand serverseitig als PDF exportieren. Die vollständige
-Legacy-`umzugruckzuck24`-Vorlage einschließlich AGB, festen Texten, Logo und
-Dateinamen wurde mit denselben jsPDF-/AutoTable-Versionen portiert. Der
-Vierseiten-Referenzfall stimmt in Zeichenanweisungen und gerenderten Pixeln
-mit dem Legacy-PDF überein; ein Regressionstest fixiert die Seiten-Hashes.
-Ungespeicherte Editoränderungen werden vor dem Download gespeichert;
-fehlgeschlagene Speicherung verhindert den Export. Jeder erfolgreiche Export
-erzeugt `PDF_EXPORTED` im Journal. Preise bleiben gespeicherte Konditionen bzw.
-aktuelle Katalogpreise, keine neue automatische Angebotskalkulation.
-Kunden-/Auftragsnummern werden als Such-Snapshot gespeichert; beim Auftrags-Purge wird nur die
-Beziehung gelöst. Rechnungsversand, Gutschriften, Mahnungen und
-der 30-Tage-Finanz-Purge bleiben offen.
-
-**Abnahme:** Mailfehler verlieren keine Anfrage; erfolgreiche Sendungen protokollieren Benutzer/Aktion/Zeit; PDF kann jederzeit aus aktuellem Datensatz erzeugt werden; keine PDF-Dateien werden persistent in der App gespeichert.
-
-### A8 – GCS-Bilder
-
-**Abhängigkeit:** A0/A4/A5.  
-Clientkomprimierung, private EU-Bucket, Signed URLs, Serververifikation, Bildreferenzen am Auftrag und 180-Tage-Lifecycle. Kein Count-Limit pro Auftrag.
-
-**Lokaler Teilstatus:** JPEG-Komprimierung, begrenzte Signed-POST-Policies,
-private/EU-/Lifecycle-Prüfung, echte serverseitige JPEG-Dekodierung,
-tokengebundene Upload-Claims und transaktionale Orderzuordnung sind
-implementiert. Der Server kopiert bestätigte Staging-Generationen in einen
-nicht vom Browser überschreibbaren finalen Objektpfad. Admins und
-Kundenberater erhalten nur kurzlebige Leselinks; Kopien behalten eigene
-Bildreferenzen. Ohne GCS-Runtime-Konfiguration bleibt der Upload ausdrücklich
-nicht verfügbar. Der reale Provider-/CORS-Proof bleibt offen.
-
-**Abnahme:** keine GCS-Credentials im Browser; Bilddateien werden geprüft; Hard-Delete eines Auftrags löst kein GCS-Delete aus; Lifecycle und Ablauf sind nachweisbar getestet.
-
-### A9 – Integration, Sicherheit und Qualität
-
-**Abhängigkeit:** A3–A8.  
-Unit-/Integration-/E2E-Tests für vollständigen Formularflow, Roles, copy/edited/archive, Nummernkreise, Rechnungs-Suche, PDF, Mail-Retry, Upload und Cron. Security Review für Rate-Limits, CORS, IDOR, XSS, Secrets, HTML-Mail-Editor, Uploads und PDF-Inhalte.
-
-**Abnahme:** keine bekannten öffentlichen Datenlesewege; alle sicherheitskritischen Checks serverseitig; Restore-/Purge-/Mailfehlerszenarien abgedeckt.
-
-### A10 – Betrieb und Übergabe
-
-**Abhängigkeit:** A9.  
-Hostinger-Deployment, Runtime-Variablen, Prisma-Migrationen, täglicher Cron, Logs, Healthcheck, Erstadmin, manuelle Katalogeinrichtung und Betriebs-Runbook. Betreiber richtet Backups, externes Rechnungsarchiv und finalen Go-live selbst ein.
-
-**Abnahme:** Deployment-/Rollback- und Cron-Anleitung vorhanden; Betreiber kennt die explizit außerhalb der App liegenden Aufgaben.
+| Paket | Offen | Abnahme |
+|---|---|---|
+| A0 Proof | Hostinger Node 24/Build/Start/Cron, Mail-API-Anhänge, GCS, WordPress-Loader/CORS in nichtproduktiver Umgebung (lokaler Teil: `proof-01-integration-compatibility.md`) | End-to-End-Proof in Zielumgebung; Tarifgrenzen notiert |
+| A1 Build | Tatsächlicher GitHub-CI-Lauf und Hostinger-Deployment | Sauberer CI-Build; Deployment liefert API und beide Frontends |
+| A2 Datenmodell | – (lokal vollständig) | Leere DB per Migration; keine Kaskaden auf Geschwister/Rechnungen |
+| A3 Auth | Reset-Mail-Proof mit echtem Hostinger-Versand | Kein Signup; Rollenmatrix serverseitig; Admin-2FA vor Datenzugriff |
+| A4 Geschäftslogik | Autoritative Orderpreisberechnung (Server übernimmt derzeit Browserpreise); täglicher 60-/30-Tage-Purge (`purgeAt` wird bereits gesetzt), optional mit Cron-Secret | Kein öffentlicher Order-Read; Browserpreise werden neu berechnet |
+| A5 Kundenformular | Realer WordPress-/Hostinger-Einbettungsproof | Loader lädt in WordPress; Anfrage ohne Login; Consent funktioniert |
+| A6 Admin-SPA | – (lokal vollständig) | Rollenrechte auf API-Ebene |
+| A7 Mail/PDF/Buchhaltung | 30-Tage-Finanz-Purge, Provider-End-to-End-Test | Mailfehler verlieren keine Anfrage; Versand protokolliert; PDFs nicht persistiert |
+| A8 GCS-Bilder | Realer Provider-/CORS-/Lifecycle-Proof | Keine Credentials im Browser; Lifecycle nachweisbar |
+| A9 Qualität | E2E-Szenarien und Security Review (IDOR, XSS/Mail-Editor, CORS, Rate-Limits, Uploads) | Keine öffentlichen Datenlesewege; Restore-/Purge-/Mailfehler abgedeckt |
+| A10 Betrieb | Hostinger-Deployment, Cron, Runbook (Grundlage: `operations.md`, `hostinger-mail-cron.md`, `gcs-bucket-setup.md`) | Deployment-/Rollback-/Cron-Anleitung vorhanden |
 
 ## 8. Konfigurations- und Betriebsgrenzen
 
 ### Hostinger Runtime
 
-Mindestens erforderlich (konkrete Namen dürfen die implementierenden Agents vereinheitlichen):
+Mindestens erforderlich (vollständige Liste: `operations.md`):
 
 - `DATABASE_URL`
 - `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`
 - `BETTER_AUTH_TRUSTED_ORIGINS`
-- `APP_BASE_URL`, `PUBLIC_SITE_ORIGIN`, `CORS_ALLOWED_ORIGINS`
+- `APP_BASE_URL`, `CORS_ALLOWED_ORIGINS` (inkl. WordPress-Origin)
 - `HOSTINGER_MAIL_API_TOKEN`, `HOSTINGER_MAILBOX_RESOURCE_ID`
 - Google-Maps-Schlüssel ausschließlich serverseitig: ein einziger `GOOGLE_MAPS_API_KEY`
   für Places API (New) (öffentlicher Proxy `/api/customer-form/places/*`) und
@@ -419,7 +227,7 @@ Nicht geheime Mailwerte (Firmenempfänger, Absendername, Absenderadresse) sind A
 
 1. **Rechnungsaufbewahrung:** § 14b UStG verlangt grundsätzlich acht Jahre Aufbewahrung von Rechnungen, Fristbeginn ist grundsätzlich das Ende des Ausstellungsjahres; § 147 AO kann bei steuerlicher Relevanz weitere Aufbewahrung bewirken. Die App löscht archivierte Rechnungen, Gutschriften und Mahnungsdatensätze/-ereignisse nach 30 Tagen und hat weder PDF-Archiv noch Versionierung. Der Betreiber stellt benötigte technische Archivkonfiguration bei Bedarf serverseitig als Runtime-Umgebungsvariablen bereit. Die tatsächliche externe Aufbewahrung muss vor Produktivbetrieb durch Buchhaltung/Steuerberatung bestätigt sein. Ein allgemeiner Confirmation-Dialog oder Runtime-Wert ersetzt keine Aufbewahrung.
 2. **Rechnungsänderungen:** Die App überschreibt Rechnungsdaten als einfache CRUD-Operation. Vor Änderung/Archivierung muss der Betreiber benötigte ausgestellte PDF-Stände extern sichern; die App kann frühere PDFs nicht rekonstruieren.
-3. **Node-/Paketkompatibilität:** Hostinger unterstützt Node 24.x. TypeScript 7, Prisma, Better Auth und MUI-Versionen sind vor Implementierung gemeinsam in CI zu verifizieren.
+3. **Node-/Paketkompatibilität:** Hostinger unterstützt Node 24.x. Die gepinnten Versionen sind im echten CI- und Hostinger-Lauf nachzuweisen.
 4. **Cron:** Die 60-Tage-Order-Bereinigung, 30-Tage-Finanzbeleg-Bereinigung und Mail-Retries benötigen einen verlässlichen Hostinger-Scheduler. A0 muss nachweisen, wie der Managed-Node-Tarif den täglichen Task sicher startet.
 5. **WordPress-Loader:** Sicherstellen, dass WordPress nur den Loader enthält und die Formbuild-URLs zur Laufzeit absolut aufgelöst werden; die Domains dürfen nicht in Vite-Builds fest codiert sein.
 6. **Better Auth-Konfiguration:** Mitarbeiter-E-Mail-Verifikation ist nicht erforderlich; Admins legen Konten an und können Passwort-Reset-Mails auslösen. Sessions laufen spätestens nach 30 Tagen absolut ab. Adapter-/Plugin-Schema muss zur exakt gepinnten Better-Auth-Version passen. Das aktuelle Admin-Passwort ist bei jeder Anlage, Sperrung/Entsperrung, Rollenänderung, Passwort-Reset-Mail und jedem 2FA-Reset erforderlich (ADR 0002).
@@ -430,7 +238,7 @@ Nicht geheime Mailwerte (Firmenempfänger, Absendername, Absenderadresse) sind A
 - Hostinger unterstützt Node.js 18/20/22/24: https://www.hostinger.com/support/how-to-select-the-node-js-version-for-your-application/
 - Node.js-Web-Apps auf Business/Cloud-Hosting: https://www.hostinger.com/support/how-to-deploy-a-nodejs-website-in-hostinger/
 - Hostinger Cron Jobs: https://www.hostinger.com/support/1583465-how-to-set-up-a-cron-job-at-hostinger/
-- Hostinger Mail API/OpenAPI: https://api.mail.hostinger.com/ und Repository-Datei `api-1.json` (vor Implementierung Attachment-Vertrag verifizieren).
+- Hostinger Mail API/OpenAPI: https://api.mail.hostinger.com/ und Repository-Datei `hostinger-email-api-definition.json`.
 - UStG § 14b: https://www.gesetze-im-internet.de/ustg_1980/__14b.html
 - AO § 147: https://www.gesetze-im-internet.de/ao_1977/__147.html
 - Aktuelle WP-Einbettung: öffentliche Seite referenziert CSS/JS unter `/konfigurator/form/`; das Ziel verwendet stattdessen den abgestimmten Loader auf der Vega-Subdomain.

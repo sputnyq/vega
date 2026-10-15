@@ -4,6 +4,7 @@ import {
   adminNotificationAutoHideDuration,
   adminNotificationReducer,
   initialAdminNotificationState,
+  type AdminNotification,
 } from "../src/components/admin-notification-queue.js";
 
 test("success notifications expire after three seconds and errors stay open", () => {
@@ -11,13 +12,14 @@ test("success notifications expire after three seconds and errors stay open", ()
   assert.equal(adminNotificationAutoHideDuration("error"), null);
 });
 
-test("notifications are shown in order after the current one is dismissed", () => {
-  const first = { id: 1, severity: "error" as const, message: "first" };
-  const second = { id: 2, severity: "success" as const, message: "second" };
-  const withFirst = adminNotificationReducer(initialAdminNotificationState, { type: "enqueue", notification: first });
-  const withBoth = adminNotificationReducer(withFirst, { type: "enqueue", notification: second });
+test("notifications stack up to five; further ones wait for a free slot in order", () => {
+  const items: AdminNotification[] = Array.from({ length: 7 }, (_, index) => ({ id: index + 1, severity: index % 2 ? "success" : "error", message: `m${index + 1}` }));
+  const full = items.reduce((state, notification) => adminNotificationReducer(state, { type: "enqueue", notification }), initialAdminNotificationState);
+  assert.deepEqual(full.visible.map((entry) => entry.id), [1, 2, 3, 4, 5]);
+  assert.deepEqual(full.queued.map((entry) => entry.id), [6, 7]);
 
-  assert.equal(withBoth.current, first);
-  assert.deepEqual(withBoth.queued, [second]);
-  assert.deepEqual(adminNotificationReducer(withBoth, { type: "dismiss" }), { current: second, queued: [] });
+  const afterDismiss = adminNotificationReducer(full, { type: "dismiss", id: 2 });
+  assert.deepEqual(afterDismiss.visible.map((entry) => entry.id), [1, 3, 4, 5, 6]);
+  assert.deepEqual(afterDismiss.queued.map((entry) => entry.id), [7]);
+  assert.equal(adminNotificationReducer(afterDismiss, { type: "dismiss", id: 2 }), afterDismiss);
 });

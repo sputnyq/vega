@@ -6,17 +6,19 @@ import { createAdminRateLimit } from "../http-rate-limit.js";
 import { hasUnchangedCustomerDateRange, validateOrderCreateInput } from "./order-input.js";
 import { normalizeOrderCatalogInput } from "./order-service.js";
 import { orderDataWithRelations, orderRelationCreates, orderRelations } from "./order-relations.js";
-import { listPackings, listServices, listServiceRates } from "../catalog/catalog-service.js";
-import { generateOrderPdf, orderPdfEditDate, orderPdfFilename } from "../pdf/order-pdf.js";
+import { renderOrderPdf } from "./order-pdf-service.js";
+import { registerOrderEmailRoutes } from "./order-email-routes.js";
+import type { AppConfig } from "../config.js";
 
 const PAGE_SIZE_MAX = 100;
 const ARCHIVE_RETENTION_DAYS = 60;
 
-export function createAdminOrderRouter() {
+export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail: null }) {
   const router = Router();
   // Standard per-staff limiter at the router boundary (app-level admin
   // limiter also applies; both use generous quotas for staff workflows).
   router.use(createAdminRateLimit());
+  registerOrderEmailRoutes(router, config);
 
   router.get("/", async (req, res, next) => {
     try {
@@ -77,25 +79,13 @@ export function createAdminOrderRouter() {
       if (orderNumber === null) return notFound(res);
       const order = await prisma.order.findUnique({ where: { orderNumber }, include: orderRelations });
       if (!order) return notFound(res);
-      const [services, packings, rates] = await Promise.all([listServices(), listPackings(), listServiceRates()]);
-      const input = {
-        orderNumber, data: orderDataWithRelations(order), rates,
-        services: [
-          ...services.map((service) => ({ ...service, kind: "service" as const })),
-          ...packings.map((packing) => ({ ...packing, kind: "packaging" as const })),
-        ],
-      };
-      const [latestActivity, lastEdit] = await Promise.all([
-        prisma.orderActivityEvent.findFirst({ where: { orderId: order.id, action: { in: ["UPDATED", "COPIED", "ARCHIVED", "RESTORED"] } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { action: true, createdAt: true } }),
-        prisma.orderActivityEvent.findFirst({ where: { orderId: order.id, action: { in: ["UPDATED", "COPIED"] } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true } }),
-      ]);
-      const pdf = generateOrderPdf(input, orderPdfEditDate(order, latestActivity, lastEdit));
+      const { pdf, filename } = await renderOrderPdf(order);
       await prisma.orderActivityEvent.create({
         data: { id: randomUUID(), orderId: order.id, action: "PDF_EXPORTED", actorName: String(res.locals.staffUser.name) },
       });
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(orderPdfFilename(input))}`);
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.status(200).send(pdf);
     } catch (error) { next(error); }
   });
@@ -238,7 +228,7 @@ function toOrderListItem(order: Prisma.OrderGetPayload<{ select: typeof orderLis
 }
 function toOrderDetail(order: Prisma.OrderGetPayload<{ select: typeof orderDetailSelect }>) {
   const { addresses: _addresses, positions: _positions, ...detail } = order;
-  return { ...detail, data: orderDataWithRelations(order) };
+  return { ...detail, isCopy: order.originOrderId !== null, data: orderDataWithRelations(order) };
 }
 function parsePositiveInteger(value: unknown): number | null { return typeof value === "string" && /^\d+$/u.test(value) && Number(value) > 0 ? Number(value) : null; }
 function parseOrderNumber(value: unknown): number | null { const parsed = parsePositiveInteger(value); return parsed && parsed <= 2_147_483_647 ? parsed : null; }

@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useReducer, useRef, type ReactNode } from "react";
-import { Alert, Snackbar } from "@mui/material";
+import { Alert, Box, Slide } from "@mui/material";
 import {
   adminNotificationAutoHideDuration,
   adminNotificationReducer,
   initialAdminNotificationState,
+  type AdminNotification,
   type AdminNotificationSeverity,
 } from "./admin-notification-queue.js";
 
@@ -18,28 +19,42 @@ export function AdminNotifications({ children }: { children: ReactNode }) {
   const notify = useCallback<Notify>((severity, message) => {
     dispatch({ type: "enqueue", notification: { id: ++nextId.current, severity, message } });
   }, []);
-  const dismiss = useCallback(() => dispatch({ type: "dismiss" }), []);
-  const current = state.current;
+  const dismiss = useCallback((id: number) => dispatch({ type: "dismiss", id }), []);
 
   return (
     <NotificationContext.Provider value={notify}>
       {children}
-      <Snackbar
-        key={current?.id}
-        open={current !== null}
-        autoHideDuration={current ? adminNotificationAutoHideDuration(current.severity) : null}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        onClose={(_event, reason) => {
-          if (current?.severity === "success" && reason !== "clickaway") dismiss();
+      <Box
+        aria-live="polite"
+        sx={{
+          position: "fixed", right: 24, bottom: 24, zIndex: (theme) => theme.zIndex.snackbar,
+          display: "flex", flexDirection: "column", alignItems: "stretch", gap: 1,
+          width: 400, maxWidth: "calc(100vw - 48px)", pointerEvents: "none",
         }}
       >
-        {current ? (
-          <Alert severity={current.severity} variant="filled" onClose={dismiss}>
-            {current.message}
-          </Alert>
-        ) : <span />}
-      </Snackbar>
+        {state.visible.map((notification) => (
+          <NotificationToast key={notification.id} notification={notification} onDismiss={dismiss} />
+        ))}
+      </Box>
     </NotificationContext.Provider>
+  );
+}
+
+function NotificationToast({ notification, onDismiss }: { notification: AdminNotification; onDismiss: (id: number) => void }) {
+  const { id, severity, message } = notification;
+  useEffect(() => {
+    const duration = adminNotificationAutoHideDuration(severity);
+    if (duration === null) return;
+    const timer = window.setTimeout(() => onDismiss(id), duration);
+    return () => window.clearTimeout(timer);
+  }, [id, onDismiss, severity]);
+
+  return (
+    <Slide direction="up" in mountOnEnter>
+      <Alert severity={severity} variant="filled" onClose={() => onDismiss(id)} sx={{ pointerEvents: "auto" }}>
+        {message}
+      </Alert>
+    </Slide>
   );
 }
 

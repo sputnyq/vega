@@ -36,8 +36,13 @@ Dokumente gelten immer als ungespeichert. Änderungen setzen den Dirty-Indikator
 am Speichern-Icon. Solange ein Dokument dirty ist, ist nur Speichern verfügbar;
 PDF, Kopie, Archivieren und Rechnungserstellung werden erst nach erfolgreichem
 Speichern freigegeben und speichern nicht implizit. Während Lade-/Speichervorgängen
-oder bei Ladefehlern sind alle Dokumentaktionen gesperrt. E-Mail bleibt bis zum
-umgesetzten Versanddialog deaktiviert.
+oder bei Ladefehlern sind alle Dokumentaktionen gesperrt. E-Mail folgt
+denselben Sperrregeln: Beim Auftrag öffnet ein Menü „Angebot versenden",
+„Absage versenden" und – nur bei Angebotskopien – „2 Angebote versenden"; bei
+Rechnungen (Admin-only) „Rechnung versenden". Der Versanddialog lädt einen
+serverseitigen Entwurf, lässt Empfänger, Betreff und Text bearbeiten und sendet
+über die Outbox. Der Auftragseditor zeigt Links zwischen Ursprungsauftrag und
+seinen Kopien.
 
 Archivierte Aufträge und Rechnungen sind nicht bearbeitbar. Die Archivlisten
 bieten PDF-Download zum Drucken sowie Wiederherstellung; direkte Editoraufrufe
@@ -106,10 +111,12 @@ WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend,
   der 60-Tage-Purge bleibt Cron-Arbeit.
 - Catalog/Pricing Service: Server ist Preisquelle; Einzelangebotsabweichungen werden im jeweiligen Order-Datensatz gespeichert.
 - Invoice/Credit Service: implementiert Admin-only Rechnungs-CRUD mit optionalem
-  Auftragsbezug, Such-Snapshots und Rechnungs-PDF-on-demand; Gutschriften und
-  Mahnungen bleiben offen.
+  Auftragsbezug, Such-Snapshots und Rechnungs-PDF-on-demand sowie Gutschriften
+  (eine je Rechnung) und Mahnstufen 1–3 mit PDF und Mail; Mahnungen werden mit
+  ihrer Rechnung archiviert/wiederhergestellt.
 - Mail Service: Hostinger API Adapter, Outbox, Retry/Failure Handling,
-  Actor/Event Logs; Angebots-/Rechnungs-Versanddialoge bleiben offen.
+  Actor/Event Logs und Versanddialoge für Angebote, Absagen, Rechnungen,
+  Gutschriften und Mahnungen.
 - Upload Service: GCS URL-Signierung, Upload-Verifikation und Zuordnung von Bildreferenzen.
 - Settings Service: versionierter Singleton für die sechs aktiven
   Legacy-Optionen (`boxCbm`, `kleiderboxCbm`, `origin`, `dataPrivacyUrl`,
@@ -117,8 +124,7 @@ WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend,
   (`companyEmail`, `emailFromName`, `emailFromAddress`). Änderung nur durch
   Admins, Konfliktschutz über Revision; leere Werte bleiben unkonfiguriert.
 - PDF Service: Rechnungen werden serverseitig aus aktuellen DB-Daten im
-  übernommenen Legacy-Layout erzeugt; Angebots-, Gutschrift- und Mahn-PDFs
-  bleiben offen.
+  übernommenen Legacy-Layout erzeugt; Gutschrift- und Mahn-PDFs ebenso.
 
 ## Rollen-/Berechtigungsmatrix
 
@@ -142,7 +148,7 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - Prisma-Adapter mit dem Schema, das für die gepinnte Better-Auth-Version generiert wurde. Bei Änderung von Adapter/Plugins CLI-Schema erneut generieren und Migration prüfen.
 - Better-Auth-Konfiguration benennt Prisma-Modelle gemäß ORM-Modellnamen (nicht SQL-Tabellennamen); generiertes Plugin-Schema wird nicht von Hand an der CLI vorbei geändert.
 - E-Mail/Passwort aktiv; neu gesetzte Passwörter erfordern mindestens 8 Zeichen sowie Großbuchstabe, Kleinbuchstabe und Zahl. `sendResetPassword` nutzt den serverseitigen Hostinger-Maildienst. Reset-Antworten geben nicht preis, ob ein Account existiert; Reset-Token sind kurzlebig/einmalig und Passwortreset widerruft bestehende Sessions.
-- `twoFactor` Server- und Client-Plugin für TOTP. Enrollment benötigt Passwortbestätigung und einen erfolgreichen ersten Code; nur dann gilt 2FA als aktiviert. Einmalige Recovery-Codes verschlüsselt speichern/anzeigen; 2FA-Reset erzwingt erneutes Enrollment.
+- `twoFactor` Server- und Client-Plugin für TOTP. Enrollment benötigt Passwortbestätigung und einen erfolgreichen ersten Code; nur dann gilt 2FA als aktiviert. Einmalige Recovery-Codes verschlüsselt speichern/anzeigen; Pflicht nur für Admins; Kundenberater richten TOTP optional ein und können es mit Passwortbestätigung deaktivieren. 2FA-Reset erzwingt bei Admins erneutes Enrollment.
 - Serverseitige Middleware blockiert geschützte Kundendatenrouten, bis 2FA aktiviert ist. Kein „trusted device“-Bypass zum Start.
 - `BETTER_AUTH_SECRET` ist ein zufälliges, einzigartiges Secret (mindestens 32 Zeichen/hohe Entropie) aus Hostinger Runtime-Variablen.
 - Trusted Origins werden exakt aus Runtime-Konfiguration abgeleitet. Der Public-Form-Origin ist CORS-Origin, aber nicht automatisch Auth-Origin. Kein Wildcard-Origin, keine deaktivierte CSRF-/Origin-Prüfung und keine Cross-Subdomain-Cookies, da Login und Admin auf derselben Vega-Origin liegen.

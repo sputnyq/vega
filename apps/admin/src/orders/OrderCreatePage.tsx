@@ -11,6 +11,7 @@ import { CustomerTab } from "./CustomerTab.js";
 import { ExtrasTab } from "./ExtrasTab.js";
 import { FurnitureTab } from "./FurnitureTab.js";
 import { JournalTab } from "./JournalTab.js";
+import { OrderFamilyLinks } from "./OrderFamilyLinks.js";
 import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
 import { downloadOrderPdf, saveAndFetchOrderPdf } from "./order-pdf-download.js";
 
@@ -20,6 +21,7 @@ interface OrderCreatePageProps {
   navigate: (path: string) => void;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
+  onCopyChange?: (isCopy: boolean) => void;
   dirty: boolean;
   orderNumber?: number;
 }
@@ -31,7 +33,7 @@ interface ApiErrorResponse {
   };
 }
 
-export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, orderNumber }: OrderCreatePageProps) {
+export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyChange, dirty, orderNumber }: OrderCreatePageProps) {
   const [value, setValue] = useState(createEmptyOrder);
   const [activeTab, setActiveTab] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -63,12 +65,13 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
           to: { ...base.to, ...data.to },
           details: data.details ?? base.details,
         });
+        onCopyChange?.(body.data.isCopy);
         onDirtyChange(false);
       })
       .catch(() => { if (!cancelled) { setError("Auftrag konnte nicht geladen werden."); setLoadFailed(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [navigate, onDirtyChange, orderNumber]);
+  }, [navigate, onCopyChange, onDirtyChange, orderNumber]);
 
   function update(patch: Partial<OrderFormValue>) {
     setValue((current) => ({ ...current, ...patch }));
@@ -104,10 +107,10 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
     if (orderNumber === undefined) {
       onDirtyChange(false);
       navigate(`/edit/${body.data.orderNumber}`);
-      notify("success", "Auftrag erfolgreich angelegt.");
+      notify("success", "Auftrag angelegt.");
     } else {
       onDirtyChange(false);
-      notify("success", "Auftrag erfolgreich gespeichert.");
+      notify("success", "Auftrag gespeichert.");
     }
     return true;
   }
@@ -155,6 +158,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
     }}>
       {loading && <Alert severity="info">Auftrag wird geladen …</Alert>}
       {error && <Alert severity="error" role="alert">{error}</Alert>}
+      {orderNumber !== undefined && <OrderFamilyLinks orderNumber={orderNumber} dirty={dirty} navigate={navigate} />}
       <SectionTabs
         label="Auftragsschritte"
         value={activeTab}

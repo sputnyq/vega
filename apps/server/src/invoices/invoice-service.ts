@@ -58,13 +58,12 @@ export function updateInvoice(id: string, input: InvoiceInput, invoiceNumber: st
 export function archiveInvoice(id: string, archivedAt: Date) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.invoice.findUniqueOrThrow({ where: { id }, select: { updatedAt: true } });
+    const purgeAt = new Date(archivedAt.getTime() + RETENTION_DAYS * 86400000);
+    // Reminders have no own archive action; they follow their invoice.
+    await tx.reminderEvent.updateMany({ where: { invoiceId: id, archivedAt: null }, data: { archivedAt, purgeAt } });
     return tx.invoice.update({
       where: { id, updatedAt: existing.updatedAt },
-      data: {
-        archivedAt,
-        purgeAt: new Date(archivedAt.getTime() + RETENTION_DAYS * 86400000),
-        updatedAt: existing.updatedAt,
-      },
+      data: { archivedAt, purgeAt, updatedAt: existing.updatedAt },
     });
   });
 }
@@ -72,6 +71,7 @@ export function archiveInvoice(id: string, archivedAt: Date) {
 export function restoreInvoice(id: string) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.invoice.findUniqueOrThrow({ where: { id }, select: { updatedAt: true } });
+    await tx.reminderEvent.updateMany({ where: { invoiceId: id, archivedAt: { not: null } }, data: { archivedAt: null, purgeAt: null } });
     return tx.invoice.update({
       where: { id, updatedAt: existing.updatedAt },
       data: { archivedAt: null, purgeAt: null, updatedAt: existing.updatedAt },

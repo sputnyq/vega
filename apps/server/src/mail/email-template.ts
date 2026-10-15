@@ -12,14 +12,17 @@ p { margin-block-start: 0.6rem; margin-block-end: 0.6rem; } table { width: 100%;
 .image-container { text-align: center; padding: 10px; } .image { max-width: 100%; height: auto; } .container { max-width: 700px; margin: 0 auto; background: #ececed3b; } .content, .footer { padding: 0.8rem; }
 .footer { color: #a8a8a8; background-color: #363636; font-size: 0.8rem; } .footer a { color: #a8a8a8; } .footer a:hover { color: #ffffff; } .rating { color: #ea5b27; } .centered { text-align: center; }
 .ql-align-right { text-align: right; } .ql-align-center { text-align: center; }
-</style></head><body><div class="container"><div class="image-container"><img class="image" alt="Umzug Ruck Zuck" src="https://umzugruckzuck24.de/wp-content/uploads/2026/06/Logo-147.svg" /></div><div class="content">{{content}}<br /><p>Freundliche Grüße, <br />Ihr Umzug Ruck Zuck Team.</p></div><div class="footer"><p class="centered">Mobil: 0176 101 719 90</p><p class="centered">Telefon: 089 306 429 72</p><p class="centered"><a href="https://umzugruckzuck24.de">umzugruckzuck24.de</a></p><p class="centered">© Umzug Ruck Zuck. Alle Rechte vorbehalten.</p></div></div></body></html>`;
+</style></head><body><div class="container"><div class="image-container"><img class="image" alt="Umzug Ruck Zuck" src="https://umzugruckzuck24.de/wp-content/uploads/2026/06/Logo-147.svg" /></div><div class="content">{{content}}<br /><p>Freundliche Grüße, <br />{{signature}}Ihr Umzug Ruck Zuck Team.</p></div><div class="footer"><p class="centered">Mobil: 0176 101 719 90</p><p class="centered">Telefon: 089 306 429 72</p><p class="centered"><a href="https://umzugruckzuck24.de">umzugruckzuck24.de</a></p><p class="centered">© Umzug Ruck Zuck. Alle Rechte vorbehalten.</p></div></div></body></html>`;
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]!);
 }
 
-export function renderEmailLayout(contentHtml: string): string {
-  return EMAIL_LAYOUT.replace("{{content}}", sanitizeEmailHtml(contentHtml));
+/** `signatureName` is the sending staff member's name shown above the team greeting. */
+export function renderEmailLayout(contentHtml: string, signatureName?: string | null): string {
+  const signature = signatureName?.trim() ? `${escapeHtml(signatureName.trim())}<br />` : "";
+  // Function replacers: `$` sequences in user content must not be interpreted as patterns.
+  return EMAIL_LAYOUT.replace("{{signature}}", () => signature).replace("{{content}}", () => sanitizeEmailHtml(contentHtml));
 }
 
 /**
@@ -33,12 +36,13 @@ export function renderEmailLayout(contentHtml: string): string {
  * handling stays inside the library so sequential manual decoding cannot
  * double-unescape attacker input.
  */
-const EMAIL_ALLOWED_TAGS = ["a", "b", "br", "div", "em", "h1", "h2", "h3", "i", "li", "ol", "p", "span", "strong", "table", "tbody", "td", "thead", "tr", "u", "ul"];
+// colgroup/col/th and colspan/rowspan are emitted by the admin rich-text table extension.
+const EMAIL_ALLOWED_TAGS = ["a", "b", "br", "col", "colgroup", "div", "em", "h1", "h2", "h3", "i", "li", "ol", "p", "span", "strong", "table", "tbody", "td", "th", "thead", "tr", "u", "ul"];
 
 export function sanitizeEmailHtml(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: EMAIL_ALLOWED_TAGS,
-    allowedAttributes: { a: ["href"] },
+    allowedAttributes: { a: ["href"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
     allowedSchemes: ["http", "https", "mailto"],
     allowProtocolRelative: false,
   });
@@ -71,24 +75,6 @@ export const emailDefaults = {
     return {
       subject: `Wir haben Ihre Umzugsanfrage ${orderNumber} erhalten`,
       contentHtml: `<p>Guten Tag ${escapeHtml(customerName)},</p><p>vielen Dank für Ihre Anfrage. Wir haben diese erhalten und melden uns schnellstmöglich bei Ihnen.</p>`,
-    };
-  },
-  offer(orderNumber: number) {
-    return {
-      subject: `📦 Umzugsangebot zu Ihrer Anfrage ${orderNumber}`,
-      contentHtml: "<p>Vielen Dank für Ihre Anfrage. Im Anhang finden Sie unser Umzugsangebot.</p><p>Wir freuen uns auf Ihre Rückmeldung.</p>",
-    };
-  },
-  invoice(invoiceNumber: string) {
-    return {
-      subject: `Rechnung zu Ihrem Umzug ${invoiceNumber}`,
-      contentHtml: "<p>Vielen Dank, dass Sie unsere Leistungen in Anspruch genommen haben.</p><p>Im Anhang befindet sich Ihre Rechnung.</p>",
-    };
-  },
-  inquiryDeclined(orderNumber: number) {
-    return {
-      subject: `Ihre Umzugsanfrage ${orderNumber}`,
-      contentHtml: "<p>Wir bedauern sehr, Ihnen mitteilen zu müssen, dass wir derzeit leider keine Kapazitäten haben, um Ihren Umzug übernehmen zu können. Daher können wir Ihnen momentan kein Angebot unterbreiten. Wir wünschen Ihnen viel Erfolg bei der weiteren Suche nach einem passenden Umzugsunternehmen.</p>",
     };
   },
 };

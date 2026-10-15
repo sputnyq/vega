@@ -1,41 +1,53 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "../generated/prisma/client.js";
+import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../prisma.js";
 import { MailDeliveryError, type MailAttachment } from "./hostinger-mail-client.js";
 import type { EmailKind, MailService } from "./mail-service.js";
 
 export interface QueueMailInput {
   orderId?: string;
+  /** Partner order of a two-option offer; gets a journal entry once the mail is SENT. */
+  optionOrderId?: string;
+  /** Payment reminder whose `sentAt` is set once this mail is SENT. */
+  reminderEventId?: string;
   kind: Exclude<EmailKind, "PASSWORD_RESET">;
   to: string[];
   subject: string;
   contentHtml: string;
   attachments?: MailAttachment[];
   actorName?: string;
+  signatureName?: string | null;
   idempotencyKey: string;
 }
 
 /** Stores mail before delivery. It deliberately contains no password-reset token. */
 export async function queueMail(input: QueueMailInput): Promise<string> {
-  const id = randomUUID();
-  const row = await prisma.emailOutbox.upsert({
-    where: { idempotencyKey: input.idempotencyKey },
-    create: {
-      id,
-      ...(input.orderId ? { orderId: input.orderId } : {}),
-      kind: input.kind,
-      recipients: input.to as Prisma.InputJsonValue,
-      subject: input.subject,
-      contentHtml: input.contentHtml,
-      ...(input.attachments ? { attachments: input.attachments as unknown as Prisma.InputJsonValue } : {}),
-      ...(input.actorName ? { actorName: input.actorName } : {}),
-      idempotencyKey: input.idempotencyKey,
-      nextAttemptAt: new Date(),
-    },
-    update: {},
-    select: { id: true },
-  });
-  return row.id;
+  const create = {
+    id: randomUUID(),
+    ...(input.orderId ? { orderId: input.orderId } : {}),
+    ...(input.optionOrderId ? { optionOrderId: input.optionOrderId } : {}),
+    ...(input.reminderEventId ? { reminderEventId: input.reminderEventId } : {}),
+    kind: input.kind,
+    recipients: input.to as Prisma.InputJsonValue,
+    subject: input.subject,
+    contentHtml: input.contentHtml,
+    ...(input.attachments ? { attachments: input.attachments as unknown as Prisma.InputJsonValue } : {}),
+    ...(input.actorName ? { actorName: input.actorName } : {}),
+    ...(input.signatureName ? { signatureName: input.signatureName } : {}),
+    idempotencyKey: input.idempotencyKey,
+    nextAttemptAt: new Date(),
+  };
+  try {
+    const row = await prisma.emailOutbox.upsert({ where: { idempotencyKey: input.idempotencyKey }, create, update: {}, select: { id: true } });
+    return row.id;
+  } catch (error) {
+    // Two concurrent requests with the same key: the loser reuses the winner's row.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await prisma.emailOutbox.findUnique({ where: { idempotencyKey: input.idempotencyKey }, select: { id: true } });
+      if (existing) return existing.id;
+    }
+    throw error;
+  }
 }
 
 export async function deliverOutboxMail(id: string, mailService: MailService): Promise<"sent" | "not-claimed"> {
@@ -52,6 +64,7 @@ export async function deliverOutboxMail(id: string, mailService: MailService): P
       to: parseRecipients(row.recipients),
       subject: row.subject,
       contentHtml: row.contentHtml,
+      signatureName: row.signatureName,
     };
     if (row.attachments) {
       await mailService.send({ ...mailInput, attachments: parseAttachments(row.attachments) });
@@ -59,10 +72,21 @@ export async function deliverOutboxMail(id: string, mailService: MailService): P
       await mailService.send(mailInput);
     }
     const sentAt = new Date();
-    await prisma.$transaction([
-      prisma.emailOutbox.update({ where: { id }, data: { status: "SENT", sentAt, lockedAt: null, lastErrorCode: null } }),
-      prisma.emailEvent.create({ data: { id: randomUUID(), outboxId: id, orderId: row.orderId, kind: row.kind, actorName: row.actorName, sentAt } }),
-    ]);
+    await prisma.$transaction(async (tx) => {
+      // PDF snapshots are only needed until delivery; do not retain them afterwards.
+      await tx.emailOutbox.update({ where: { id }, data: { status: "SENT", sentAt, lockedAt: null, lastErrorCode: null, attachments: Prisma.DbNull } });
+      await tx.emailEvent.create({ data: { id: randomUUID(), outboxId: id, orderId: row.orderId, kind: row.kind, actorName: row.actorName, sentAt } });
+      // Shared with the cron retry so delayed deliveries have the same effects as immediate ones.
+      if (row.orderId && (row.kind === "OFFER" || row.kind === "INQUIRY_DECLINED")) {
+        await tx.order.updateMany({ where: { id: row.orderId }, data: { edited: true } });
+      }
+      if (row.reminderEventId) {
+        await tx.reminderEvent.updateMany({ where: { id: row.reminderEventId }, data: { sentAt } });
+      }
+      if (row.optionOrderId) {
+        await tx.orderActivityEvent.create({ data: { id: randomUUID(), orderId: row.optionOrderId, action: "OFFER_SENT_AS_OPTION", actorName: row.actorName ?? "-", createdAt: sentAt } });
+      }
+    });
     return "sent";
   } catch (error) {
     const deliveryError = error instanceof MailDeliveryError ? error : new MailDeliveryError("MAIL_SEND_FAILED", true);

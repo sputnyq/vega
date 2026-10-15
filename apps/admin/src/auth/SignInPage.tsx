@@ -5,6 +5,7 @@ import { authClient } from "../auth-client.js";
 import type { PendingInitialPassword } from "../types.js";
 import { AuthCard } from "./AuthCard.js";
 import { PasswordField } from "./PasswordField.js";
+import { isTotpRequired } from "@vega/domain";
 
 interface SignInPageProps {
   onInitialPassword: (pending: PendingInitialPassword) => void;
@@ -52,9 +53,10 @@ export function SignInPage({
       }
 
       const user = result.data?.user;
+      const totpRequired = isTotpRequired(String(user?.role));
       if (user?.mustChangePassword) {
-        onInitialPassword({ currentPassword: password });
-      } else if (user?.twoFactorEnabled !== true) {
+        onInitialPassword({ currentPassword: password, totpRequired });
+      } else if (totpRequired && user?.twoFactorEnabled !== true) {
         onTotpSetup(password);
       } else {
         window.location.reload();

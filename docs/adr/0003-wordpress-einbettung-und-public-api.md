@@ -41,7 +41,7 @@ CSS-Reset für die WordPress-Seite. Die explizite Projektion unter
 Kartonvolumina und Verfügbarkeitsflags; Standort, Firmenempfänger,
 Absenderdaten und Providerzugänge bleiben davon ausgeschlossen.
 
-## Ergänzung Google-Maps (2026-10-11, Plan `google-maps-places-plan.md`)
+## Ergänzung Google-Maps (2026-10-11)
 
 Die einzige öffentliche Google-Ausnahme sind die zwei Places-Aktionen unter
 `/api/customer-form/places/*` (Autocomplete-Vorschläge ab 3 Zeichen mit
@@ -54,6 +54,7 @@ voll möglich; die eingereichte Adresse wird serverseitig unabhängig validiert.
 Die Streckenberechnung (`/api/admin/routes/*`) ist ausschließlich
 authentifizierte Admin-API für Admin/Kundenberater mit abgeschlossener
 2FA-Session: Depot → 2–4 Umzugsadressen → Depot, nur auf expliziten Klick,
-gerundet auf ganze Kilometer in den ungespeicherten Entwurf. Details und
-Abnahmekriterien stehen in `docs/google-maps-places-plan.md`; der echte
-Google-/Hostinger-Provider-Proof bleibt offen.
+gerundet auf ganze Kilometer in den ungespeicherten Entwurf. Ein einziger
+serverseitiger `GOOGLE_MAPS_API_KEY` deckt Places API (New) und Routes API ab
+(bewusste Betreiberentscheidung: gemeinsame Quoten, keine getrennte Rotation).
+Der echte Google-/Hostinger-Provider-Proof bleibt offen.

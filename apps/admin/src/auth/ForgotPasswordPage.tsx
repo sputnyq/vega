@@ -38,7 +38,7 @@ export function ForgotPasswordPage({ onBack }: { onBack: () => void }) {
       <Typography component="h1" variant="h4">Passwort zurücksetzen</Typography>
       {sent ? (
         <Stack spacing={2}>
-            <AdminAlert severity="success">Falls ein Konto zu dieser E-Mail-Adresse existiert, wurde ein Link zum Zurücksetzen versendet.</AdminAlert>
+            <AdminAlert severity="success">Falls das Konto existiert, wurde ein Link versendet.</AdminAlert>
           <Button onClick={onBack}>Zur Anmeldung</Button>
         </Stack>
       ) : (

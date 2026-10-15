@@ -3,7 +3,7 @@ import type { MailAttachment, OutgoingMail } from "./hostinger-mail-client.js";
 import type { AppSettingsDto } from "@vega/domain";
 import { isValidEmailAddress } from "@vega/domain";
 
-export type EmailKind = "INQUIRY_RECEIVED" | "OFFER" | "INVOICE" | "INQUIRY_DECLINED" | "PASSWORD_RESET";
+export type EmailKind = "INQUIRY_RECEIVED" | "OFFER" | "INVOICE" | "CREDIT_NOTE" | "PAYMENT_REMINDER" | "INQUIRY_DECLINED" | "PASSWORD_RESET";
 
 export interface SendMailInput {
   kind: EmailKind;
@@ -13,6 +13,7 @@ export interface SendMailInput {
   text?: string;
   attachments?: MailAttachment[];
   displayName?: string;
+  signatureName?: string | null;
 }
 
 export interface MailTransport {
@@ -35,7 +36,7 @@ export class MailService {
     const message: OutgoingMail = {
       to: recipients,
       subject: input.subject.trim(),
-      html: renderEmailLayout(input.contentHtml),
+      html: renderEmailLayout(input.contentHtml, input.signatureName),
       text: input.text ?? htmlToPlainText(input.contentHtml),
       ...(displayName ? { displayName } : {}),
       ...(settings?.emailFromAddress ? { expectedFromAddress: settings.emailFromAddress } : {}),

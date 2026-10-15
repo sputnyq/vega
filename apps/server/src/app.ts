@@ -17,7 +17,9 @@ import { meetsPasswordPolicy, PASSWORD_POLICY_MESSAGE } from "./password-policy.
 import { createOrderRouter } from "./orders/order-routes.js";
 import { createCatalogRouter } from "./catalog/catalog-routes.js";
 import { createAdminOrderRouter } from "./orders/admin-order-routes.js";
+import { createCreditNoteRouter } from "./invoices/credit-note-routes.js";
 import { createInvoiceRouter } from "./invoices/invoice-routes.js";
+import { createReminderRouter } from "./invoices/reminder-routes.js";
 import { createUploadRouter } from "./uploads/upload-routes.js";
 import { createUploadService, UploadError } from "./uploads/upload-service.js";
 import { createCustomerFormRouter } from "./customer-form-routes.js";
@@ -25,6 +27,7 @@ import { createSettingsRouter } from "./settings/settings-routes.js";
 import { createRouteRouter } from "./maps/route-routes.js";
 import { createAdminPlacesRouter } from "./maps/admin-places-routes.js";
 import { createStaffRouter } from "./staff/staff-routes.js";
+import { loadSignatureName, validateSignatureName } from "./staff/signature-name.js";
 
 const adminBuild = fileURLToPath(new URL("../../admin/dist", import.meta.url));
 const customerFormBuild = fileURLToPath(new URL("../../customer-form/dist", import.meta.url));
@@ -195,8 +198,36 @@ export function createApp(config: AppConfig) {
       return;
     }
   });
-  app.use("/api/admin/orders", createAdminOrderRouter());
-  app.use("/api/admin/invoices", requireAdmin(auth), createInvoiceRouter());
+  app.use("/api/admin/orders", createAdminOrderRouter(config));
+  app.use("/api/admin/invoices", requireAdmin(auth), createInvoiceRouter(config));
+  app.use("/api/admin/credits", requireAdmin(auth), createCreditNoteRouter(config));
+  app.use("/api/admin/reminders", requireAdmin(auth), createReminderRouter(config));
+
+  app.get("/api/admin/profile/signature", async (_req, res, next) => {
+    try {
+      const staffUser = res.locals.staffUser as { id: string };
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: { signatureName: await loadSignatureName(staffUser.id) } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/admin/profile/signature", async (req, res, next) => {
+    try {
+      const input = validateSignatureName((req.body as { signatureName?: unknown } | undefined)?.signatureName);
+      if (!input.ok) {
+        res.status(400).json({ error: { code: "INVALID_SIGNATURE_NAME", message: input.message } });
+        return;
+      }
+      const staffUser = res.locals.staffUser as { id: string };
+      await prisma.user.update({ where: { id: staffUser.id }, data: { signatureName: input.value } });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: { signatureName: input.value } });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   app.post("/api/admin/profile/email", createProfileEmailRateLimit(), async (req, res, next) => {
     try {

@@ -134,6 +134,17 @@ test("A3 real auth lifecycle: provisioning, password/TOTP gates, recovery, role 
   assert.equal((await advisor.request("/api/admin/orders")).status, 403);
   let changed = "Test-only-new-password2";
   assert.equal((await advisor.request("/api/admin/auth/initial-password", { currentPassword: createInput.initialPassword, newPassword: changed })).status, 200);
+  // TOTP is optional for Kundenberater: access works without it, and it can be disabled with the password.
+  assert.equal((await advisor.request("/api/admin/orders")).status, 200);
+  const optionalEnrollment = await advisor.request("/api/auth/two-factor/enable", { password: changed });
+  assert.equal(optionalEnrollment.status, 200);
+  assert.equal((await advisor.request("/api/auth/two-factor/verify-totp", { code: totp(String(optionalEnrollment.body.totpURI)), trustDevice: false })).status, 200);
+  assert.notEqual((await advisor.request("/api/auth/two-factor/disable", { password: "wrong" })).status, 200);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).twoFactorEnabled, true);
+  assert.equal((await advisor.request("/api/auth/two-factor/disable", { password: changed })).status, 200);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).twoFactorEnabled, false);
+  assert.equal(await prisma.twoFactor.count({ where: { userId } }), 0);
+  assert.equal((await advisor.request("/api/admin/orders")).status, 200);
   const enrollment = await advisor.request("/api/auth/two-factor/enable", { password: changed });
   assert.equal(enrollment.status, 200);
   assert.equal((await advisor.request("/api/auth/two-factor/verify-totp", { code: totp(String(enrollment.body.totpURI)), trustDevice: false })).status, 200);
@@ -208,7 +219,8 @@ test("A3 real auth lifecycle: provisioning, password/TOTP gates, recovery, role 
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).twoFactorEnabled, false);
   const resetClient = new Client();
   assert.equal((await resetClient.request("/api/auth/sign-in/email", { email: createInput.email, password: changed })).status, 200);
-  assert.equal((await resetClient.request("/api/admin/orders")).status, 403);
+  // After an admin TOTP reset, a Kundenberater keeps access because TOTP is optional for this role.
+  assert.equal((await resetClient.request("/api/admin/orders")).status, 200);
   await clearRate();
   assert.equal((await admin.request(`/api/admin/staff/${adminId}/actions`, { kind: "reset-totp", currentPassword: password })).status, 409);
   assert.equal((await admin.request(`/api/admin/staff/${adminId}/actions`, { kind: "block", blocked: true, currentPassword: password })).status, 409);
