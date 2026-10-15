@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Button, CircularProgress, Grid, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Button, CircularProgress, Grid, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import DeleteOutlined from "@mui/icons-material/DeleteOutlined";
 import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type AdminInvoiceDto, type InvoiceInput } from "@vega/domain";
 import { PlaceAutocompleteField } from "../places/PlaceAutocompleteField.js";

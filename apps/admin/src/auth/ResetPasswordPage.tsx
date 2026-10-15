@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import { authClient } from "../auth-client.js";
 import { meetsPasswordPolicy, passwordPolicyError, passwordPolicyHelp } from "../password-policy.js";
 import { AuthCard } from "./AuthCard.js";
@@ -47,19 +48,19 @@ export function ResetPasswordPage({ onComplete }: { onComplete: () => void }) {
       <Typography component="h1" variant="h4">Neues Passwort festlegen</Typography>
       {!token ? (
         <Stack spacing={2}>
-          <Alert severity="error">Der Reset-Link ist unvollständig oder ungültig.</Alert>
+            <AdminAlert severity="error">Der Reset-Link ist unvollständig oder ungültig.</AdminAlert>
           <Button onClick={onComplete}>Zur Anmeldung</Button>
         </Stack>
       ) : complete ? (
         <Stack spacing={2}>
-          <Alert severity="success">Passwort geändert. Melden Sie sich nun mit Ihrem neuen Passwort und Ihrem Zwei-Faktor-Code an.</Alert>
+            <AdminAlert severity="success">Passwort geändert. Melden Sie sich nun mit Ihrem neuen Passwort und Ihrem Zwei-Faktor-Code an.</AdminAlert>
           <Button variant="contained" onClick={onComplete}>Zur Anmeldung</Button>
         </Stack>
       ) : (
         <Box component="form" onSubmit={submit}>
           <Stack spacing={2}>
             <Typography color="text.secondary">{passwordPolicyHelp}</Typography>
-            {error && <Alert severity="error">{error}</Alert>}
+            {error && <AdminAlert severity="error">{error}</AdminAlert>}
             <PasswordField autoFocus autoComplete="new-password" label="Neues Passwort" helperText={passwordPolicyHelp} value={password} onChange={setPassword} minLength={8} maxLength={128} />
             <PasswordField autoComplete="new-password" label="Neues Passwort wiederholen" value={confirmation} onChange={setConfirmation} minLength={8} maxLength={128} />
             <Button type="submit" variant="contained" size="large" disabled={busy}>

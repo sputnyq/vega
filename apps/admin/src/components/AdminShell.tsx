@@ -41,6 +41,7 @@ import {
   Typography,
 } from "@mui/material";
 import { authClient } from "../auth-client.js";
+import { useAdminNotification } from "./AdminNotifications.js";
 import type { AdminRoute } from "../routes.js";
 import type { StaffUser } from "../types.js";
 
@@ -64,6 +65,7 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
     pathname === "/orders/archived" || pathname === "/invoices/archived",
   );
   const [busy, setBusy] = useState(false);
+  const notify = useAdminNotification();
   const isAdmin = user.role === "Admin";
   const isContentArea = route.settingsArea === "content";
   const isArchivePath = pathname === "/orders/archived" || pathname === "/invoices/archived";
@@ -115,7 +117,7 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
       navigate("/invoices");
       return;
     }
-    window.alert("Rechnung konnte nicht archiviert werden.");
+    notify("error", "Rechnung konnte nicht archiviert werden.");
   }
 
   return (

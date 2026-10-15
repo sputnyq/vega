@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Box,
   Button,
   Card,
@@ -14,6 +13,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import { AddOutlined, BoyOutlined, DeleteOutlined, LocalShippingOutlined } from "@mui/icons-material";
 import type { CatalogOfferDto } from "@vega/domain";
 import { useCatalogCollection } from "./useCatalogCollection.js";

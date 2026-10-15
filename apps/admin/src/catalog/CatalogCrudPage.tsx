@@ -1,6 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  Alert,
   Button,
   Checkbox,
   Dialog,
@@ -30,6 +29,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import { AddOutlined, DeleteOutlined, EditOutlined, MoreVert } from "@mui/icons-material";
 import { useCatalogCollection, type IdentifiedCatalogRecord } from "./useCatalogCollection.js";
 

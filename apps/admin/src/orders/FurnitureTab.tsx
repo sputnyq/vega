@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AddOutlined, DeleteOutlined } from "@mui/icons-material";
-import { Alert, Box, Button, FormControlLabel, Grid, IconButton, MenuItem, Paper, Stack, Switch, Tabs, Tab, TextField, Typography } from "@mui/material";
+import { Box, Button, FormControlLabel, Grid, IconButton, MenuItem, Paper, Stack, Switch, Tabs, Tab, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { CatalogFurnitureDto, OrderFurnitureInput } from "@vega/domain";
 import { apiRequest } from "../api/api-request.js";
 import type { OrderFormValue } from "./order-form-types.js";

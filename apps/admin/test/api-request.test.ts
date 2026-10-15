@@ -49,7 +49,10 @@ test("admin API requests preserve response, issue, network, and JSON error behav
   await assert.rejects(apiRequest("/broken"), { message: "Serverfehler" });
 
   globalThis.fetch = async () => Response.json({ error: { issues: [{ field: "name", message: "Erforderlich" }, { field: "email", message: "Ungültig" }] } }, { status: 422 });
-  await assert.rejects(apiRequest("/broken"), { message: "name: Erforderlich · email: Ungültig" });
+  await assert.rejects(apiRequest("/broken"), { message: "Erforderlich · Ungültig" });
+
+  globalThis.fetch = async () => Response.json({ error: { issues: [{ field: "price", message: "Bitte geben Sie einen nicht-negativen Betrag mit höchstens zwei Nachkommastellen ein." }] } }, { status: 422 });
+  await assert.rejects(apiRequest("/broken"), { message: "Bitte geben Sie einen nicht-negativen Betrag mit höchstens zwei Nachkommastellen ein." });
 
   globalThis.fetch = async () => { throw new Error("network"); };
   await assert.rejects(apiRequest("/broken"), { message: "network" });

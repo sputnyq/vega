@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Card, CircularProgress, List, ListItem, ListItemText, Stack, Typography } from "@mui/material";
+import { Card, CircularProgress, List, ListItem, ListItemText, Stack, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { AdminOrderJournalEntry } from "@vega/domain";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -33,7 +34,7 @@ export function JournalTab({ orderNumber }: { orderNumber?: number }) {
 
   if (orderNumber === undefined) return <Card><List disablePadding><ListItem sx={{ px: 2, py: 1 }}><ListItemText primary={<Typography color="text.secondary">Das Journal steht nach dem ersten Speichern des Auftrags zur Verfügung.</Typography>} /></ListItem></List></Card>;
   if (loading) return <Stack sx={{ py: 4, alignItems: "center" }}><CircularProgress /></Stack>;
-  if (error) return <Card sx={{ p: 2 }}><Alert severity="error">{error}</Alert></Card>;
+  if (error) return <Alert severity="error">{error}</Alert>;
   return <Stack spacing={2}>
     {items.length > 0 ? items.map((entry) => (
       <Card key={entry.id}>

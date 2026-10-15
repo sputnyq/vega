@@ -5,7 +5,8 @@ import AddOutlined from "@mui/icons-material/AddOutlined";
 import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
 import RestoreOutlined from "@mui/icons-material/RestoreOutlined";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField, Tooltip } from "@mui/material";
+import { Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField, Tooltip } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { AdminOrderListItem } from "@vega/domain";
 
 const PAGE_SIZE = 10;

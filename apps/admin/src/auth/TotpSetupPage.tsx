@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Alert, Box, Button, CircularProgress, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import { QRCodeSVG } from "qrcode.react";
 import { authClient } from "../auth-client.js";
 import { AuthCard } from "./AuthCard.js";
@@ -88,7 +89,7 @@ export function TotpSetupPage({ initialPassword, onComplete }: TotpSetupPageProp
       <Typography color="text.secondary">
         TOTP ist für alle Mitarbeiterkonten verpflichtend. Der normale Zugriff bleibt bis zur erfolgreichen Verifizierung gesperrt.
       </Typography>
-      {error && <Alert severity="error">{error}</Alert>}
+        {error && <AdminAlert severity="error">{error}</AdminAlert>}
       {!totpURI ? (
         <Stack spacing={2}>
           {!initialPassword && (

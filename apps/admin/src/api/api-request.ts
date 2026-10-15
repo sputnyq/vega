@@ -13,7 +13,7 @@ export async function apiRequest<T>(path: string, method = "GET", body?: unknown
   const response = await fetch(path, request);
   const result = await response.json() as ApiEnvelope<T>;
   if (!response.ok || result.data === undefined) {
-    const issueText = result.error?.issues?.map((issue) => `${issue.field}: ${issue.message}`).join(" · ");
+    const issueText = result.error?.issues?.map((issue) => issue.message).join(" · ");
     throw new Error(issueText || result.error?.message || "Die Kataloganfrage ist fehlgeschlagen.");
   }
   return result.data;

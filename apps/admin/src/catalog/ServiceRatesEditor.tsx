@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Grid, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Grid, Paper, Stack, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { CatalogServiceRateDto, ServiceRateKey } from "@vega/domain";
 import { apiRequest } from "../api/api-request.js";
 

@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import {
-  Alert,
   Box,
   Button,
   Checkbox,
@@ -13,6 +12,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
 import { authClient } from "../auth-client.js";
 import { meetsPasswordPolicy, passwordPolicyError } from "../password-policy.js";

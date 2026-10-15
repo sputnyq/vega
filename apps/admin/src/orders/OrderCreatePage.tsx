@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Snackbar, Stack } from "@mui/material";
+import { Stack } from "@mui/material";
 import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
+import { useAdminNotification } from "../components/AdminNotifications.js";
 import { SectionTabs } from "../components/SectionTabs.js";
 import { AddressesTab } from "./AddressesTab.js";
 import { BasisTab } from "./BasisTab.js";
@@ -34,7 +36,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
   const [activeTab, setActiveTab] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const notify = useAdminNotification();
   const [loading, setLoading] = useState(orderNumber !== undefined);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -88,7 +90,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
     const body = await response.json() as { data?: CreateOrderResult | AdminOrderDetail } & ApiErrorResponse;
     if (!response.ok || !body.data) {
       const issues = body.error?.issues ?? [];
-      const fieldErrors = issues.map((issue) => `${issue.field}: ${issue.message}`);
+      const fieldErrors = issues.map((issue) => issue.message);
       const firstField = issues[0]?.field ?? "";
       if (firstField.startsWith("customer")) setActiveTab(0);
       else if (firstField === "from" || firstField === "to" || firstField.startsWith("details.secondaryFrom") || firstField.startsWith("details.secondaryTo")) setActiveTab(1);
@@ -102,9 +104,10 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
     if (orderNumber === undefined) {
       onDirtyChange(false);
       navigate(`/edit/${body.data.orderNumber}`);
+      notify("success", "Auftrag erfolgreich angelegt.");
     } else {
       onDirtyChange(false);
-      setSaveSuccess(true);
+      notify("success", "Auftrag erfolgreich gespeichert.");
     }
     return true;
   }
@@ -125,7 +128,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
       if (exportPdf && orderNumber !== undefined) {
         if ((value.from.parkingSlot || value.to.parkingSlot)
           && !value.details.conditions.some((condition) => condition.description.toUpperCase().includes("HALTEVERBOT"))) {
-          window.alert("Halteverbotzone(n) wurde(n) ausgewählt!\nBitte entweder die HVZ entfernen oder als Kondition aufnehmen.");
+          notify("warning", "Halteverbotzone(n) wurde(n) ausgewählt! Bitte entweder die HVZ entfernen oder als Kondition aufnehmen.");
         }
         const file = await saveAndFetchOrderPdf(orderNumber, () => Promise.resolve(true));
         if (file) downloadOrderPdf(file);
@@ -188,9 +191,6 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
         </div>
       </fieldset>
       {busy && <Alert severity="info" role="status">Auftrag wird gespeichert …</Alert>}
-      <Snackbar open={saveSuccess} autoHideDuration={4_000} onClose={() => setSaveSuccess(false)} anchorOrigin={{ vertical: "top", horizontal: "right" }}>
-        <Alert severity="success" variant="filled" onClose={() => setSaveSuccess(false)}>Auftrag erfolgreich gespeichert.</Alert>
-      </Snackbar>
     </Stack>
   );
 }

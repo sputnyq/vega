@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Box, Button, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import { authClient } from "../auth-client.js";
 import type { PendingInitialPassword } from "../types.js";
 import { AuthCard } from "./AuthCard.js";
@@ -102,7 +103,7 @@ export function SignInPage({
       </Typography>
       <Box component="form" onSubmit={twoFactorRequired ? verifyCode : submit}>
         <Stack spacing={2}>
-          {error && <Alert severity="error">{error}</Alert>}
+          {error && <AdminAlert severity="error">{error}</AdminAlert>}
           {twoFactorRequired ? (
             <TextField
               autoFocus

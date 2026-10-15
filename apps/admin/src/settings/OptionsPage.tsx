@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Grid, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Button, Grid, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { AppSettingsDto } from "@vega/domain";
 import { apiRequest } from "../api/api-request.js";
 import { PlaceAutocompleteField } from "../places/PlaceAutocompleteField.js";
