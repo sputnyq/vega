@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { FilterList, FilterListOff } from "@mui/icons-material";
 import { Card, Checkbox, FormControlLabel, FormGroup, IconButton, Stack, Typography } from "@mui/material";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import type { CatalogCategoryDto, CatalogFurnitureDto } from "@vega/domain";
 import { CatalogCrudPage, type CatalogColumn, type CatalogField } from "./CatalogCrudPage.js";
 import { useCatalogCollection } from "./useCatalogCollection.js";
@@ -72,7 +73,7 @@ export function FurniturePage() {
 
   return (
     <Stack spacing={1.5}>
-      {categories.error && <Typography color="error">Kategorien konnten nicht geladen werden: {categories.error}</Typography>}
+      {categories.error && <AdminAlert severity="error">{`Kategorien konnten nicht geladen werden: ${categories.error}`}</AdminAlert>}
       <CatalogCrudPage<CatalogFurnitureDto>
         resource="furniture"
         title="Möbel"

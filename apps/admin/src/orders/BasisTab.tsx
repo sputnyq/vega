@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Chip, Grid, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { Button, Chip, Grid, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { CatalogOfferDto, OrderDetailsInput } from "@vega/domain";
 import { AppointmentFields } from "./AppointmentFields.js";
 import { apiRequest } from "../api/api-request.js";

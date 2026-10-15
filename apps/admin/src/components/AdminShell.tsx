@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import {
   AccountCircleOutlined,
   CategoryOutlined,
@@ -35,14 +35,21 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
   Paper,
   Toolbar,
   Tooltip,
   Typography,
 } from "@mui/material";
 import { authClient } from "../auth-client.js";
+import { useAdminNotification } from "./AdminNotifications.js";
 import type { AdminRoute } from "../routes.js";
 import type { StaffUser } from "../types.js";
+import type { EmailTarget } from "../email/EmailDialog.js";
+
+// Loaded on demand so the rich-text editor stays out of the initial bundle.
+const EmailDialog = lazy(() => import("../email/EmailDialog.js").then((module) => ({ default: module.EmailDialog })));
 
 interface AdminShellProps {
   user: StaffUser;
@@ -51,19 +58,23 @@ interface AdminShellProps {
   navigate: (path: string) => void;
   orderDirty?: boolean;
   orderBusy?: boolean;
+  orderIsCopy?: boolean;
   invoiceBusy?: boolean;
   invoiceDirty?: boolean;
   invoiceNumber?: string | undefined;
   children: ReactNode;
 }
 
-export function AdminShell({ user, route, pathname, navigate, orderDirty = false, orderBusy = false, invoiceBusy = false, invoiceDirty = false, invoiceNumber, children }: AdminShellProps) {
+export function AdminShell({ user, route, pathname, navigate, orderDirty = false, orderBusy = false, orderIsCopy = false, invoiceBusy = false, invoiceDirty = false, invoiceNumber, children }: AdminShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [contentOpen, setContentOpen] = useState(route.settingsArea === "content");
   const [archiveOpen, setArchiveOpen] = useState(
     pathname === "/orders/archived" || pathname === "/invoices/archived",
   );
   const [busy, setBusy] = useState(false);
+  const [emailMenuAnchor, setEmailMenuAnchor] = useState<HTMLElement | null>(null);
+  const [emailTarget, setEmailTarget] = useState<EmailTarget | null>(null);
+  const notify = useAdminNotification();
   const isAdmin = user.role === "Admin";
   const isContentArea = route.settingsArea === "content";
   const isArchivePath = pathname === "/orders/archived" || pathname === "/invoices/archived";
@@ -88,6 +99,11 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
     if (isArchivePath) setArchiveOpen(true);
   }, [isArchivePath]);
 
+  useEffect(() => {
+    setEmailMenuAnchor(null);
+    setEmailTarget(null);
+  }, [pathname]);
+
   async function signOut() {
     setBusy(true);
     await authClient.signOut();
@@ -108,6 +124,11 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
     if (response.ok) navigate("/");
   }
 
+  function openOrderEmail(kind: "offer" | "offer-pair" | "decline") {
+    setEmailMenuAnchor(null);
+    if (editedOrderNumber && !orderActionsDisabled) setEmailTarget({ type: "order", orderNumber: Number(editedOrderNumber), kind });
+  }
+
   async function archiveInvoice() {
     if (!editedInvoiceId || invoiceActionsDisabled || !window.confirm("Rechnung vor dem Archivieren extern sichern. Rechnung wirklich archivieren?")) return;
     const response = await fetch(`/api/admin/invoices/${editedInvoiceId}/archive`, { method: "POST", credentials: "same-origin" });
@@ -115,7 +136,7 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
       navigate("/invoices");
       return;
     }
-    window.alert("Rechnung konnte nicht archiviert werden.");
+    notify("error", "Rechnung konnte nicht archiviert werden.");
   }
 
   return (
@@ -131,7 +152,12 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
             {editedOrderNumber && <>
               <Tooltip title="Angebotskopie anlegen"><span><IconButton color="inherit" disabled={orderActionsDisabled} onClick={() => void copyOrder()} aria-label="Angebotskopie anlegen"><ContentCopyOutlined /></IconButton></span></Tooltip>
               <Tooltip title="Als PDF speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="pdf" disabled={orderActionsDisabled} aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
-              <Tooltip title="E-Mail-Versand wird mit PDF-Anhang und Versanddialog aktiviert"><span><IconButton color="inherit" disabled aria-label="E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
+              <Tooltip title="E-Mail versenden"><span><IconButton color="inherit" disabled={orderActionsDisabled} onClick={(event) => setEmailMenuAnchor(event.currentTarget)} aria-label="E-Mail versenden" aria-haspopup="menu"><EmailOutlined /></IconButton></span></Tooltip>
+              <Menu anchorEl={emailMenuAnchor} open={emailMenuAnchor !== null} onClose={() => setEmailMenuAnchor(null)}>
+                <MenuItem onClick={() => openOrderEmail("offer")}>Angebot versenden</MenuItem>
+                {orderIsCopy && <MenuItem onClick={() => openOrderEmail("offer-pair")}>2 Angebote versenden</MenuItem>}
+                <MenuItem onClick={() => openOrderEmail("decline")}>Absage versenden</MenuItem>
+              </Menu>
               <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
               <Tooltip title="Archivieren"><span><IconButton color="warning" disabled={orderActionsDisabled} onClick={() => void archiveOrder()} aria-label="Auftrag archivieren"><ArchiveOutlined /></IconButton></span></Tooltip>
               {isAdmin && <>
@@ -143,12 +169,13 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
           {isInvoiceEditor && <>
             <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="invoice-editor-form" disabled={invoiceBusy} aria-label="Rechnung speichern"><Badge color="error" variant="dot" invisible={!invoiceHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
             <Tooltip title="PDF speichern"><span><IconButton color="inherit" component="a" href={!invoiceActionsDisabled && editedInvoiceId ? `/api/admin/invoices/${editedInvoiceId}/pdf` : undefined} disabled={invoiceActionsDisabled} aria-label="Rechnungs-PDF speichern"><FileDownloadOutlined /></IconButton></span></Tooltip>
-            <Tooltip title="Rechnungsversand wird mit Versanddialog und PDF-Anhang aktiviert"><span><IconButton color="inherit" disabled aria-label="Rechnung per E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
+            <Tooltip title="Rechnung per E-Mail versenden"><span><IconButton color="inherit" disabled={invoiceActionsDisabled || !editedInvoiceId} onClick={() => { if (editedInvoiceId) setEmailTarget({ type: "invoice", id: editedInvoiceId }); }} aria-label="Rechnung per E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
             <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />
             <Tooltip title="Archivieren"><span><IconButton color="warning" disabled={invoiceActionsDisabled} onClick={() => void archiveInvoice()} aria-label="Rechnung archivieren"><ArchiveOutlined /></IconButton></span></Tooltip>
           </>}
         </Toolbar>
       </AppBar>
+      {emailTarget && <Suspense fallback={null}><EmailDialog target={emailTarget} onClose={() => setEmailTarget(null)} /></Suspense>}
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ "& .MuiDivider-root": { mx: 2 } }}>
         <Box sx={{ width: 300, pt: 0.5, height: "100%", display: "flex", flexDirection: "column" }} role="navigation" aria-label="Hauptmenü">
           <Box>

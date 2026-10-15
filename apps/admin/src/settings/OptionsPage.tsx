@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Grid, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Button, Grid, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { AppSettingsDto } from "@vega/domain";
 import { apiRequest } from "../api/api-request.js";
 import { PlaceAutocompleteField } from "../places/PlaceAutocompleteField.js";
@@ -147,7 +148,7 @@ export function OptionsPage() {
             draftRef.current = nextDraft;
             setDraft(nextDraft);
           }
-          setMessage("Einstellungen gespeichert. Das Kundenformular verwendet sie beim nächsten Laden.");
+          setMessage("Einstellungen gespeichert.");
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : "Der Server ist nicht erreichbar. Ihre Eingaben bleiben erhalten.");
         }
@@ -183,7 +184,7 @@ export function OptionsPage() {
             invoiceDraftRef.current = String(sequence.nextValue);
             setInvoiceDraft(String(sequence.nextValue));
           }
-          setInvoiceMessage("Rechnungsnummernkreis gespeichert.");
+          setInvoiceMessage("Nummernkreis gespeichert.");
         } catch (reason) {
           setInvoiceError(reason instanceof Error ? reason.message : "Nummernkreis konnte nicht gespeichert werden.");
         }

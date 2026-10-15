@@ -1,7 +1,7 @@
 # Hostinger-Cron: Mail-Outbox-Retry
 
 **Stand:** 2026-10-10
-**Geltung:** Vega `notify-customer`-Stand; Teil von `docs/notification-pland.md` (Phase 3, Schritt 14).
+**Geltung:** Retry für alle Mails der Outbox (Anfrage-Benachrichtigungen und In-App-Versand).
 **Prinzip:** Öffentliche Anfragen werden sofort beantwortet (`201 { orderNumber }`);
 der Versand läuft zweistufig: Sofortversuch nach dem DB-Commit plus dieser
 Cron-Lauf als Retry für alles Liegengebliebene. Keine öffentliche

@@ -8,7 +8,7 @@ import { EMPTY_SETTINGS } from "../src/settings/settings-input.js";
 test("mail service keeps the established branded shell and derives plain text", async () => {
   const sent: unknown[] = [];
   const service = new MailService({ send: async (message) => { sent.push(message); } });
-  const draft = emailDefaults.offer(1042);
+  const draft = { subject: "📦 Umzugsangebot zu Ihrer Anfrage 1042", contentHtml: "<p>Vielen Dank für Ihre Anfrage.</p>" };
   await service.send({ kind: "OFFER", to: [" Kunde@Example.test ", "kunde@example.test"], ...draft });
 
   assert.equal(sent.length, 1);

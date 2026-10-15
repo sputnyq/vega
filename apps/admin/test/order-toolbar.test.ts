@@ -62,7 +62,15 @@ test("invoice editor toolbar exposes save, PDF and archive actions", () => {
   }
   assert.ok(html.includes('form="invoice-editor-form"'));
   const emailButton = html.match(/<button\b[^>]*aria-label="Rechnung per E-Mail versenden"[^>]*>/u)?.[0];
-  assert.ok(emailButton?.includes("disabled"));
+  assert.ok(emailButton);
+  assert.doesNotMatch(emailButton, /\bdisabled/u);
+});
+
+test("order email menu offers two offers only for copies and loads the dialog lazily", async () => {
+  const source = await readFile(new URL("../src/components/AdminShell.tsx", import.meta.url), "utf8");
+  assert.match(source, /\{orderIsCopy && <MenuItem onClick=\{\(\) => openOrderEmail\("offer-pair"\)\}>2 Angebote versenden<\/MenuItem>\}/u);
+  assert.match(source, /lazy\(\(\) => import\("\.\.\/email\/EmailDialog\.js"\)/u);
+  assert.doesNotMatch(source, /from "@tiptap\//u);
 });
 
 test("all invoice drafts expose toolbar actions and a dirty badge, but archive lists do not", () => {
@@ -103,9 +111,8 @@ test("dirty documents allow only saving and clean saved documents enable follow-
           assert.equal(actions.length, kind === "order" ? 6 : 4);
           for (const match of actions) {
             const save = match[1] === (kind === "order" ? "Auftrag speichern" : "Rechnung speichern");
-            const email = match[1]?.includes("E-Mail");
             const disabled = /\bdisabled(?:=""|="true")/u.test(match[0]);
-            assert.equal(disabled, save ? busy : Boolean(busy || dirty || fresh || email), `${pathname}, ${match[1]}, dirty=${dirty}, busy=${busy}`);
+            assert.equal(disabled, save ? busy : Boolean(busy || dirty || fresh), `${pathname}, ${match[1]}, dirty=${dirty}, busy=${busy}`);
           }
           const badge = header.match(/<span\b[^>]*class="[^"]*MuiBadge-badge[^"]*"/u)?.[0];
           assert.ok(badge);

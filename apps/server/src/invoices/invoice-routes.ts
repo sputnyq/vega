@@ -1,9 +1,14 @@
 import { Router, type Response } from "express";
-import type { InvoiceInput } from "@vega/domain";
+import type { CreateOrderInput, EmailDraft, InvoiceInput } from "@vega/domain";
+import type { AppConfig } from "../config.js";
+import { createConfiguredMailService } from "../mail/configured-mail-service.js";
+import { invoiceEmail } from "../mail/staff-email-templates.js";
+import { invalidEmail, mailNotConfigured, respondWithSendResult, sendStaffEmail, validateStaffEmailInput } from "../mail/staff-email-service.js";
 import { prisma } from "../prisma.js";
 import { generateInvoicePdf, invoicePdfFilename } from "../pdf/invoice-pdf.js";
 import { orderDataWithRelations, orderRelations } from "../orders/order-relations.js";
 import { toInvoiceDto, validateInvoice } from "./invoice-input.js";
+import { loadSignatureName } from "../staff/signature-name.js";
 import {
   archiveInvoice,
   createInvoice,
@@ -13,7 +18,7 @@ import {
   updateInvoice,
 } from "./invoice-service.js";
 
-export function createInvoiceRouter() {
+export function createInvoiceRouter(config: Pick<AppConfig, "mail"> = { mail: null }) {
   const router = Router();
   router.get("/", async (req, res, next) => {
     try {
@@ -43,6 +48,39 @@ export function createInvoiceRouter() {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(invoicePdfFilename(invoice))}`);
       res.status(200).send(pdf);
+    } catch (error) { next(error); }
+  });
+  router.get("/:id/email-draft", async (req, res, next) => {
+    try {
+      const context = await loadInvoiceEmailContext(req.params.id);
+      if (!context.ok) return context.respond(res);
+      const { invoice, draft } = context;
+      const body: EmailDraft = { to: invoice.order?.customerEmail ?? "", subject: draft.subject, contentHtml: draft.contentHtml, attachmentNames: [invoicePdfFilename(invoice)] };
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: body });
+    } catch (error) { next(error); }
+  });
+  router.post("/:id/emails", async (req, res, next) => {
+    try {
+      const context = await loadInvoiceEmailContext(req.params.id);
+      if (!context.ok) return context.respond(res);
+      const input = validateStaffEmailInput(req.body);
+      if (!input.ok) return invalidEmail(res, input.issues);
+      const mailService = createConfiguredMailService(config);
+      if (!mailService) return mailNotConfigured(res);
+      const { invoice } = context;
+      const signatureName = await loadSignatureName(String(res.locals.staffUser.id));
+      const { outboxId, result } = await sendStaffEmail(mailService, `invoice:${invoice.id}`, input.value.idempotencyKey, async () => ({
+        ...(invoice.orderId ? { orderId: invoice.orderId } : {}),
+        kind: "INVOICE",
+        to: [input.value.to],
+        subject: input.value.subject,
+        contentHtml: input.value.contentHtml,
+        attachments: [{ filename: invoicePdfFilename(invoice), content: (await generateInvoicePdf(invoice)).toString("base64"), contentType: "application/pdf" }],
+        actorName: String(res.locals.staffUser.name),
+        signatureName,
+      }));
+      respondWithSendResult(req, res, outboxId, result);
     } catch (error) { next(error); }
   });
   router.post("/", async (req, res, next) => {
@@ -122,6 +160,13 @@ export function createInvoiceRouter() {
     try { const invoice = await restoreInvoice(req.params.id); res.json({ data: toInvoiceDto(invoice) }); } catch (error) { if (isMissing(error)) return notFound(res); next(error); }
   });
   return router;
+}
+async function loadInvoiceEmailContext(id: string) {
+  const invoice = await prisma.invoice.findUnique({ where: { id }, include: { order: { include: orderRelations } } });
+  if (!invoice) return { ok: false as const, respond: notFound };
+  if (invoice.archivedAt) return { ok: false as const, respond: (res: Response) => { res.status(409).json({ error: { code: "INVOICE_ARCHIVED", message: "Archivierte Rechnungen müssen zuerst wiederhergestellt werden." } }); } };
+  const customer = invoice.order ? (orderDataWithRelations(invoice.order) as CreateOrderInput).customer : undefined;
+  return { ok: true as const, invoice, draft: invoiceEmail(invoice.invoiceNumber, customer, invoice.customerNameSnapshot) };
 }
 function stringValue(value: unknown): string { return typeof value === "string" ? value : ""; }
 function notFound(res: Response) { res.status(404).json({ error: { code: "INVOICE_NOT_FOUND", message: "Rechnung nicht gefunden." } }); }

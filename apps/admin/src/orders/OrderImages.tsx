@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, CardMedia, Grid, Paper, Stack, Typography } from "@mui/material";
+import { Button, CardMedia, Grid, Paper, Stack, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 
 export function OrderImages({ orderNumber }: { orderNumber: number }) {
   const [images, setImages] = useState<Array<{ id: string; url: string }>>([]);

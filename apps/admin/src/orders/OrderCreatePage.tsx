@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Snackbar, Stack } from "@mui/material";
+import { Stack } from "@mui/material";
 import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
+import { useAdminNotification } from "../components/AdminNotifications.js";
 import { SectionTabs } from "../components/SectionTabs.js";
 import { AddressesTab } from "./AddressesTab.js";
 import { BasisTab } from "./BasisTab.js";
@@ -9,6 +11,7 @@ import { CustomerTab } from "./CustomerTab.js";
 import { ExtrasTab } from "./ExtrasTab.js";
 import { FurnitureTab } from "./FurnitureTab.js";
 import { JournalTab } from "./JournalTab.js";
+import { OrderFamilyLinks } from "./OrderFamilyLinks.js";
 import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
 import { downloadOrderPdf, saveAndFetchOrderPdf } from "./order-pdf-download.js";
 
@@ -18,6 +21,7 @@ interface OrderCreatePageProps {
   navigate: (path: string) => void;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
+  onCopyChange?: (isCopy: boolean) => void;
   dirty: boolean;
   orderNumber?: number;
 }
@@ -29,12 +33,12 @@ interface ApiErrorResponse {
   };
 }
 
-export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, orderNumber }: OrderCreatePageProps) {
+export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyChange, dirty, orderNumber }: OrderCreatePageProps) {
   const [value, setValue] = useState(createEmptyOrder);
   const [activeTab, setActiveTab] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const notify = useAdminNotification();
   const [loading, setLoading] = useState(orderNumber !== undefined);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -61,12 +65,13 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
           to: { ...base.to, ...data.to },
           details: data.details ?? base.details,
         });
+        onCopyChange?.(body.data.isCopy);
         onDirtyChange(false);
       })
       .catch(() => { if (!cancelled) { setError("Auftrag konnte nicht geladen werden."); setLoadFailed(true); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [navigate, onDirtyChange, orderNumber]);
+  }, [navigate, onCopyChange, onDirtyChange, orderNumber]);
 
   function update(patch: Partial<OrderFormValue>) {
     setValue((current) => ({ ...current, ...patch }));
@@ -88,7 +93,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
     const body = await response.json() as { data?: CreateOrderResult | AdminOrderDetail } & ApiErrorResponse;
     if (!response.ok || !body.data) {
       const issues = body.error?.issues ?? [];
-      const fieldErrors = issues.map((issue) => `${issue.field}: ${issue.message}`);
+      const fieldErrors = issues.map((issue) => issue.message);
       const firstField = issues[0]?.field ?? "";
       if (firstField.startsWith("customer")) setActiveTab(0);
       else if (firstField === "from" || firstField === "to" || firstField.startsWith("details.secondaryFrom") || firstField.startsWith("details.secondaryTo")) setActiveTab(1);
@@ -102,9 +107,10 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
     if (orderNumber === undefined) {
       onDirtyChange(false);
       navigate(`/edit/${body.data.orderNumber}`);
+      notify("success", "Auftrag angelegt.");
     } else {
       onDirtyChange(false);
-      setSaveSuccess(true);
+      notify("success", "Auftrag gespeichert.");
     }
     return true;
   }
@@ -125,7 +131,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
       if (exportPdf && orderNumber !== undefined) {
         if ((value.from.parkingSlot || value.to.parkingSlot)
           && !value.details.conditions.some((condition) => condition.description.toUpperCase().includes("HALTEVERBOT"))) {
-          window.alert("Halteverbotzone(n) wurde(n) ausgewählt!\nBitte entweder die HVZ entfernen oder als Kondition aufnehmen.");
+          notify("warning", "Halteverbotzone(n) wurde(n) ausgewählt! Bitte entweder die HVZ entfernen oder als Kondition aufnehmen.");
         }
         const file = await saveAndFetchOrderPdf(orderNumber, () => Promise.resolve(true));
         if (file) downloadOrderPdf(file);
@@ -152,6 +158,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
     }}>
       {loading && <Alert severity="info">Auftrag wird geladen …</Alert>}
       {error && <Alert severity="error" role="alert">{error}</Alert>}
+      {orderNumber !== undefined && <OrderFamilyLinks orderNumber={orderNumber} dirty={dirty} navigate={navigate} />}
       <SectionTabs
         label="Auftragsschritte"
         value={activeTab}
@@ -188,9 +195,6 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, dirty, 
         </div>
       </fieldset>
       {busy && <Alert severity="info" role="status">Auftrag wird gespeichert …</Alert>}
-      <Snackbar open={saveSuccess} autoHideDuration={4_000} onClose={() => setSaveSuccess(false)} anchorOrigin={{ vertical: "top", horizontal: "right" }}>
-        <Alert severity="success" variant="filled" onClose={() => setSaveSuccess(false)}>Auftrag erfolgreich gespeichert.</Alert>
-      </Snackbar>
     </Stack>
   );
 }

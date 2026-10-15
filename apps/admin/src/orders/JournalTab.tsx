@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Card, CircularProgress, List, ListItem, ListItemText, Stack, Typography } from "@mui/material";
+import { Card, CircularProgress, List, ListItem, ListItemText, Stack, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { AdminOrderJournalEntry } from "@vega/domain";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -10,6 +11,11 @@ const ACTION_LABELS: Record<string, string> = {
   ARCHIVED: "Auftrag archiviert",
   RESTORED: "Auftrag wiederhergestellt",
   PDF_EXPORTED: "PDF exportiert",
+  OFFER_SENT_AS_OPTION: "Als zweites Angebot per E-Mail versendet",
+  EMAIL_SENT_INQUIRY_RECEIVED: "Eingangsbestätigung per E-Mail versendet",
+  EMAIL_SENT_OFFER: "Angebot per E-Mail versendet",
+  EMAIL_SENT_INQUIRY_DECLINED: "Absage per E-Mail versendet",
+  EMAIL_SENT_INVOICE: "Rechnung per E-Mail versendet",
 };
 
 export function JournalTab({ orderNumber }: { orderNumber?: number }) {
@@ -33,7 +39,7 @@ export function JournalTab({ orderNumber }: { orderNumber?: number }) {
 
   if (orderNumber === undefined) return <Card><List disablePadding><ListItem sx={{ px: 2, py: 1 }}><ListItemText primary={<Typography color="text.secondary">Das Journal steht nach dem ersten Speichern des Auftrags zur Verfügung.</Typography>} /></ListItem></List></Card>;
   if (loading) return <Stack sx={{ py: 4, alignItems: "center" }}><CircularProgress /></Stack>;
-  if (error) return <Card sx={{ p: 2 }}><Alert severity="error">{error}</Alert></Card>;
+  if (error) return <Alert severity="error">{error}</Alert>;
   return <Stack spacing={2}>
     {items.length > 0 ? items.map((entry) => (
       <Card key={entry.id}>
@@ -56,6 +62,8 @@ export function JournalTab({ orderNumber }: { orderNumber?: number }) {
 }
 
 function labelFor(action: string): string {
+  const label = ACTION_LABELS[action];
+  if (label) return label;
   if (action.startsWith("EMAIL_SENT_")) return `E-Mail versandt (${action.slice("EMAIL_SENT_".length)})`;
-  return ACTION_LABELS[action] ?? action;
+  return action;
 }

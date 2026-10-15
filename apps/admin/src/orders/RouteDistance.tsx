@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import ArrowRightAltOutlined from "@mui/icons-material/ArrowRightAltOutlined";
-import { Alert, Button, Stack, Typography } from "@mui/material";
+import { Button, Stack, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import { apiRequest } from "../api/api-request.js";
 import type { OrderFormValue } from "./order-form-types.js";
 

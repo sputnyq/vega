@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { isTotpRequired } from "@vega/domain";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import type { AppConfig } from "./config.js";
@@ -98,8 +99,15 @@ export function createAuth(config: AppConfig) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path === "/two-factor/disable"
-          || (ctx.path === "/two-factor/enable" && ctx.body?.method !== undefined && ctx.body.method !== "totp")
+        if (ctx.path === "/two-factor/disable") {
+          // Only roles with optional TOTP may switch it off; the endpoint itself re-checks the password.
+          const session = await getSessionFromCtx(ctx);
+          if (!session || isTotpRequired(String(session.user.role))) {
+            throw new APIError("FORBIDDEN", { code: "MANDATORY_TOTP", message: "TOTP ist für diese Rolle verpflichtend und kann nicht deaktiviert werden." });
+          }
+          return;
+        }
+        if ((ctx.path === "/two-factor/enable" && ctx.body?.method !== undefined && ctx.body.method !== "totp")
           || (ctx.path.startsWith("/two-factor/") && ctx.body?.trustDevice === true)) {
           throw new APIError("FORBIDDEN", { code: "MANDATORY_TOTP", message: "TOTP darf nicht deaktiviert oder durch ein vertrauenswürdiges Gerät umgangen werden." });
         }

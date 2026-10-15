@@ -1,6 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
-  Alert,
   Box,
   Button,
   Checkbox,
@@ -13,7 +12,9 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
+import { isTotpRequired } from "@vega/domain";
 import { authClient } from "../auth-client.js";
 import { meetsPasswordPolicy, passwordPolicyError } from "../password-policy.js";
 import type { StaffUser } from "../types.js";
@@ -51,7 +52,85 @@ export function RecoveryCodesPanel({ codes, onDownload }: { codes: string[]; onD
   );
 }
 
-export function ProfilePage({ user }: { user: StaffUser }) {
+const SIGNATURE_NAME_MAX = 100;
+
+export function SignatureSection() {
+  const [signatureName, setSignatureName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/profile/signature")
+      .then(async (response) => {
+        const payload = await response.json() as { data?: { signatureName?: string | null } };
+        if (!response.ok || !payload.data) throw new Error("LOAD_FAILED");
+        if (active) setSignatureName(payload.data.signatureName ?? "");
+      })
+      .catch(() => { if (active) setError("Die Signatur konnte nicht geladen werden."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setBusy(true);
+    try {
+      const response = await fetch("/api/admin/profile/signature", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signatureName }),
+      });
+      const payload = await response.json() as { data?: { signatureName?: string | null }; error?: { message?: string } };
+      if (!response.ok || !payload.data) {
+        setError(payload.error?.message ?? "Die Signatur konnte nicht gespeichert werden.");
+        return;
+      }
+      setSignatureName(payload.data.signatureName ?? "");
+      setSuccess("Signatur gespeichert.");
+    } catch {
+      setError("Die Signatur konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Paper component="section" aria-labelledby="signature-heading" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+      <Stack spacing={1.5}>
+        <Typography component="h2" variant="h6" id="signature-heading">Signatur</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Ihr Name erscheint im Grußblock der E-Mails, die Sie aus Vega versenden. Leer lassen für den Standardgruß.
+        </Typography>
+        {error && <Alert severity="error">{error}</Alert>}
+        {success && <Alert severity="success">{success}</Alert>}
+        <Box component="form" onSubmit={save}>
+          <Stack spacing={2}>
+            <TextField
+              label="Name in der Signatur"
+              placeholder="z. B. Max Meier"
+              value={signatureName}
+              onChange={(event) => { setSignatureName(event.target.value); setSuccess(""); }}
+              disabled={loading}
+              slotProps={{ htmlInput: { maxLength: SIGNATURE_NAME_MAX } }}
+            />
+            <ProfileSubmitButton label="Signatur speichern" busy={busy} disabled={loading} />
+          </Stack>
+        </Box>
+      </Stack>
+    </Paper>
+  );
+}
+
+export function ProfilePage({ user, onSetupTotp }: { user: StaffUser; onSetupTotp?: () => void }) {
+  const totpOptional = !isTotpRequired(user.role);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableError, setDisableError] = useState("");
+  const [disableBusy, setDisableBusy] = useState(false);
   const [email, setEmail] = useState(user.email);
   const [emailPassword, setEmailPassword] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -103,7 +182,7 @@ export function ProfilePage({ user }: { user: StaffUser }) {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmation("");
-      setPasswordSuccess("Passwort geändert. Andere aktive Sitzungen wurden abgemeldet.");
+      setPasswordSuccess("Passwort geändert.");
     } catch {
       setPasswordError("Das Passwort konnte nicht geändert werden. Bitte versuchen Sie es erneut.");
     } finally {
@@ -129,7 +208,7 @@ export function ProfilePage({ user }: { user: StaffUser }) {
       }
       setEmail(payload.data.email);
       setEmailPassword("");
-      setEmailSuccess("E-Mail-Adresse geändert. Andere aktive Sitzungen wurden abgemeldet.");
+      setEmailSuccess("E-Mail-Adresse geändert.");
     } catch {
       setEmailError("Die E-Mail-Adresse konnte nicht geändert werden. Bitte versuchen Sie es erneut.");
     } finally {
@@ -156,11 +235,29 @@ export function ProfilePage({ user }: { user: StaffUser }) {
       setRecoveryCodes(result.data.backupCodes);
       setOtpPassword("");
       setConfirmRegeneration(false);
-      setOtpSuccess("Neue Wiederherstellungscodes erstellt. Alte Codes sind ab jetzt ungültig.");
+      setOtpSuccess("Neue Recovery-Codes erstellt.");
     } catch {
       setOtpError("Wiederherstellungscodes konnten nicht neu erstellt werden.");
     } finally {
       setOtpBusy(false);
+    }
+  }
+
+  async function disableTotp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setDisableError("");
+    setDisableBusy(true);
+    try {
+      const result = await authClient.twoFactor.disable({ password: disablePassword });
+      if (result.error) {
+        setDisableError("TOTP konnte nicht deaktiviert werden. Prüfen Sie Ihr aktuelles Passwort.");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setDisableError("TOTP konnte nicht deaktiviert werden. Bitte versuchen Sie es erneut.");
+    } finally {
+      setDisableBusy(false);
     }
   }
 
@@ -211,6 +308,7 @@ export function ProfilePage({ user }: { user: StaffUser }) {
           </Typography>
         </Stack>
       </Paper>
+      <SignatureSection />
       <Paper component="section" aria-labelledby="password-heading" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={1.5}>
           <Typography component="h2" variant="h6" id="password-heading">Passwort</Typography>
@@ -249,9 +347,12 @@ export function ProfilePage({ user }: { user: StaffUser }) {
       <Paper component="section" aria-labelledby="otp-heading" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={1.5}>
           <Typography component="h2" variant="h6" id="otp-heading">OTP-Einstellungen</Typography>
-          <Alert severity={user.twoFactorEnabled ? "success" : "warning"}>
-            TOTP-Authentifizierung: {user.twoFactorEnabled ? "aktiv" : "nicht eingerichtet"}
+          <Alert severity={user.twoFactorEnabled ? "success" : totpOptional ? "info" : "warning"}>
+            TOTP-Authentifizierung: {user.twoFactorEnabled ? "aktiv" : "nicht eingerichtet"}{totpOptional ? " (optional)" : ""}
           </Alert>
+          {totpOptional && !user.twoFactorEnabled && onSetupTotp && (
+            <Button type="button" variant="contained" onClick={onSetupTotp} sx={{ alignSelf: "flex-end" }}>TOTP einrichten</Button>
+          )}
           <Typography variant="body2" color="text.secondary">
             Wiederherstellungscodes sind einmalig. Beim Erzeugen neuer Codes werden alle bisherigen Codes ungültig.
             Die erzeugten Codes werden nur in diesem Browser angezeigt und nicht dauerhaft in der App gespeichert.
@@ -274,6 +375,18 @@ export function ProfilePage({ user }: { user: StaffUser }) {
               <ProfileSubmitButton label="Codes neu erzeugen" busy={otpBusy} disabled={!user.twoFactorEnabled} />
             </Stack>
           </Box>
+          {totpOptional && user.twoFactorEnabled && (
+            <Box component="form" onSubmit={disableTotp}>
+              <Stack spacing={2}>
+                <Typography variant="body2" color="text.secondary">
+                  TOTP ist für Ihre Rolle optional. Beim Deaktivieren werden Authenticator und Wiederherstellungscodes gelöscht.
+                </Typography>
+                {disableError && <Alert severity="error">{disableError}</Alert>}
+                <PasswordField autoComplete="current-password" label="Aktuelles Passwort bestätigen" value={disablePassword} onChange={setDisablePassword} />
+                <ProfileSubmitButton label="TOTP deaktivieren" busy={disableBusy} />
+              </Stack>
+            </Box>
+          )}
         </Stack>
       </Paper>
     </Stack>

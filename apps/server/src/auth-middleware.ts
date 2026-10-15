@@ -1,3 +1,4 @@
+import { needsTotpSetup } from "@vega/domain";
 import type { RequestHandler } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 import type { createAuth } from "./auth-config.js";
@@ -26,7 +27,7 @@ export function requireCompletedStaff(auth: AuthInstance): RequestHandler {
         reject(res, 403, "PASSWORD_CHANGE_REQUIRED", "Bitte ändern Sie zuerst Ihr Passwort.");
         return;
       }
-      if (!user.twoFactorEnabled) {
+      if (needsTotpSetup(user)) {
         reject(res, 403, "TWO_FACTOR_SETUP_REQUIRED", "Bitte richten Sie zuerst die Zwei-Faktor-Anmeldung ein.");
         return;
       }

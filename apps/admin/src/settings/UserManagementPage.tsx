@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from "@mui/material";
+import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import MoreVert from "@mui/icons-material/MoreVert";
 import AddOutlined from "@mui/icons-material/AddOutlined";
 import type { StaffAccountDto, UserRole } from "@vega/domain";
 import { PasswordField } from "../auth/PasswordField.js";
 import { apiRequest } from "../api/api-request.js";
+import { isTotpRequired } from "@vega/domain";
 
 type Action = { kind: "role"; role: UserRole } | { kind: "block"; blocked: boolean } | { kind: "reset-totp" } | { kind: "reset-password" };
 type Pending = { type: "create" } | { type: "action"; user: StaffAccountDto; action: Action };
@@ -75,12 +77,12 @@ export function UserManagementPage({ currentUserId }: { currentUserId: string })
     try {
       if (pending.type === "create") {
         await apiRequest("/api/admin/staff", "POST", { name, email, role, initialPassword, currentPassword: password });
-        setMessage("Konto angelegt. Initialpasswort separat sicher übergeben; vor Zugriff sind Passwortwechsel und TOTP erforderlich.");
+        setMessage("Konto angelegt.");
       } else {
         await apiRequest(`/api/admin/staff/${encodeURIComponent(pending.user.id)}/actions`, "POST", { ...pending.action, currentPassword: password });
-        setMessage(pending.action.kind === "reset-password" ? "Passwort-Reset-Mail versendet."
-          : pending.action.kind === "reset-totp" ? "Authenticator und Recovery-Codes gelöscht. Neue Anmeldung und TOTP-Einrichtung erforderlich."
-          : "Konto aktualisiert. Bestehende Sitzungen wurden widerrufen.");
+        setMessage(pending.action.kind === "reset-password" ? "Reset-Mail versendet."
+          : pending.action.kind === "reset-totp" ? "TOTP zurückgesetzt."
+          : "Konto aktualisiert.");
       }
       setPending(null); setPassword(""); setInitialPassword(""); setReload((value) => value + 1);
     } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Die Aktion konnte nicht ausgeführt werden."); setPassword(""); }
@@ -100,7 +102,7 @@ export function UserManagementPage({ currentUserId }: { currentUserId: string })
         <TableCell>{user.role}</TableCell>
         <TableCell><Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
           {user.mustChangePassword && <Chip size="small" label="Passwortwechsel erforderlich" />}
-          <Chip size="small" label={user.twoFactorEnabled ? "TOTP eingerichtet" : "TOTP erforderlich"} /></Stack></TableCell>
+          <Chip size="small" label={user.twoFactorEnabled ? "TOTP eingerichtet" : isTotpRequired(user.role) ? "TOTP erforderlich" : "Ohne TOTP"} /></Stack></TableCell>
         <TableCell>
           <Tooltip title="Kontoaktionen">
             <IconButton size="small" id={`staff-actions-${user.id}`} aria-label={`Aktionen für ${user.name}`} aria-haspopup="menu" aria-controls={actionMenu?.user.id === user.id ? "staff-actions-menu" : undefined} aria-expanded={actionMenu?.user.id === user.id ? true : undefined} onClick={(event) => setActionMenu({ anchor: event.currentTarget, user })}>

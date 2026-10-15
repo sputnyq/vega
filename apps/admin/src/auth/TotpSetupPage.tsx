@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Alert, Box, Button, CircularProgress, Paper, Stack, TextField, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
+import { AdminAlert } from "../components/AdminNotifications.js";
 import { QRCodeSVG } from "qrcode.react";
 import { authClient } from "../auth-client.js";
 import { AuthCard } from "./AuthCard.js";
@@ -9,10 +10,13 @@ import { PasswordField } from "./PasswordField.js";
 
 interface TotpSetupPageProps {
   initialPassword?: string;
+  /** Voluntary enrollment from the profile (Kundenberater); can be cancelled. */
+  optional?: boolean;
+  onCancel?: () => void;
   onComplete: () => void;
 }
 
-export function TotpSetupPage({ initialPassword, onComplete }: TotpSetupPageProps) {
+export function TotpSetupPage({ initialPassword, optional = false, onCancel, onComplete }: TotpSetupPageProps) {
   const [password, setPassword] = useState(initialPassword ?? "");
   const [totpURI, setTotpURI] = useState("");
   const [code, setCode] = useState("");
@@ -63,7 +67,7 @@ export function TotpSetupPage({ initialPassword, onComplete }: TotpSetupPageProp
   if (code === "verified") {
     return (
       <AuthCard>
-        <Typography variant="overline" color="primary">Vega · Ersteinrichtung</Typography>
+        <Typography variant="overline" color="primary">{optional ? "Vega · Profil" : "Vega · Ersteinrichtung"}</Typography>
         <Typography component="h1" variant="h4">Wiederherstellungscodes sichern</Typography>
         <Alert severity="warning">Diese Codes werden nur einmal angezeigt. Bewahren Sie sie sicher und getrennt vom Gerät auf.</Alert>
         <Paper variant="outlined" sx={{ p: 2 }}>
@@ -76,19 +80,21 @@ export function TotpSetupPage({ initialPassword, onComplete }: TotpSetupPageProp
         <Button variant="outlined" startIcon={<DownloadIcon />} onClick={() => downloadBackupCodesFile(backupCodes)}>
           Als Textdatei herunterladen
         </Button>
-        <Button variant="contained" size="large" onClick={onComplete}>Weiter zur Verwaltung</Button>
+        <Button variant="contained" size="large" onClick={onComplete}>{optional ? "Zurück zum Profil" : "Weiter zur Verwaltung"}</Button>
       </AuthCard>
     );
   }
 
   return (
     <AuthCard>
-      <Typography variant="overline" color="primary">Vega · Ersteinrichtung</Typography>
+      <Typography variant="overline" color="primary">{optional ? "Vega · Profil" : "Vega · Ersteinrichtung"}</Typography>
       <Typography component="h1" variant="h4">Authenticator einrichten</Typography>
       <Typography color="text.secondary">
-        TOTP ist für alle Mitarbeiterkonten verpflichtend. Der normale Zugriff bleibt bis zur erfolgreichen Verifizierung gesperrt.
+        {optional
+          ? "TOTP ist für Ihr Konto optional. Nach der Verifizierung wird bei jeder Anmeldung ein Code abgefragt."
+          : "TOTP ist für Admin-Konten verpflichtend. Der normale Zugriff bleibt bis zur erfolgreichen Verifizierung gesperrt."}
       </Typography>
-      {error && <Alert severity="error">{error}</Alert>}
+        {error && <AdminAlert severity="error">{error}</AdminAlert>}
       {!totpURI ? (
         <Stack spacing={2}>
           {!initialPassword && (
@@ -128,6 +134,7 @@ export function TotpSetupPage({ initialPassword, onComplete }: TotpSetupPageProp
           </Stack>
         </Box>
       )}
+      {optional && onCancel && <Button onClick={onCancel} disabled={busy}>Abbrechen</Button>}
     </AuthCard>
   );
 }

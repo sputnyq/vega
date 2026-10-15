@@ -4,7 +4,8 @@ import AddOutlined from "@mui/icons-material/AddOutlined";
 import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
 import RestoreOutlined from "@mui/icons-material/RestoreOutlined";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip } from "@mui/material";
+import { Box, Button, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip } from "@mui/material";
+import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { AdminInvoiceDto } from "@vega/domain";
 
 const currencyFormatter = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });

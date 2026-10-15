@@ -18,6 +18,11 @@ export interface OrderPdfInput {
 const euro = (value: number | undefined) => value === undefined ? "" : new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value);
 const number = (value: number | undefined) => value === undefined ? "" : new Intl.NumberFormat("de-DE").format(value);
 
+/** Conditions are individual gross amounts; the offer total is their sum (PDF and mail). */
+export function orderGrossTotal(data: Pick<CreateOrderInput, "details">): number {
+  return (data.details?.conditions ?? []).reduce((sum, entry) => sum + entry.amount, 0);
+}
+
 export function orderPdfEditDate(order: { createdAt: Date; updatedAt: Date }, latestActivity: { action: string; createdAt: Date } | null, lastEdit: { createdAt: Date } | null): Date {
   if (latestActivity?.action === "ARCHIVED" || latestActivity?.action === "RESTORED") {
     return lastEdit?.createdAt ?? order.createdAt;
@@ -148,7 +153,7 @@ function addPriceAndFirstPageEnd(pdf: OrderPdfBuilder, data: CreateOrderInput) {
   pdf.addText("Die Preise sind inklusive gesetzlicher Haftung in Höhe von 620,0 Euro / m³.", 8);
   pdf.resetText();
   pdf.setBold();
-  const gross = (data.details?.conditions ?? []).reduce((sum, entry) => sum + entry.amount, 0);
+  const gross = orderGrossTotal(data);
   const net = gross / 1.19;
   pdf.addText(`Netto: ${euro(net)}`, 9, 6, "right");
   pdf.addText(`MwSt. 19%: ${euro(gross - net)}`, 9, 6, "right");
