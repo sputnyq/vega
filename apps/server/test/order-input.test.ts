@@ -127,6 +127,16 @@ test("allows a staff draft with empty legacy fields but still requires public su
   assert.equal(validateOrderCreateInput(draft).ok, false);
 });
 
+test("anonymous orders cannot forge staff distance provenance", () => {
+  const input = orderFixture();
+  input.details!.distanceKm = 0;
+  input.details!.distanceSource = "route";
+  const result = validateOrderCreateInput(input);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.ok(result.issues.some((issue) => issue.field === "details.distanceSource"));
+  assert.equal(validateOrderCreateInput(input, { allowStaffPricing: true }).ok, true);
+});
+
 test("preserves the complete normalized payload for public and staff orders", () => {
   const staffInput = orderFixture();
   const staffResult = validateOrderCreateInput(staffInput, { allowStaffPricing: true });

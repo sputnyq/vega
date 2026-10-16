@@ -93,6 +93,41 @@ Exakte Versionen sind in `package.json`/`package-lock.json` gepinnt; offen ist n
   - Extern versandte E-Mails können nicht als tatsächlicher Versand erkannt werden.
 - Audit-/Aktionsprotokoll: Aktion, Zeitstempel, Benutzername und Auftrags-/Angebotsbezug. Keine Feld-Diffs oder Vorher-/Nachher-Werte. E-Mail-Versand wird nur bei Erfolg als versendet markiert. Audit-Einträge werden mit dem Auftrag gelöscht.
 
+#### Serverautoritative Angebotskalkulation
+
+- Nur Admins und Kundenberater können auf ausdrücklichen Klick über
+  `POST /api/admin/orders/pricing-preview` einen Staff-Entwurf kalkulieren.
+  Der Browser ist weder Katalog- noch Berechnungsquelle. Speichern, Kopieren,
+  PDF-Export und Mailversand kalkulieren nicht automatisch neu.
+- `CatalogOffer.sum` ist der gepflegte Basispreis; `hourPrice` beschreibt
+  weitere Stunden, aber erzeugt keine zusätzliche Arbeitsstunde im Angebot.
+  Ein Rabatt wird ausschließlich auf den Basispreis gerechnet.
+- Fahrtkosten in München nutzen `ridingCosts`; andernorts gilt das Maximum aus
+  dieser Pauschale und `distanceKm * kmPrice * trucks`. Der Kilometerbetrag
+  wird auf das nächste Vielfache von 5 EUR gerundet. Lokale Adressen werden
+  anhand ihres Ortsfelds erkannt; aktive Haupt- und aktivierte Nebenadressen
+  werden berücksichtigt.
+- Halteverbotszonen verwenden die Summe der aktivierten Adressen mal
+  `hvzPrice`. Alle ausgewählten Katalog-Services und Packungen werden anhand
+  der aktuellen Mengen und serverseitigen Einzelpreise einbezogen; Packungen
+  behalten den Hinweis „wird nach Verbrauch berechnet“. Freitextpositionen
+  ohne Tarif blockieren die automatische Kalkulation, nicht das manuelle
+  Angebot.
+- Jede fertige Kondition wird auf Cent gerundet; erst danach wird die
+  Bruttosumme exakt gebildet. Order-Bruttobeträge werden nicht mit der
+  Netto-/Umsatzsteuerarithmetik von Rechnungen vermischt.
+- Berechnete Konditionen können direkt angepasst werden. Eine neue Kalkulation
+  ersetzt bestehende Konditionen erst nach Bestätigung. Gespeicherte
+  Konditionen sind die verbindlichen Beträge; Katalogänderungen werden nur
+  durch eine neue, ausdrücklich bestätigte Kalkulation übernommen.
+- Ein serverseitiger `pricingSnapshot` im bestehenden Order-JSON hält die
+  verwendeten Preisstände für Services, Packungen und AGB sowie die
+  Preisgrundlage. PDF-Tabellen und Angebotsmails verwenden gespeicherte
+  Konditionen; Order-PDF-Preislisten verwenden denselben Snapshot und zeigen
+  bei alten Orders ohne Snapshot keine erfundenen historischen Einzelpreise.
+  Kopien übernehmen den Snapshot unverändert. Keine öffentliche Preisvorschau
+  und keine anonymen Preis-/Snapshot-Overrides.
+
 ### 4.4 Archivierung und Aufbewahrung
 
 - Aufträge werden nur durch ausdrückliche Benutzeraktion archiviert. Eine separate Archivansicht erlaubt Wiederherstellung.

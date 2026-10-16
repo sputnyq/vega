@@ -196,6 +196,27 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   Preisfelder sind bei anonymen Requests verboten; Staff-Preisangaben werden
   serverseitig typ- und wertebereichsgeprüft. Öffentliche Order-Reads bleiben
   verboten; anonyme Requests werden serverseitig limitiert.
+- Die serverseitige Angebotskalkulation ist eine ausdrückliche Staff-Aktion
+  (`POST /api/admin/orders/pricing-preview`), kein Effekt beim Speichern,
+  Kopieren, Exportieren oder Mailversand. Sie verwendet den gepflegten
+  `CatalogOffer.sum`, einen Basisrabatt, Fahrtkosten, Halteverbotszonen sowie
+  ausgewählte Katalog-Services und Packungen. Fahrtkosten außerhalb Münchens
+  sind das Maximum aus Tarifpauschale und Kilometerpreis mal Entfernung und
+  LKW-Anzahl; der Kilometerbetrag wird auf das nächste Vielfache von 5 EUR
+  gerundet. Der Rabatt gilt nur für den Basispreis. Fertige Konditionen werden
+  auf Cent gerundet und als Bruttobeträge summiert; die Rechnungsarithmetik
+  bleibt davon getrennt.
+- Berechnete Konditionen bleiben im Admin-Editor anpassbar. Erneutes Ersetzen
+  vorhandener Konditionen verlangt eine Bestätigung. Katalognormaländerungen
+  ändern gespeicherte Preise nicht. Der serverseitige `pricingSnapshot` im
+  bestehenden Order-JSON hält verwendete Katalog-/Tarifpreise und
+  Berechnungsgrundlagen fest; die finalen Beträge liegen ausschließlich in den
+  Konditionen. Vorschau- und Katalogkonflikte liefern `409`. Orders ohne
+  Snapshot bleiben bearbeitbar und werden nicht nachträglich neu bepreist.
+- Preisrelevante fehlende Grundlagen, insbesondere eine unbekannte Entfernung
+  für Nicht-München, blockieren nur die automatische Kalkulation. Manuelle
+  Angebote und unvollständige Entwürfe bleiben möglich. Anonyme Requests
+  können weder den Staff-Preisweg noch einen `pricingSnapshot` setzen.
 - Öffentliche Katalogprojektionen sind getrennte, rate-limitierte GETs unter
   `/api/catalog/categories`, `/api/catalog/furniture`, `/api/catalog/offers`,
   `/api/catalog/packings`, `/api/catalog/services` und

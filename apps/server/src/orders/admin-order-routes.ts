@@ -4,7 +4,8 @@ import { Router, type Response } from "express";
 import { prisma } from "../prisma.js";
 import { createAdminRateLimit } from "../http-rate-limit.js";
 import { hasUnchangedCustomerDateRange, OrderInputError, validateOrderCreateInput, validateOrderWriteInput } from "./order-input.js";
-import { normalizeOrderCatalogInput } from "./order-service.js";
+import { normalizeOrderCatalogInput, roundChangedOrderConditions } from "./order-service.js";
+import { orderPricingErrorIssue, previewOrderPricing, validatePricingSnapshot } from "./order-pricing-service.js";
 import { orderDataWithRelations, orderRelationCreates, orderRelations } from "./order-relations.js";
 import { renderOrderPdf } from "./order-pdf-service.js";
 import { registerOrderEmailRoutes } from "./order-email-routes.js";
@@ -19,6 +20,33 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
   // limiter also applies; both use generous quotas for staff workflows).
   router.use(createAdminRateLimit());
   registerOrderEmailRoutes(router, config);
+
+  router.post("/pricing-preview", async (req, res, next) => {
+    try {
+      const validation = validateOrderCreateInput(req.body, { allowStaffPricing: true, allowIncomplete: true });
+      if (!validation.ok) return invalidOrder(res, validation.issues);
+      const normalized = await normalizeOrderCatalogInput(validation.value);
+      const preview = await previewOrderPricing(normalized, prisma);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ data: preview });
+    } catch (error) {
+      const issue = orderPricingErrorIssue(error);
+      if (issue) return invalidOrder(res, [issue]);
+      if (error instanceof Error && error.message === "PRICE_CATALOG_CHANGED") {
+        res.status(409).json({ error: { code: "PRICE_CATALOG_CHANGED", message: "Der Preiskatalog wurde seit der Vorschau geändert. Bitte berechnen Sie das Angebot erneut." } });
+        return;
+      }
+      if (error instanceof Error && error.message === "PRICE_PREVIEW_STALE") {
+        res.status(409).json({ error: { code: "PRICE_PREVIEW_STALE", message: "Preisrelevante Angaben wurden seit der Vorschau geändert. Bitte berechnen Sie das Angebot erneut." } });
+        return;
+      }
+      if (error instanceof Error && error.message === "INVALID_ORDER_CATALOG_REFERENCE") {
+        res.status(400).json({ error: { code: "INVALID_ORDER_CATALOG_REFERENCE", message: "Eine ausgewählte Katalogposition ist nicht mehr verfügbar." } });
+        return;
+      }
+      next(error);
+    }
+  });
 
   router.get("/", async (req, res, next) => {
     try {
@@ -144,7 +172,13 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
           if (existing.archivedAt) throw new Error("ORDER_ARCHIVED");
           if (existing.revision !== revision) throw new Error("ORDER_CONFLICT");
           if (!hasUnchangedCustomerDateRange(validation.value, existing.data)) throw new Error("CUSTOMER_DATE_RANGE_READ_ONLY");
-          const normalized = await normalizeOrderCatalogInput(validation.value, orderDataWithRelations(existing), tx);
+          const storedInput = orderDataWithRelations(existing);
+          const normalized = roundChangedOrderConditions(
+            await normalizeOrderCatalogInput(validation.value, storedInput, tx),
+            storedInput,
+          );
+          const pricingSnapshot = await validatePricingSnapshot(normalized, storedInput.pricingSnapshot, tx);
+          if (pricingSnapshot) normalized.pricingSnapshot = pricingSnapshot;
           const customerName = `${normalized.customer.firstName} ${normalized.customer.lastName}`.trim();
           const relations = orderRelationCreates(normalized);
           // Claim and lock the parent before Prisma can execute nested relation writes.
@@ -167,6 +201,16 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
         if (isMissingOrder(error) || isTransactionConflict(error) || (error instanceof Error && error.message === "ORDER_CONFLICT")) return orderConflict(res);
         if (error instanceof Error && error.message === "ORDER_NOT_FOUND") return notFound(res);
         if (error instanceof OrderInputError) return invalidOrder(res, error.issues);
+        const pricingIssue = orderPricingErrorIssue(error);
+        if (pricingIssue) return invalidOrder(res, [pricingIssue]);
+        if (error instanceof Error && error.message === "PRICE_CATALOG_CHANGED") {
+          res.status(409).json({ error: { code: "PRICE_CATALOG_CHANGED", message: "Der Preiskatalog wurde seit der Vorschau geändert. Bitte berechnen Sie das Angebot erneut." } });
+          return;
+        }
+        if (error instanceof Error && error.message === "PRICE_PREVIEW_STALE") {
+          res.status(409).json({ error: { code: "PRICE_PREVIEW_STALE", message: "Preisrelevante Angaben wurden seit der Vorschau geändert. Bitte berechnen Sie das Angebot erneut." } });
+          return;
+        }
         if (error instanceof Error && error.message === "INVALID_ORDER_CATALOG_REFERENCE") {
           res.status(400).json({ error: { code: "INVALID_ORDER_CATALOG_REFERENCE", message: "Eine ausgewählte Katalogposition ist nicht mehr verfügbar." } });
           return;

@@ -44,3 +44,22 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
   Auftragseigene Mail-Outbox-Inhalte und Mailereignisse werden ebenso wie das
   Aktionsjournal mit dem Auftrag gelöscht, nicht als personenbezogene Waisen
   weiter aufbewahrt.
+
+## Preisstand und serverseitige Kalkulation (2026-10-16)
+
+- Die automatische Preisvorschau ist eine ausdrückliche Staff-Aktion. Sie
+  ersetzt vorhandene Konditionen nur nach Bestätigung; direkte individuelle
+  Konditionsänderungen bleiben möglich.
+- Gespeicherte Angebotsbeträge ändern sich nicht bei Katalogänderung,
+  erneutem Speichern, Kopie, Export oder Mailversand. Nur eine bestätigte
+  Neukalkulation verwendet aktuelle Katalogwerte.
+- Die Berechnungsgrundlage und verwendeten Einzelpreis-/Tarifstände liegen als
+  validierter `pricingSnapshot` im bestehenden Order-JSON. Die endgültigen
+  Angebotspreise sind die gespeicherten Konditionen, keine zweite
+  konkurrierende Preisliste. Kopien erhalten eigenständige Snapshots.
+- Orders ohne Snapshot behalten ihre bisherigen Konditionen; fehlende
+  historische Einzelpreise werden in Preislisten nicht durch aktuelle
+  Katalogwerte ersetzt. Es erfolgt keine Migration von Bestandsdaten.
+- Serverseitige Dezimalarithmetik rundet fertige Konditionen auf Cent und
+  summiert diese Bruttobeträge. Rechnungs- und Mahnberechnungen bleiben
+  getrennt.

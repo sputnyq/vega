@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { AdminShell } from "../src/components/AdminShell.js";
 import { AppointmentFields } from "../src/orders/AppointmentFields.js";
+import { ConditionsTab } from "../src/orders/ConditionsTab.js";
+import { createEmptyOrder } from "../src/orders/order-form-types.js";
 import { resolveAdminRoute } from "../src/routes.js";
 import type { StaffUser } from "../src/types.js";
 
@@ -85,4 +87,19 @@ test("staff can view but cannot edit the customer alternative date range", () =>
     assert.ok(input);
     assert.doesNotMatch(input, /readOnly/u);
   }
+});
+
+test("conditions keep manual editing and expose an explicit server calculation action", () => {
+  const value = createEmptyOrder();
+  value.details.conditions = [{ description: "Manuelle Kondition", amount: 125 }];
+  const html = render(createElement(ConditionsTab, {
+    value,
+    onConditionsChange: () => {},
+    onCalculate: () => {},
+  }));
+  assert.ok(html.includes("Konditionen serverseitig berechnen"));
+  assert.ok(html.includes("Beschreibung"));
+  assert.ok(html.includes("Betrag (€)"));
+  assert.ok(html.includes("Manuelle Kondition"));
+  assert.ok(html.includes("125,00"));
 });

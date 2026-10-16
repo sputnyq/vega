@@ -6,9 +6,12 @@ import { emailDefaults } from "../mail/email-template.js";
 import { attachUploadClaims } from "../uploads/upload-service.js";
 import { orderRelationCreates } from "./order-relations.js";
 import { validateOrderWriteInput } from "./order-input.js";
+import { validatePricingSnapshot } from "./order-pricing-service.js";
+import { roundAmountToCents } from "@vega/domain";
 
 export async function createOrder(input: CreateOrderInput, source: "public" | "admin", actorName = "-", settings?: AppSettingsDto) {
   let normalizedInput = await normalizeOrderCatalogInput(input);
+  if (source === "admin") normalizedInput = roundChangedOrderConditions(normalizedInput);
   if (source === "public" && normalizedInput.details) {
     const furniture = normalizedInput.details.furniture;
     normalizedInput = { ...normalizedInput, details: {
@@ -26,9 +29,16 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
   normalizedInput = validateOrderWriteInput(normalizedInput);
   const customerName = `${normalizedInput.customer.firstName} ${normalizedInput.customer.lastName}`.trim();
   const { imageClaims = [], ...storedInput } = normalizedInput;
-  const data = JSON.parse(JSON.stringify(storedInput)) as Prisma.InputJsonValue;
 
   return prisma.$transaction(async (transaction) => {
+    if (source === "admin" && normalizedInput.pricingSnapshot) {
+      const pricingSnapshot = await validatePricingSnapshot(normalizedInput, undefined, transaction);
+      if (pricingSnapshot) {
+        normalizedInput = { ...normalizedInput, pricingSnapshot };
+        storedInput.pricingSnapshot = pricingSnapshot;
+      }
+    }
+    const data = JSON.parse(JSON.stringify(storedInput)) as Prisma.InputJsonValue;
     const sequence = await transaction.orderNumberSequence.update({
       where: { id: 1 },
       data: { nextValue: { increment: 1 } },
@@ -71,6 +81,21 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
     }
     return { orderNumber, outboxId, outboxIds };
   });
+}
+
+export function roundChangedOrderConditions(input: CreateOrderInput, previous?: CreateOrderInput): CreateOrderInput {
+  if (!input.details) return input;
+  return {
+    ...input,
+    details: {
+      ...input.details,
+      conditions: input.details.conditions.map((condition, index) => {
+        const saved = previous?.details?.conditions[index];
+        const unchanged = saved?.amount === condition.amount && saved.kind === condition.kind;
+        return unchanged ? condition : { ...condition, amount: roundAmountToCents(condition.amount) };
+      }),
+    },
+  };
 }
 
 export async function normalizeOrderCatalogInput(

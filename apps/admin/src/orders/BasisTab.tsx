@@ -17,7 +17,11 @@ export function BasisTab({ value, update, onBasisChange }: BasisTabProps) {
   const [offers, setOffers] = useState<CatalogOfferDto[]>([]);
   const [offersLoading, setOffersLoading] = useState(true);
   const [offersError, setOffersError] = useState<string | null>(null);
-  const setBasis = (patch: Partial<typeof basis>) => onBasisChange({ ...basis, ...patch });
+  const setBasis = (patch: Partial<typeof basis>) => {
+    const next = { ...basis, ...patch };
+    if (["workers", "trucks", "hours"].some((key) => key in patch)) delete next.offerId;
+    onBasisChange(next);
+  };
 
   useEffect(() => {
     let active = true;
@@ -93,6 +97,7 @@ export function BasisTab({ value, update, onBasisChange }: BasisTabProps) {
                       <TableCell>{offer.sum.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</TableCell>
                       <TableCell>
                         <Button size="small" onClick={() => onBasisChange({
+                          offerId: offer.id,
                           workers: offer.workers,
                           trucks: offer.trucks,
                           hours: offer.includedHours,

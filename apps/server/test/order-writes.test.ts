@@ -18,7 +18,7 @@ const client = {
 };
 const previous = Reflect.get(globalThis, "vegaPrisma");
 Reflect.set(globalThis, "vegaPrisma", client);
-const { createOrder, normalizeOrderCatalogInput } = await import("../src/orders/order-service.js");
+const { createOrder, normalizeOrderCatalogInput, roundChangedOrderConditions } = await import("../src/orders/order-service.js");
 const { createAdminOrderRouter } = await import("../src/orders/admin-order-routes.js");
 if (previous === undefined) Reflect.deleteProperty(globalThis, "vegaPrisma");
 else Reflect.set(globalThis, "vegaPrisma", previous);
@@ -184,6 +184,21 @@ test("public creation never treats submitted snapshots as historical", async () 
   const input = publicFixture();
   input.details!.furniture.items = [{ catalogId: 123, name: "Historical", volume: 2, quantity: 1 }];
   await assert.rejects(createOrder(input, "public"), /INVALID_ORDER_CATALOG_REFERENCE/u);
+});
+
+test("new and edited order conditions round to cents while untouched historical amounts remain unchanged", () => {
+  const previous = orderFixture();
+  previous.details!.conditions = [{ description: "Historical", amount: 1.005 }];
+  const input = structuredClone(previous);
+  input.details!.conditions = [
+    { description: "Historical", amount: 1.005 },
+    { description: "New", amount: 2.345 },
+  ];
+  assert.deepEqual(roundChangedOrderConditions(input, previous).details!.conditions, [
+    { description: "Historical", amount: 1.005 },
+    { description: "New", amount: 2.35 },
+  ]);
+  assert.equal(roundChangedOrderConditions(input).details!.conditions[0]!.amount, 1.01);
 });
 
 for (const revision of [undefined, null, "0", -1, 0.5, 2_147_483_647]) {

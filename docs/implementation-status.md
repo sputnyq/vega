@@ -13,6 +13,7 @@ Konkretisiert `implementation-plan.md` §7; bei Konflikten gelten Plan und ADRs.
 | Auth | Better Auth 1.7.7, zwei Rollen, TOTP (Pflicht für Admins, optional für Kundenberater), Initialadmin, Recovery-Codes, 30-Tage-Sessions, Mitarbeiterverwaltung mit Passwortbestätigung, Sole-Admin-Recovery. |
 | Profil | E-Mail- und Passwortänderung, TOTP-Verwaltung, persönlicher Signaturname für Mails. |
 | Aufträge | Öffentlicher Order-POST, Admin-Neuanlage/-Liste/-Suche/-Bearbeitung, Angebotskopien mit Familienlinks, Archiv/Restore, Journal, Auftrags-PDF im Legacy-Layout. |
+| Preisberechnung | Serverseitige Vorschau auf ausdrücklichen Staff-Klick; Legacy-Basisrabatt, Fahrt, Halteverbotszonen, Katalog-Services und Packungen. Konditionen bleiben anpassbar, Preisstände im Order-Snapshot stabil; PDF/AGB-Preislisten nutzen gespeicherte Preise. Keine automatische Neubepreisung oder öffentliche Preisvorschau. |
 | Katalog/Optionen | Safe Public-GETs, Admin-CRUD, revisionsgeschützte Optionen unter `/settings`. |
 | Kundenformular | Fünf Legacy-Schritte, Möbelrechner, Consent, WordPress-Loader, Google-Places-Vorschläge. |
 | Bilder | JPEG-Komprimierung, GCS-Signed-POST, Byteprüfung, Claims, kurzlebige Leselinks. |
@@ -41,11 +42,10 @@ Konkretisiert `implementation-plan.md` §7; bei Konflikten gelten Plan und ADRs.
 
 ## Offene fachliche Arbeit
 
-1. **Autoritative Preisberechnung** auf dem Server; der Browser bleibt niemals Preisquelle.
-2. **Purge-Läufe:** 60-Tage-Order-Purge und 30-Tage-Finanz-Purge idempotent per Cron.
-3. **E2E/Sicherheitsprüfung:** Order-/Copy-/Archive-/Mail-/PDF-Szenarien, IDOR,
+1. **Purge-Läufe:** 60-Tage-Order-Purge und 30-Tage-Finanz-Purge idempotent per Cron.
+2. **E2E/Sicherheitsprüfung:** Order-/Copy-/Archive-/Mail-/PDF-Szenarien, IDOR,
    HTML-Mail-Editor, CORS, Rate-Limits, Uploads.
-4. **Offene Fachfrage:** Bestätigung der Mehrfachadress-Reihenfolge bei der Route.
+3. **Offene Fachfrage:** Bestätigung der Mehrfachadress-Reihenfolge bei der Route.
 
 ## Externe Release-Gates
 

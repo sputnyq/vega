@@ -1,4 +1,4 @@
-import type { CatalogServiceRateDto, CreateOrderInput, OrderAddressInput } from "@vega/domain";
+import { addInvoiceAmounts, type CatalogServiceRateDto, type CreateOrderInput, type OrderAddressInput } from "@vega/domain";
 import { OrderPdfBuilder } from "./order-pdf-builder.js";
 import { LEGACY_RZ24_LOGO } from "./legacy-logo.js";
 import { orderAgb } from "./order-agb.js";
@@ -20,7 +20,7 @@ const number = (value: number | undefined) => value === undefined ? "" : new Int
 
 /** Conditions are individual gross amounts; the offer total is their sum (PDF and mail). */
 export function orderGrossTotal(data: Pick<CreateOrderInput, "details">): number {
-  return (data.details?.conditions ?? []).reduce((sum, entry) => sum + entry.amount, 0);
+  return addInvoiceAmounts((data.details?.conditions ?? []).map((entry) => entry.amount));
 }
 
 export function orderPdfEditDate(order: { createdAt: Date; updatedAt: Date }, latestActivity: { action: string; createdAt: Date } | null, lastEdit: { createdAt: Date } | null): Date {

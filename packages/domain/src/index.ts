@@ -1,6 +1,8 @@
 export { meetsPasswordPolicy, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./password-policy.js";
 export { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE } from "./invoice-number.js";
 export { isValidEmailAddress } from "./email.js";
+export { calculateOrderPricing, OrderPricingError } from "./order-pricing.js";
+export type { CalculateOrderPricingInput, PricedOrderService } from "./order-pricing.js";
 
 /** Anwendungsrollen; Berechtigungen werden serverseitig durchgesetzt. */
 export type UserRole = "Admin" | "Kundenberater";
@@ -76,6 +78,28 @@ export interface OrderServiceInput {
 export interface OrderConditionInput {
   description: string;
   amount: number;
+  kind?: "manual" | "base" | "discount" | "travel" | "parking" | "services" | "packaging";
+}
+
+export interface OrderPricingSnapshot {
+  version: 1;
+  calculatedAt: string;
+  source: {
+    offerId: number | null;
+    workers: number;
+    trucks: number;
+    hours: number;
+    basePrice: number;
+    extraHourPrice: number;
+    discountPercent: number;
+    distanceKm: number;
+    distanceSource?: "manual" | "route";
+    addresses: Array<{ city: string; parkingSlot: boolean }>;
+    services: Array<{ kind: "service" | "packaging"; catalogId: number | null; quantity: number }>;
+  };
+  offer: CatalogOfferDto | null;
+  rates: CatalogServiceRateDto[];
+  services: Array<{ id: number; kind: "service" | "packaging"; name: string; price: number; sort: number }>;
 }
 
 export interface OrderDetailsInput {
@@ -84,6 +108,7 @@ export interface OrderDetailsInput {
   showSecondaryFrom: boolean;
   showSecondaryTo: boolean;
   distanceKm: number;
+  distanceSource?: "manual" | "route";
   furniture: {
     volume: number;
     volumeComplete?: boolean;
@@ -109,11 +134,12 @@ export interface OrderDetailsInput {
     basePrice: number;
     extraHourPrice: number;
     discountPercent: number;
+    offerId?: number;
   };
   conditions: OrderConditionInput[];
 }
 
-/** Customer-submitted or staff-entered order data. Prices are deliberately absent. */
+/** Public and staff order input; staff prices are validated and previews are calculated server-side. */
 export interface CreateOrderInput {
   privacyAccepted?: boolean;
   visitWanted?: boolean;
@@ -129,6 +155,7 @@ export interface CreateOrderInput {
   from: OrderAddressInput;
   to: OrderAddressInput;
   details?: OrderDetailsInput;
+  pricingSnapshot?: OrderPricingSnapshot;
   movingDate: string;
   movingTime?: string;
   dateFrom?: string;
@@ -137,6 +164,11 @@ export interface CreateOrderInput {
   orderSource?: "express" | "individuelle" | "Moebelliste" | "UmzugRuckZuck" | "check24" | "umzugruckzuck24.de";
   note?: string;
   costsAssumption?: boolean;
+}
+
+export interface OrderPricingPreview {
+  conditions: OrderConditionInput[];
+  pricingSnapshot: OrderPricingSnapshot;
 }
 
 export interface CreateOrderResult {
@@ -282,7 +314,17 @@ export interface AdminInvoiceListDto {
   pageSize: number;
 }
 
-export { addInvoiceAmounts, calculateInvoiceTotals, invoiceLineTotal, roundInvoiceAmount } from "./invoice-calculation.js";
+export {
+  addInvoiceAmounts,
+  calculateInvoiceTotals,
+  calculateRoundedPercent,
+  calculateRoundedSubtotal,
+  invoiceLineTotal,
+  roundAmountToCents,
+  roundAmountToNearestIncrement,
+  roundProductToNearestIncrement,
+  roundInvoiceAmount,
+} from "./invoice-calculation.js";
 export { MAX_INVOICE_AMOUNT, isInvoiceAmount, isInvoiceDate, validateInvoiceEntries } from "./invoice-validation.js";
 
 /** Legacy accounting tabs: at most three consecutive payment reminders per invoice. */

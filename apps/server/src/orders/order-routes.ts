@@ -10,6 +10,7 @@ import { createConfiguredMailService } from "../mail/configured-mail-service.js"
 import { deliverOutboxMail } from "../mail/mail-outbox-service.js";
 import { UploadError } from "../uploads/upload-service.js";
 import { getAppSettings } from "../settings/settings-service.js";
+import { orderPricingErrorIssue } from "./order-pricing-service.js";
 
 type AuthInstance = ReturnType<typeof createAuth>;
 
@@ -93,6 +94,19 @@ export function createOrderRouter(auth: AuthInstance, config: AppConfig) {
       }
       if (error instanceof Error && error.message === "INVALID_ORDER_CATALOG_REFERENCE") {
         res.status(400).json({ error: { code: "INVALID_ORDER_CATALOG_REFERENCE", message: "Eine ausgewählte Katalogposition ist nicht mehr verfügbar." } });
+        return;
+      }
+      const pricingIssue = orderPricingErrorIssue(error);
+      if (pricingIssue) {
+        res.status(400).json({ error: { code: "INVALID_ORDER", message: pricingIssue.message, issues: [pricingIssue] } });
+        return;
+      }
+      if (error instanceof Error && error.message === "PRICE_CATALOG_CHANGED") {
+        res.status(409).json({ error: { code: "PRICE_CATALOG_CHANGED", message: "Der Preiskatalog wurde seit der Vorschau geändert. Bitte berechnen Sie das Angebot erneut." } });
+        return;
+      }
+      if (error instanceof Error && error.message === "PRICE_PREVIEW_STALE") {
+        res.status(409).json({ error: { code: "PRICE_PREVIEW_STALE", message: "Preisrelevante Angaben wurden seit der Vorschau geändert. Bitte berechnen Sie das Angebot erneut." } });
         return;
       }
       next(error);
