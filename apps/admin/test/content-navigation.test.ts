@@ -4,6 +4,8 @@ import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
+import { ThemeProvider } from "@mui/material/styles";
+import { adminTheme } from "../src/theme.js";
 import { SectionTabs } from "../src/components/SectionTabs.js";
 import { resolveAdminRoute } from "../src/routes.js";
 import { ContentManagementPage } from "../src/settings/ContentManagementPage.js";
@@ -34,7 +36,7 @@ test("catalog money fields display the euro at the right end of the input", asyn
   assert.ok(source.includes('field.label.replace(/\\s*\\(€\\)$/u, "")'));
 });
 
-test("sticky section tabs meet the dense outlined navbar without a gap", () => {
+test("sticky section tabs stay opaque and meet the responsive navbar without overlap", () => {
   const previous = Reflect.get(globalThis, "React");
   Reflect.set(globalThis, "React", React);
   try {
@@ -44,8 +46,13 @@ test("sticky section tabs meet the dense outlined navbar without a gap", () => {
       tabs: [{ label: "Kunde", value: 0 }],
       onChange: () => {},
     };
-    const sticky = renderToStaticMarkup(createElement(SectionTabs, { ...props, sticky: true }));
-    assert.match(sticky, /position:sticky;top:50px;/u);
+    const sticky = renderToStaticMarkup(createElement(ThemeProvider, { theme: adminTheme },
+      createElement(SectionTabs, { ...props, sticky: true })));
+    assert.match(sticky, /position:sticky/u);
+    assert.match(sticky, /@media \(min-width:0px\)[^}]*top:58px/u);
+    assert.match(sticky, /@media \(min-width:900px\)[^}]*top:68px/u);
+    assert.match(sticky, /background-color:var\(--mui-palette-background-default\)/u);
+    assert.match(sticky, /border-bottom:1px solid/u);
     const normal = renderToStaticMarkup(createElement(SectionTabs, props));
     assert.doesNotMatch(normal, /position:sticky/u);
   } finally {

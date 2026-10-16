@@ -6,7 +6,7 @@ import test from "node:test";
 import { ProfilePage, ProfileSubmitButton, RecoveryCodesPanel } from "../src/profile/ProfilePage.js";
 import type { StaffUser } from "../src/types.js";
 
-test("profile uses four visible cards without tabs and keeps separate forms and a plain-text name", () => {
+test("profile uses five visible cards without tabs and keeps separate forms and a plain-text name", () => {
   const previous = Reflect.get(globalThis, "React");
   Reflect.set(globalThis, "React", React);
   try {
@@ -22,14 +22,21 @@ test("profile uses four visible cards without tabs and keeps separate forms and 
     const html = renderToStaticMarkup(createElement(ProfilePage, { user }));
     assert.match(html, /width:100%;max-width:760px;margin-left:auto;margin-right:auto/u);
     assert.doesNotMatch(html, /role="tab(?:list|panel)?"/u);
-    assert.equal([...html.matchAll(/<section\b/gu)].length, 4);
+    assert.equal([...html.matchAll(/<section\b/gu)].length, 5);
     assert.equal([...html.matchAll(/<form\b/gu)].length, 4);
-    for (const heading of ["Profil", "Signatur", "Passwort", "OTP-Einstellungen"]) {
+    for (const heading of ["Profil", "Darstellung", "Signatur", "Passwort", "OTP-Einstellungen"]) {
       assert.match(html, new RegExp(`<h2[^>]*>${heading}</h2>`, "u"));
     }
     assert.ok(html.indexOf(">Signatur</h2>") < html.indexOf(">Passwort</h2>"));
     assert.match(html, /<input[^>]*placeholder="z\. B\. Max Meier"[^>]*maxLength="100"|<input[^>]*maxLength="100"[^>]*placeholder="z\. B\. Max Meier"/u);
     assert.match(html, /Neues Passwort wiederholen/u);
+    assert.match(html, /role="radiogroup" aria-labelledby="appearance-heading"/u);
+    for (const value of ["light", "dark", "system"]) {
+      assert.match(html, new RegExp(`<input[^>]*type="radio"[^>]*value="${value}"`, "u"));
+    }
+    const systemInput = html.match(/<input\b[^>]*value="system"[^>]*>/u)?.[0];
+    assert.ok(systemInput);
+    assert.ok(systemInput.includes('checked=""'));
     assert.doesNotMatch(html, /Mindestens 8 Zeichen, inklusive Großbuchstabe, Kleinbuchstabe und Zahl\./u);
     assert.match(html, /padding-top:8px/u);
     assert.match(html, /Codes neu erzeugen/u);

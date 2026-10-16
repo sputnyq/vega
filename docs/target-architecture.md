@@ -27,6 +27,15 @@ Nutzer (`/settings/users`) gegliedert. Legacy-Content-Pfade bleiben
 als weitergeleitete Aliase verfügbar; archivierte Orders/Rechnungen und Profil
 haben eigene Routen.
 
+Die Admin-Oberfläche unterstützt unter „Mein Profil“ → „Darstellung“ die Auswahl
+„Hell“, „Dunkel“ und „System“, auch auf Mobilgeräten. „System“ ist der Standard
+und folgt Änderungen der Betriebssystemeinstellung automatisch. Eine Auswahl
+bleibt lokal im Browser gespeichert. Glasflächen in Navigation und Kopfzeile
+passen sich dem Modus an, Inhaltsflächen bleiben undurchsichtig.
+Die fixierte Reiternavigation im Auftragseditor hat einen undurchsichtigen,
+modusabhängigen Hintergrund und schließt beim Scrollen unterhalb der
+responsiven Kopfzeile an, damit Formularinhalte nicht durchscheinen.
+
 Nach erfolgreicher Neuanlage öffnet die Admin-App direkt den gespeicherten
 Auftrag unter `/edit/<Auftragsnummer>`. Es gibt keine separate Erfolgsansicht.
 

@@ -185,13 +185,30 @@ test("newly saved orders navigate to their editor without a separate success vie
   assert.doesNotMatch(source, /setSaved|if \(saved\)|Zur Auftragsübersicht|onSaved/u);
 });
 
-test("drawer brand is large, centered and monospace", async () => {
+test("admin shell uses a restrained brand in a persistent sidebar", async () => {
   const source = await readFile(new URL("../src/components/AdminShell.tsx", import.meta.url), "utf8");
-  assert.match(source, /align="center"[^\n]*fontFamily: "ui-monospace, monospace"[^\n]*fontSize: "2rem"[^\n]*>VEGA<\/Typography>/u);
-  assert.match(source, /px: 1, py: 0\.5/u);
-  assert.match(source, /width: 300, pt: 0\.5/u);
-  assert.match(source, />VEGA<\/Typography>\s*<Divider \/>/u);
-  assert.ok(source.includes('sx={{ "& .MuiDivider-root": { mx: 2 } }}'));
+  assert.match(source, /Auftragsverwaltung/u);
+  assert.match(source, /variant=\{isMobile \? "temporary" : "permanent"\}/u);
+  assert.match(source, /EXPANDED_SIDEBAR_WIDTH = 264/u);
+  assert.ok(source.includes('"& .MuiDivider-root": { mx: 2 }'));
+});
+
+test("sidebar can collapse on desktop and mobile and keeps navigation accessible", async () => {
+  const source = await readFile(new URL("../src/components/AdminShell.tsx", import.meta.url), "utf8");
+  assert.match(source, /COLLAPSED_SIDEBAR_WIDTH = 72/u);
+  assert.match(source, /aria-label=\{sidebarCollapsed \? "Seitenleiste ausklappen" : "Seitenleiste einklappen"\}/u);
+  assert.match(source, /onClick=\{\(\) => setSidebarCollapsed\(\(collapsed\) => !collapsed\)\}/u);
+  assert.match(source, /aria-label="Aufträge"/u);
+  assert.match(source, /title="Abmelden" aria-label="Abmelden"/u);
+  assert.match(source, /width: \{ md: `calc\(100% - \$\{sidebarWidth\}px\)` \}, ml: \{ md: `\$\{sidebarWidth\}px` \}/u);
+});
+
+test("sidebar navigation starts with consistent spacing after the brand", async () => {
+  const source = await readFile(new URL("../src/components/AdminShell.tsx", import.meta.url), "utf8");
+  assert.match(source, /<Divider \/>\s*<List disablePadding>/u);
+  const ordersNavigationItem = source.slice(source.indexOf('aria-label="Aufträge"'), source.indexOf('aria-label="Rechnungen"'));
+  assert.ok(ordersNavigationItem.includes('primary="Aufträge"'));
+  assert.doesNotMatch(ordersNavigationItem, /<Divider/u);
 });
 
 test("all content navigation entries have matching icons", async () => {
@@ -204,7 +221,8 @@ test("all content navigation entries have matching icons", async () => {
     assert.ok(source.includes(`section: "${section}", icon: <${icon} />`));
   }
   assert.match(source, /<ListItemIcon sx=\{\{ minWidth: 36 \}\}>\{item\.icon\}<\/ListItemIcon>/u);
-  assert.match(source, /<ListItemIcon><ViewModuleOutlined \/><\/ListItemIcon>\s*<ListItemText primary="Content"/u);
+  assert.ok(source.includes("<ListItemIcon><ViewModuleOutlined /></ListItemIcon>"));
+  assert.ok(source.includes('{!sidebarCollapsed && <ListItemText primary="Content" />}'));
 });
 
 test("archived orders offer PDF and restoration without editing", async () => {

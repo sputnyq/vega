@@ -3,6 +3,8 @@ import {
   AccountCircleOutlined,
   CategoryOutlined,
   ChairOutlined,
+  ChevronLeft,
+  ChevronRight,
   HandymanOutlined,
   ViewModuleOutlined,
   LocalOfferOutlined,
@@ -41,6 +43,8 @@ import {
   Toolbar,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { authClient } from "../auth-client.js";
 import { useAdminNotification } from "./AdminNotifications.js";
@@ -50,6 +54,9 @@ import type { EmailTarget } from "../email/EmailDialog.js";
 
 // Loaded on demand so the rich-text editor stays out of the initial bundle.
 const EmailDialog = lazy(() => import("../email/EmailDialog.js").then((module) => ({ default: module.EmailDialog })));
+
+const EXPANDED_SIDEBAR_WIDTH = 264;
+const COLLAPSED_SIDEBAR_WIDTH = 72;
 
 interface AdminShellProps {
   user: StaffUser;
@@ -74,6 +81,11 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
   const [busy, setBusy] = useState(false);
   const [emailMenuAnchor, setEmailMenuAnchor] = useState<HTMLElement | null>(null);
   const [emailTarget, setEmailTarget] = useState<EmailTarget | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const sidebarWidth = sidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : EXPANDED_SIDEBAR_WIDTH;
   const notify = useAdminNotification();
   const isAdmin = user.role === "Admin";
   const isContentArea = route.settingsArea === "content";
@@ -140,13 +152,17 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <AppBar position="fixed" color="inherit" variant="outlined" elevation={0}>
-        <Toolbar variant="dense">
-          <IconButton color="inherit" onClick={() => setDrawerOpen(true)} aria-label="Menü öffnen">
+    <Box sx={{
+      minHeight: "100vh",
+      bgcolor: "background.default",
+      backgroundImage: "radial-gradient(ellipse at 82% -12%, rgba(36, 88, 211, 0.07), transparent 34%)",
+    }}>
+      <AppBar position="fixed" color="inherit" elevation={0} sx={{ width: { md: `calc(100% - ${sidebarWidth}px)` }, ml: { md: `${sidebarWidth}px` } }}>
+        <Toolbar sx={{ minHeight: { xs: 58, md: 68 }, px: { xs: 1.5, sm: 2.5 } }}>
+          <IconButton color="inherit" onClick={() => setDrawerOpen(true)} aria-label="Menü öffnen" sx={{ display: { md: "none" } }}>
             <MenuOutlined />
           </IconButton>
-          <Typography component="h1" variant="h6" sx={{ flexGrow: 1, ml: 2 }}>{headerTitle}</Typography>
+          <Typography component="h1" variant="h6" sx={{ flexGrow: 1, ml: { xs: 1, md: 0 } }}>{headerTitle}</Typography>
           {pathname.startsWith("/edit/") && <>
             <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" disabled={orderBusy} aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
             {editedOrderNumber && <>
@@ -176,49 +192,117 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
         </Toolbar>
       </AppBar>
       {emailTarget && <Suspense fallback={null}><EmailDialog target={emailTarget} onClose={() => setEmailTarget(null)} /></Suspense>}
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ "& .MuiDivider-root": { mx: 2 } }}>
-        <Box sx={{ width: 300, pt: 0.5, height: "100%", display: "flex", flexDirection: "column" }} role="navigation" aria-label="Hauptmenü">
+      <Drawer
+        variant={isMobile ? "temporary" : "permanent"}
+        open={isMobile ? drawerOpen : true}
+        onClose={() => setDrawerOpen(false)}
+        sx={{
+          width: { md: sidebarWidth },
+          flexShrink: 0,
+          "& .MuiDrawer-paper": {
+            width: sidebarWidth,
+            boxSizing: "border-box",
+            overflowX: "hidden",
+            transition: reduceMotion ? "none" : theme.transitions.create("width"),
+          },
+          "& .MuiDivider-root": { mx: 2 },
+        }}
+      >
+        <Box
+          sx={{
+            width: "100%",
+            pt: 2,
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            position: "relative",
+            "& .MuiListItemButton-root": {
+              justifyContent: sidebarCollapsed ? "center" : "flex-start",
+              px: sidebarCollapsed ? 0 : undefined,
+            },
+            "& .MuiListItemIcon-root": {
+              minWidth: sidebarCollapsed ? 0 : undefined,
+              justifyContent: "center",
+            },
+          }}
+          role="navigation"
+          aria-label="Hauptmenü"
+        >
           <Box>
-            <Typography variant="subtitle1" color="primary" align="center" sx={{ px: 1, py: 0.5, display: "block", fontFamily: "ui-monospace, monospace", fontSize: "2rem", lineHeight: 1.2, fontWeight: 700 }}>VEGA</Typography>
+            <Box sx={{ px: sidebarCollapsed ? 1 : 2.5, pb: 2, minHeight: 60, display: "flex", alignItems: "center", justifyContent: sidebarCollapsed ? "center" : "space-between" }}>
+              {!sidebarCollapsed && (
+                <Box>
+                  <Typography variant="h6" color="primary" sx={{ fontSize: "1.25rem", fontWeight: 750, letterSpacing: "-0.06em", lineHeight: 1.2 }}>
+                    VEGA
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">Auftragsverwaltung</Typography>
+                </Box>
+              )}
+              <Tooltip title={sidebarCollapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"} placement="right">
+                <IconButton
+                  size="small"
+                  aria-label={sidebarCollapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"}
+                  aria-expanded={!sidebarCollapsed}
+                  onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+                >
+                  {sidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
+                </IconButton>
+              </Tooltip>
+            </Box>
             <Divider />
-            <List>
-              <ListItemButton selected={pathname === "/"} onClick={() => { setDrawerOpen(false); navigate("/"); }}>
+            <List disablePadding>
+              <ListItemButton title="Aufträge" aria-label="Aufträge" selected={pathname === "/"} onClick={() => { setDrawerOpen(false); navigate("/"); }}>
                 <ListItemIcon><FormatListNumberedOutlined /></ListItemIcon>
-                <ListItemText primary="Aufträge" />
+                {!sidebarCollapsed && <ListItemText primary="Aufträge" />}
               </ListItemButton>
-              <Divider sx={{ my: 1 }} />
               {isAdmin && (
                 <>
-                  <ListItemButton selected={pathname === "/invoices"} onClick={() => { setDrawerOpen(false); navigate("/invoices"); }}>
+                  <ListItemButton title="Rechnungen" aria-label="Rechnungen" selected={pathname === "/invoices"} onClick={() => { setDrawerOpen(false); navigate("/invoices"); }}>
                     <ListItemIcon><ReceiptLongOutlined /></ListItemIcon>
-                    <ListItemText primary="Rechnungen" />
+                    {!sidebarCollapsed && <ListItemText primary="Rechnungen" />}
                   </ListItemButton>
-                  <Divider sx={{ my: 1 }} />
                 </>
               )}
-              <ListItemButton selected={isArchivePath} onClick={() => setArchiveOpen((open) => !open)}>
+              <ListItemButton
+                title="Archiv"
+                aria-label="Archiv"
+                aria-expanded={!sidebarCollapsed && archiveOpen}
+                selected={isArchivePath}
+                onClick={() => {
+                  if (sidebarCollapsed) {
+                    setSidebarCollapsed(false);
+                    setArchiveOpen(true);
+                  } else {
+                    setArchiveOpen((open) => !open);
+                  }
+                }}
+              >
                 <ListItemIcon><ArchiveOutlined /></ListItemIcon>
-                <ListItemText primary="Archiv" />
-                {archiveOpen ? <ExpandLess /> : <ExpandMore />}
+                {!sidebarCollapsed && <ListItemText primary="Archiv" />}
+                {!sidebarCollapsed && (archiveOpen ? <ExpandLess /> : <ExpandMore />)}
               </ListItemButton>
-              <Collapse in={archiveOpen} timeout="auto" unmountOnExit>
+              <Collapse in={archiveOpen && !sidebarCollapsed} timeout="auto" unmountOnExit>
                 <List component="div" disablePadding>
                   <ListItemButton
+                    title="Archivierte Aufträge"
+                    aria-label="Archivierte Aufträge"
                     sx={{ pl: 4 }}
                     selected={pathname === "/orders/archived"}
                     onClick={() => { setDrawerOpen(false); navigate("/orders/archived"); }}
                   >
                     <ListItemIcon><FormatListNumberedOutlined /></ListItemIcon>
-                    <ListItemText primary="Archivierte Aufträge" />
+                    {!sidebarCollapsed && <ListItemText primary="Archivierte Aufträge" />}
                   </ListItemButton>
                   {isAdmin && (
                     <ListItemButton
+                      title="Archivierte Rechnungen"
+                      aria-label="Archivierte Rechnungen"
                       sx={{ pl: 4 }}
                       selected={pathname === "/invoices/archived"}
                       onClick={() => { setDrawerOpen(false); navigate("/invoices/archived"); }}
                     >
                       <ListItemIcon><ReceiptLongOutlined /></ListItemIcon>
-                      <ListItemText primary="Archivierte Rechnungen" />
+                      {!sidebarCollapsed && <ListItemText primary="Archivierte Rechnungen" />}
                     </ListItemButton>
                   )}
                 </List>
@@ -226,18 +310,33 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
               {isAdmin && (
                 <>
                   <ListItemButton
+                    title="Optionen"
+                    aria-label="Optionen"
                     selected={route.settingsArea === "options"}
                     onClick={() => { setDrawerOpen(false); navigate("/settings"); }}
                   >
                     <ListItemIcon><SettingsOutlined /></ListItemIcon>
-                    <ListItemText primary="Optionen" />
+                    {!sidebarCollapsed && <ListItemText primary="Optionen" />}
                   </ListItemButton>
-                  <ListItemButton selected={isContentArea} onClick={() => setContentOpen((open) => !open)}>
+                  <ListItemButton
+                    title="Content"
+                    aria-label="Content"
+                    aria-expanded={!sidebarCollapsed && contentOpen}
+                    selected={isContentArea}
+                    onClick={() => {
+                      if (sidebarCollapsed) {
+                        setSidebarCollapsed(false);
+                        setContentOpen(true);
+                      } else {
+                        setContentOpen((open) => !open);
+                      }
+                    }}
+                  >
                     <ListItemIcon><ViewModuleOutlined /></ListItemIcon>
-                    <ListItemText primary="Content" />
-                    {contentOpen ? <ExpandLess /> : <ExpandMore />}
+                    {!sidebarCollapsed && <ListItemText primary="Content" />}
+                    {!sidebarCollapsed && (contentOpen ? <ExpandLess /> : <ExpandMore />)}
                   </ListItemButton>
-                  <Collapse in={contentOpen} timeout="auto" unmountOnExit>
+                  <Collapse in={contentOpen && !sidebarCollapsed} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
                       {[
                         { label: "Angebote", path: "/settings/offers", section: "offers", icon: <LocalOfferOutlined /> },
@@ -249,49 +348,54 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
                       ].map((item) => (
                         <ListItemButton
                           key={item.path}
+                          title={item.label}
+                          aria-label={item.label}
                           sx={{ pl: 4 }}
                           selected={route.contentSection === item.section}
                           onClick={() => { setDrawerOpen(false); navigate(item.path); }}
                         >
                           <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-                          <ListItemText primary={item.label} />
+                          {!sidebarCollapsed && <ListItemText primary={item.label} />}
                         </ListItemButton>
                       ))}
                     </List>
                   </Collapse>
                   <ListItemButton
+                    title="Nutzer"
+                    aria-label="Nutzer"
                     selected={route.settingsArea === "users"}
                     onClick={() => { setDrawerOpen(false); navigate("/settings/users"); }}
                   >
                     <ListItemIcon><PeopleAltOutlined /></ListItemIcon>
-                    <ListItemText primary="Nutzer" />
+                    {!sidebarCollapsed && <ListItemText primary="Nutzer" />}
                   </ListItemButton>
                 </>
               )}
-              <Divider sx={{ my: 1 }} />
-              <ListItemButton selected={pathname === "/profile"} onClick={() => { setDrawerOpen(false); navigate("/profile"); }}>
+              {!sidebarCollapsed && <Divider sx={{ my: 1 }} />}
+              <ListItemButton title="Mein Profil" aria-label="Mein Profil" selected={pathname === "/profile"} onClick={() => { setDrawerOpen(false); navigate("/profile"); }}>
                 <ListItemIcon><AccountCircleOutlined /></ListItemIcon>
-                <ListItemText primary="Mein Profil" />
+                {!sidebarCollapsed && <ListItemText primary="Mein Profil" />}
               </ListItemButton>
             </List>
           </Box>
           <Box sx={{ mt: "auto" }}>
             <Divider />
             <List>
-              <ListItemButton onClick={signOut} disabled={busy}>
+              <ListItemButton title="Abmelden" aria-label="Abmelden" onClick={signOut} disabled={busy}>
                 <ListItemIcon><LogoutOutlined /></ListItemIcon>
-                <ListItemText primary="Abmelden" />
+                {!sidebarCollapsed && <ListItemText primary="Abmelden" />}
               </ListItemButton>
             </List>
           </Box>
         </Box>
       </Drawer>
-      <Toolbar />
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        {route.adminOnly && !isAdmin
-          ? <Paper variant="outlined" sx={{ p: 3 }}><Typography color="error">Diese Route ist nur für Admins freigeschaltet.</Typography></Paper>
-          : children}
-      </Container>
+      <Box component="main" sx={{ ml: { md: `${sidebarWidth}px` }, pt: { xs: "58px", md: "68px" }, minHeight: "100vh" }}>
+        <Container maxWidth="xl" sx={{ py: { xs: 2.5, md: 3.5 }, px: { xs: 2, sm: 3, lg: 4 } }}>
+          {route.adminOnly && !isAdmin
+            ? <Paper variant="outlined" sx={{ p: 3 }}><Typography color="error">Diese Route ist nur für Admins freigeschaltet.</Typography></Paper>
+            : children}
+        </Container>
+      </Box>
     </Box>
   );
 }
