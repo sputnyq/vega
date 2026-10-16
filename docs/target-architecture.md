@@ -12,7 +12,7 @@ Kunde
 
 Kundenberater/Admin
   └─ vega.umzugruckzuck24.de
-       ├─ React/Vite Admin-SPA am Origin-Root (`/`); Redirect zu `/login` bzw. `/two-factor`, unbekannte Pfade zeigen 404
+       ├─ React/Vite Admin-SPA am Origin-Root (`/`); Redirect zu `/login` bzw. nach erfolgreicher Passwortprüfung zu `/two-factor`; direkter Aufruf von `/two-factor` ohne laufende Anmelde-Challenge führt zu `/login`, unbekannte Pfade zeigen 404
        ├─ Better Auth + TOTP
        ├─ Express 5 API / Domain Services
        ├─ Prisma → Hostinger MySQL

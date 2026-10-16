@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { resolveAdminRoute } from "../src/routes.js";
+
+test("a direct two-factor URL does not mark the sign-in flow as authenticated", async () => {
+  const app = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /const \[twoFactorRequired, setTwoFactorRequired\] = useState\(false\)/u);
+  assert.match(app, /if \(!session && pathname === "\/two-factor" && !twoFactorRequired\) replacePath\("\/login"\)/u);
+});
 
 test("legacy order and settings routes resolve to their existing sections", () => {
   assert.equal(resolveAdminRoute("/")?.title, "Aufträge");
