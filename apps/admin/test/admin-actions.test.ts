@@ -48,7 +48,7 @@ test("accounting-only drafts lock document actions without offering to save the 
   }));
   try {
     for (const label of ["Rechnung speichern", "Rechnungs-PDF speichern", "Rechnung per E-Mail versenden", "Rechnung archivieren"]) {
-      const button = app.container.querySelector<HTMLElement>(`[aria-label="${label}"] .MuiIconButton-root, .MuiIconButton-root[aria-label="${label}"]`);
+      const button = app.container.querySelector<HTMLElement>(`button[aria-label="${label}"], a[aria-label="${label}"]`);
       assert.ok(button, label);
       assert.equal(button.hasAttribute("disabled") || button.getAttribute("aria-disabled") === "true", true, label);
     }

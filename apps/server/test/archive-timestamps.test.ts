@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import type { Prisma } from "../src/generated/prisma/client.js";
 
@@ -38,14 +37,4 @@ test("invoice archive and restore preserve the last edit timestamp", async (cont
     { where: { invoiceId: "invoice-test", archivedAt: null }, data: { archivedAt, purgeAt: new Date(archivedAt.getTime() + 30 * 86400000) } },
     { where: { invoiceId: "invoice-test", archivedAt: { not: null } }, data: { archivedAt: null, purgeAt: null } },
   ]);
-});
-
-test("order PDF and archive routes preserve edit dates and guard archived writes", async () => {
-  const source = await readFile(new URL("../src/orders/admin-order-routes.ts", import.meta.url), "utf8");
-  const pdfService = await readFile(new URL("../src/orders/order-pdf-service.ts", import.meta.url), "utf8");
-  assert.match(source, /renderOrderPdf\(order\)/u);
-  assert.match(pdfService, /generateOrderPdf\(input, orderPdfEditDate\(order, latestActivity, lastEdit\)\)/u);
-  assert.match(source, /where: \{ id: existing\.id, revision, archivedAt: null \}, data:/u);
-  assert.match(source, /data: \{ archivedAt: now, purgeAt, updatedAt: existing\.updatedAt, revision: \{ increment: 1 \} \}/u);
-  assert.match(source, /data: \{ archivedAt: null, purgeAt: null, updatedAt: existing\.updatedAt, revision: \{ increment: 1 \} \}/u);
 });

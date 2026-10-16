@@ -102,6 +102,13 @@ genau ein Update muss erfolgreich sein, das andere muss `409` liefern,
 ohne Teiländerungen an Beziehungen. UI-Interaktionen laufen lokal mit
 jsdom; sie ersetzen keinen Browser-/WordPress-Proof.
 
+Die Suite priorisiert Fachregeln, Berechtigungen, Datenintegrität,
+Fehlerbehandlung und reale Bedienabläufe. Reine CSS-/MUI-Strukturprüfungen,
+Quelltext-Regex und redundante Wrapper-Tests werden nicht gepflegt.
+PDF-Tests sichern vollständige Inhalte und Seitenbegrenzungen statt exakter
+Zeichenkoordinaten oder Zeichenstrom-Hashes; die globale Vorgabe kompakter
+Admin-Eingabefelder bleibt separat abgesichert.
+
 CI (`.github/workflows/ci.yml`) nutzt Node 24 und MariaDB 10.11.19 inkl. frischer
 Migrationen und Drift-Prüfung.
 

@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import test from "node:test";
 import { mount } from "./dom-test-helpers.js";
-import { FurniturePage } from "../src/catalog/FurniturePage.js";
+import { furnitureCategoryChoices, FurniturePage } from "../src/catalog/FurniturePage.js";
+
+test("furniture categories follow configured order and ID without mutating the catalog", () => {
+  const categories = [{ id: 3, name: "Küche", sort: 20 }, { id: 2, name: "Schlafzimmer", sort: 10 }, { id: 1, name: "Wohnzimmer", sort: 10 }];
+  assert.deepEqual(furnitureCategoryChoices(categories).map((option) => option.value), [1, 2, 3]);
+  assert.equal(categories[0]?.id, 3);
+});
 
 test("furniture editing sends selected category IDs and deletion requires confirmation", async () => {
   const originalFetch = globalThis.fetch;

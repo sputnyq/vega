@@ -3,7 +3,7 @@ import * as React from "react";
 import test from "node:test";
 import type { AdminInvoiceDto } from "@vega/domain";
 import { mount } from "./dom-test-helpers.js";
-import { invoiceTotal, InvoicesPage } from "../src/invoices/InvoicesPage.js";
+import { InvoicesPage } from "../src/invoices/InvoicesPage.js";
 
 const invoice: AdminInvoiceDto = {
   id: "invoice-1", revision: 0, invoiceNumber: "R-42", orderNumber: 1001,
@@ -69,14 +69,6 @@ test("archived invoices lock repeated restores and show API and network errors w
   await dom.click(restore);
   assert.equal(attempts, 2);
   assert.match(dom.container.textContent ?? "", /Netzwerk nicht erreichbar/u);
-});
-
-test("invoice total includes tax using precise shared arithmetic without cent rounding", () => {
-  assert.equal(invoiceTotal({
-    entries: [{ description: "Transport", quantity: 2, unitPrice: 100 }, { description: "Verpackung", quantity: 1, unitPrice: 50 }],
-    taxPercent: 19,
-  }), 297.5);
-  assert.equal(invoiceTotal({ entries: [{ description: "", quantity: 3, unitPrice: 0.1 }], taxPercent: 19 }), 0.357);
 });
 
 test("invoice loading failures are visible and a fresh search can retry", async (context) => {

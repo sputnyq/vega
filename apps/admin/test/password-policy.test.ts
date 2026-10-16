@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { meetsPasswordPolicy, passwordPolicyError, passwordPolicyHelp } from "../src/password-policy.js";
+import { meetsPasswordPolicy } from "../src/password-policy.js";
 
-test("admin password policy matches the server rule and keeps its existing help and error text", () => {
+test("admin password policy enforces length and character requirements", () => {
   const cases: Array<[string, boolean]> = [
     ["Abcdef1", false],
     ["Abcdefg1", true],
@@ -17,6 +17,4 @@ test("admin password policy matches the server rule and keeps its existing help 
   ];
 
   for (const [password, expected] of cases) assert.equal(meetsPasswordPolicy(password), expected);
-  assert.equal(passwordPolicyHelp, "Mindestens 8 Zeichen, inklusive Großbuchstabe, Kleinbuchstabe und Zahl.");
-  assert.equal(passwordPolicyError, "Das Passwort muss mindestens 8 Zeichen sowie einen Großbuchstaben, einen Kleinbuchstaben und eine Zahl enthalten.");
 });
