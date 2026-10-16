@@ -1,6 +1,7 @@
 # Implementierungsstand und offene Arbeit
 
-**Stand:** 2026-10-15  
+**Stand:** 2026-10-16
+
 Konkretisiert `implementation-plan.md` §7; bei Konflikten gelten Plan und ADRs.
 
 ## Umgesetzt (lokal)
@@ -19,6 +20,24 @@ Konkretisiert `implementation-plan.md` §7; bei Konflikten gelten Plan und ADRs.
 | Gutschriften/Mahnungen | Admin-only in Tabs des Rechnungseditors (Rechnung, 1.–3. Mahnung, Gutschrift): eine Gutschrift je Rechnung (Snapshot der Rechnung), Mahnstufen 1–3 nur in Reihenfolge (Standard: +10 Tage, 10 € Gebühr, Legacy-Texte), PDF im Legacy-Layout, Mailversand; Gutschrift mit eigenem Archiv/Restore, Mahnungen werden mit ihrer Rechnung archiviert und wiederhergestellt, nur die höchste Stufe ist endgültig löschbar; `ReminderEvent.sentAt` wird beim erfolgreichen Outbox-Versand gesetzt. |
 | Mail | Hostinger-Adapter, Outbox mit PDF-Anhängen und Retry-CLI, Anfrage-Benachrichtigung an Firma und Kunde, Versanddialoge für Angebot, „2 Angebote" (nur Kopien), Absage, Rechnung, Gutschrift und Mahnung. |
 | Google Routes | Admin-Depot-Rundreise auf Klick, gerundete Kilometer in den Entwurf. |
+
+## Review-Korrekturen (lokal)
+
+- Andere Initial-/TOTP-Sitzungen werden widerrufen; HTTP-Logs enthalten
+  keine Queries oder Reset-Pfadtoken, Body-Parser-Fehler liefern passende 4xx.
+- Auftragsnormalisierung wird vor Persistenz erneut validiert; historische
+  Katalogpositionen bleiben bearbeitbar. Auftrag und Rechnung besitzen
+  atomaren Revisionsschutz gegen paralleles Überschreiben.
+- Finanzvalidierung und Summenberechnung sind gemeinsam im Domain-Paket;
+  lange Finanz-PDFs paginieren vollständig. Rechnungslisten sind paginiert.
+- Versandkennungen überleben Dialog-Neuöffnung; reine Statuschecks,
+  `UNKNOWN`-Sperre, Stale-Claim-Erkennung und manuell belegte Reconciliation
+  verhindern Blind-Retries.
+- Dirty-Guards schützen interne Navigation, Back/Forward und Seitenende;
+  Unterbelegentwürfe bleiben getrennt erhalten. Toolbar-/Listenaktionen
+  melden Fehler und blockieren Doppelklicks.
+- DOM-Interaktionstests ersetzen die betroffenen Quelltext-Regex-Tests.
+  Datumauswahl und spätere Formularschritte werden bedarfsgerecht geladen.
 
 ## Offene fachliche Arbeit
 

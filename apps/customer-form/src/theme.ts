@@ -1,5 +1,4 @@
 import { createTheme } from "@mui/material/styles";
-import { deDE } from "@mui/x-date-pickers/locales";
 
 export const theme = createTheme(
   {
@@ -20,5 +19,4 @@ export const theme = createTheme(
       MuiOutlinedInput: { styleOverrides: { root: { minHeight: 43 } } },
     },
   },
-  deDE,
 );

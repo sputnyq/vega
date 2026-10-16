@@ -28,11 +28,11 @@ test("invoice archive and restore preserve the last edit timestamp", async (cont
   await restoreInvoice("invoice-test");
   assert.deepEqual(writes[0], {
     where: { id: "invoice-test", updatedAt },
-    data: { archivedAt, purgeAt: new Date(archivedAt.getTime() + 30 * 86400000), updatedAt },
+    data: { archivedAt, purgeAt: new Date(archivedAt.getTime() + 30 * 86400000), updatedAt, revision: { increment: 1 } },
   });
   assert.deepEqual(writes[1], {
     where: { id: "invoice-test", updatedAt },
-    data: { archivedAt: null, purgeAt: null, updatedAt },
+    data: { archivedAt: null, purgeAt: null, updatedAt, revision: { increment: 1 } },
   });
   assert.deepEqual(reminderWrites, [
     { where: { invoiceId: "invoice-test", archivedAt: null }, data: { archivedAt, purgeAt: new Date(archivedAt.getTime() + 30 * 86400000) } },
@@ -45,7 +45,7 @@ test("order PDF and archive routes preserve edit dates and guard archived writes
   const pdfService = await readFile(new URL("../src/orders/order-pdf-service.ts", import.meta.url), "utf8");
   assert.match(source, /renderOrderPdf\(order\)/u);
   assert.match(pdfService, /generateOrderPdf\(input, orderPdfEditDate\(order, latestActivity, lastEdit\)\)/u);
-  assert.match(source, /where: \{ id: existing\.id, archivedAt: null \}, data:/u);
-  assert.match(source, /data: \{ archivedAt: now, purgeAt, updatedAt: existing\.updatedAt \}/u);
-  assert.match(source, /data: \{ archivedAt: null, purgeAt: null, updatedAt: existing\.updatedAt \}/u);
+  assert.match(source, /where: \{ id: existing\.id, revision, archivedAt: null \}, data:/u);
+  assert.match(source, /data: \{ archivedAt: now, purgeAt, updatedAt: existing\.updatedAt, revision: \{ increment: 1 \} \}/u);
+  assert.match(source, /data: \{ archivedAt: null, purgeAt: null, updatedAt: existing\.updatedAt, revision: \{ increment: 1 \} \}/u);
 });

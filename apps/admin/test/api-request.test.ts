@@ -43,7 +43,7 @@ test("admin API requests preserve response, issue, network, and JSON error behav
   context.after(() => { globalThis.fetch = originalFetch; });
 
   globalThis.fetch = async () => Response.json({ data: { value: 1 } }, { status: 500 });
-  await assert.rejects(apiRequest("/broken"), { message: "Die Kataloganfrage ist fehlgeschlagen." });
+  await assert.rejects(apiRequest("/broken"), { message: "Die Anfrage ist fehlgeschlagen." });
 
   globalThis.fetch = async () => Response.json({ error: { message: "Serverfehler" } }, { status: 400 });
   await assert.rejects(apiRequest("/broken"), { message: "Serverfehler" });

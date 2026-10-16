@@ -19,6 +19,15 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
 - Rechnungen dürfen nicht per FK-Cascade mit Orders gelöscht werden.
 - Startkatalog/Preise werden nach Setup manuell durch Admins angelegt.
 - Das Frontend erhält keinen Zugriff auf beliebige Order-IDs/öffentliche Order-Reads.
+- Auftrags-PUTs vergleichen `revision` atomar vor Relationsänderungen;
+  ein veralteter Stand liefert `409`. Archiv/Restore erhöhen die Revision,
+  behalten aber `updatedAt` bei. Kopien sperren ihre aktive Quelle während
+  der Transaktion.
+- Historische Katalog-Snapshots bleiben auch nach Kataloglöschung oder
+  Ausblenden bearbeitbar; Mengenänderungen aktualisieren keine alten
+  Namen/Volumina. Neue bzw. geänderte Referenzen benötigen einen gültigen
+  aktuellen Katalogeintrag. Normalisierte Daten werden vor Persistenz
+  nochmals vollständig validiert.
 
 ## Umsetzungsstand (2026-10-09)
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AccountCircleOutlined,
   CategoryOutlined,
@@ -47,6 +47,7 @@ import { useAdminNotification } from "./AdminNotifications.js";
 import type { AdminRoute } from "../routes.js";
 import type { StaffUser } from "../types.js";
 import type { EmailTarget } from "../email/EmailDialog.js";
+import { apiRequest } from "../api/api-request.js";
 
 // Loaded on demand so the rich-text editor stays out of the initial bundle.
 const EmailDialog = lazy(() => import("../email/EmailDialog.js").then((module) => ({ default: module.EmailDialog })));
@@ -56,22 +57,29 @@ interface AdminShellProps {
   route: AdminRoute;
   pathname: string;
   navigate: (path: string) => void;
+  confirmLeave?: () => boolean;
   orderDirty?: boolean;
   orderBusy?: boolean;
   orderIsCopy?: boolean;
   invoiceBusy?: boolean;
   invoiceDirty?: boolean;
+  invoiceAccountingDirty?: boolean;
   invoiceNumber?: string | undefined;
   children: ReactNode;
 }
 
-export function AdminShell({ user, route, pathname, navigate, orderDirty = false, orderBusy = false, orderIsCopy = false, invoiceBusy = false, invoiceDirty = false, invoiceNumber, children }: AdminShellProps) {
+export function AdminShell({
+  user, route, pathname, navigate, confirmLeave, children,
+  orderDirty = false, orderBusy = false, orderIsCopy = false,
+  invoiceBusy = false, invoiceDirty = false, invoiceAccountingDirty = false, invoiceNumber,
+}: AdminShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [contentOpen, setContentOpen] = useState(route.settingsArea === "content");
   const [archiveOpen, setArchiveOpen] = useState(
     pathname === "/orders/archived" || pathname === "/invoices/archived",
   );
   const [busy, setBusy] = useState(false);
+  const actionLock = useRef(false);
   const [emailMenuAnchor, setEmailMenuAnchor] = useState<HTMLElement | null>(null);
   const [emailTarget, setEmailTarget] = useState<EmailTarget | null>(null);
   const notify = useAdminNotification();
@@ -83,8 +91,8 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
   const isInvoiceEditor = editedInvoiceId !== undefined || pathname === "/invoices/new" || pathname === "/blanco" || route.sourceOrderNumber !== undefined;
   const orderHasChanges = orderDirty || editedOrderNumber === "-1";
   const invoiceHasChanges = invoiceDirty || (isInvoiceEditor && !editedInvoiceId);
-  const orderActionsDisabled = orderBusy || orderHasChanges;
-  const invoiceActionsDisabled = invoiceBusy || invoiceHasChanges;
+  const orderActionsDisabled = busy || orderBusy || orderHasChanges;
+  const invoiceActionsDisabled = busy || invoiceBusy || invoiceHasChanges || invoiceAccountingDirty;
   const headerTitle = editedOrderNumber
     ? `Auftrag | ${editedOrderNumber === "-1" ? "Neu" : editedOrderNumber}`
     : isInvoiceEditor
@@ -105,23 +113,43 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
   }, [pathname]);
 
   async function signOut() {
+    if (confirmLeave && !confirmLeave()) return;
+    await runAction(async () => {
+      const result = await authClient.signOut();
+      if (result.error) throw new Error(result.error.message ?? "Abmelden ist fehlgeschlagen.");
+      window.location.assign("/login");
+    }, "Abmelden ist fehlgeschlagen.");
+  }
+
+  async function runAction(action: () => Promise<void>, message: string) {
+    if (actionLock.current) return;
+    actionLock.current = true;
     setBusy(true);
-    await authClient.signOut();
-    window.location.assign("/login");
+    try {
+      await action();
+    } catch (error) {
+      notify("error", error instanceof Error && !(error instanceof TypeError) ? error.message : message);
+    } finally {
+      actionLock.current = false;
+      setBusy(false);
+    }
   }
 
   async function copyOrder() {
     if (!editedOrderNumber || orderActionsDisabled) return;
-    const response = await fetch(`/api/admin/orders/${editedOrderNumber}/copy`, { method: "POST", credentials: "same-origin" });
-    if (!response.ok) return;
-    const body = await response.json() as { data?: { orderNumber?: number } };
-    if (body.data?.orderNumber) navigate(`/edit/${body.data.orderNumber}`);
+    await runAction(async () => {
+      const result = await apiRequest<{ orderNumber: number }>(`/api/admin/orders/${editedOrderNumber}/copy`, "POST");
+      if (!Number.isInteger(result.orderNumber)) throw new Error("Die Angebotskopie konnte nicht geöffnet werden.");
+      navigate(`/edit/${result.orderNumber}`);
+    }, "Angebotskopie konnte nicht angelegt werden.");
   }
 
   async function archiveOrder() {
     if (!editedOrderNumber || orderActionsDisabled || !window.confirm("Auftrag wirklich archivieren?")) return;
-    const response = await fetch(`/api/admin/orders/${editedOrderNumber}/archive`, { method: "POST", credentials: "same-origin" });
-    if (response.ok) navigate("/");
+    await runAction(async () => {
+      await apiRequest(`/api/admin/orders/${editedOrderNumber}/archive`, "POST");
+      navigate("/");
+    }, "Auftrag konnte nicht archiviert werden.");
   }
 
   function openOrderEmail(kind: "offer" | "offer-pair" | "decline") {
@@ -131,12 +159,10 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
 
   async function archiveInvoice() {
     if (!editedInvoiceId || invoiceActionsDisabled || !window.confirm("Rechnung vor dem Archivieren extern sichern. Rechnung wirklich archivieren?")) return;
-    const response = await fetch(`/api/admin/invoices/${editedInvoiceId}/archive`, { method: "POST", credentials: "same-origin" });
-    if (response.ok) {
+    await runAction(async () => {
+      await apiRequest(`/api/admin/invoices/${editedInvoiceId}/archive`, "POST");
       navigate("/invoices");
-      return;
-    }
-    notify("error", "Rechnung konnte nicht archiviert werden.");
+    }, "Rechnung konnte nicht archiviert werden.");
   }
 
   return (
@@ -148,7 +174,7 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
           </IconButton>
           <Typography component="h1" variant="h6" sx={{ flexGrow: 1, ml: 2 }}>{headerTitle}</Typography>
           {pathname.startsWith("/edit/") && <>
-            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" disabled={orderBusy} aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
+            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" disabled={busy || orderBusy} aria-label="Auftrag speichern"><Badge color="error" variant="dot" invisible={!orderHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
             {editedOrderNumber && <>
               <Tooltip title="Angebotskopie anlegen"><span><IconButton color="inherit" disabled={orderActionsDisabled} onClick={() => void copyOrder()} aria-label="Angebotskopie anlegen"><ContentCopyOutlined /></IconButton></span></Tooltip>
               <Tooltip title="Als PDF speichern"><span><IconButton color="inherit" type="submit" form="order-create-form" name="action" value="pdf" disabled={orderActionsDisabled} aria-label="PDF erzeugen"><FileDownloadOutlined /></IconButton></span></Tooltip>
@@ -167,7 +193,7 @@ export function AdminShell({ user, route, pathname, navigate, orderDirty = false
             </>}
           </>}
           {isInvoiceEditor && <>
-            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="invoice-editor-form" disabled={invoiceBusy} aria-label="Rechnung speichern"><Badge color="error" variant="dot" invisible={!invoiceHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
+            <Tooltip title="Speichern"><span><IconButton color="inherit" type="submit" form="invoice-editor-form" disabled={busy || invoiceBusy || (invoiceAccountingDirty && !invoiceHasChanges)} aria-label="Rechnung speichern"><Badge color="error" variant="dot" invisible={!invoiceHasChanges}><SaveOutlined /></Badge></IconButton></span></Tooltip>
             <Tooltip title="PDF speichern"><span><IconButton color="inherit" component="a" href={!invoiceActionsDisabled && editedInvoiceId ? `/api/admin/invoices/${editedInvoiceId}/pdf` : undefined} disabled={invoiceActionsDisabled} aria-label="Rechnungs-PDF speichern"><FileDownloadOutlined /></IconButton></span></Tooltip>
             <Tooltip title="Rechnung per E-Mail versenden"><span><IconButton color="inherit" disabled={invoiceActionsDisabled || !editedInvoiceId} onClick={() => { if (editedInvoiceId) setEmailTarget({ type: "invoice", id: editedInvoiceId }); }} aria-label="Rechnung per E-Mail versenden"><EmailOutlined /></IconButton></span></Tooltip>
             <Divider orientation="vertical" flexItem sx={{ mx: 1.5, my: 1 }} />

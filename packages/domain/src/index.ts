@@ -187,6 +187,7 @@ export interface AdminOrderListItem {
 }
 
 export interface AdminOrderDetail extends AdminOrderListItem {
+  revision: number;
   data: CreateOrderInput;
   originOrderId: string | null;
 }
@@ -224,9 +225,12 @@ export interface OrderEmailSendInput extends StaffEmailSendInput {
 }
 
 export type StaffEmailSendResult =
-  | { status: "SENT" }
-  | { status: "SENDING" }
-  | { status: "RETRY_SCHEDULED"; errorCode: string };
+  | { status: "NOT_QUEUED"; outboxId?: string }
+  | { status: "SENT"; outboxId?: string }
+  | { status: "SENDING"; outboxId?: string }
+  | { status: "UNKNOWN"; errorCode: string; outboxId?: string }
+  | { status: "FAILED"; errorCode: string; outboxId?: string }
+  | { status: "RETRY_SCHEDULED"; errorCode: string; outboxId?: string };
 
 /** Minimal audit projection; deliberately excludes field-level before/after values. */
 export interface AdminOrderJournalEntry {
@@ -263,12 +267,23 @@ export interface InvoiceInput {
 
 export interface AdminInvoiceDto extends InvoiceInput {
   id: string;
+  revision: number;
   invoiceNumber: string;
   orderNumber: number | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+export interface AdminInvoiceListDto {
+  items: AdminInvoiceDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export { addInvoiceAmounts, calculateInvoiceTotals, invoiceLineTotal, roundInvoiceAmount } from "./invoice-calculation.js";
+export { MAX_INVOICE_AMOUNT, isInvoiceAmount, isInvoiceDate, validateInvoiceEntries } from "./invoice-validation.js";
 
 /** Legacy accounting tabs: at most three consecutive payment reminders per invoice. */
 export const MAX_REMINDER_LEVEL = 3;

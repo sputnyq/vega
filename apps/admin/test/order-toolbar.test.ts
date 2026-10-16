@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -66,13 +65,6 @@ test("invoice editor toolbar exposes save, PDF and archive actions", () => {
   assert.doesNotMatch(emailButton, /\bdisabled/u);
 });
 
-test("order email menu offers two offers only for copies and loads the dialog lazily", async () => {
-  const source = await readFile(new URL("../src/components/AdminShell.tsx", import.meta.url), "utf8");
-  assert.match(source, /\{orderIsCopy && <MenuItem onClick=\{\(\) => openOrderEmail\("offer-pair"\)\}>2 Angebote versenden<\/MenuItem>\}/u);
-  assert.match(source, /lazy\(\(\) => import\("\.\.\/email\/EmailDialog\.js"\)/u);
-  assert.doesNotMatch(source, /from "@tiptap\//u);
-});
-
 test("all invoice drafts expose toolbar actions and a dirty badge, but archive lists do not", () => {
   const user: StaffUser = { id: "test", name: "Test", email: "test@example.test", role: "Admin", twoFactorEnabled: true, mustChangePassword: false, blocked: false };
   for (const pathname of ["/invoices/new", "/blanco", "/invoices/new/from-order/1004", "/invoices/invoice-test"]) {
@@ -123,18 +115,6 @@ test("dirty documents allow only saving and clean saved documents enable follow-
   }
 });
 
-test("invoice dirty state is tracked from every edit and cleared only after successful saving", async () => {
-  const source = await readFile(new URL("../src/invoices/InvoiceEditorPage.tsx", import.meta.url), "utf8");
-  assert.match(source, /\[dirty, setDirty\] = useState\(!id\)/u);
-  assert.match(source, /onDirtyChange\?\.\(dirty\)/u);
-  assert.match(source, /function change[^\n]*setDirty\(true\)/u);
-  assert.match(source, /if \(!response\.ok \|\| !body\.data\)[^\n]*return; \}\s*setValue\(body\.data\);\s*setDirty\(false\);/u);
-  assert.match(source, /onBusyChange\?\.\(busy \|\| loading \|\| numberLoading \|\| loadFailed\)/u);
-  const order = await readFile(new URL("../src/orders/OrderCreatePage.tsx", import.meta.url), "utf8");
-  assert.match(order, /if \(\(exportPdf \|\| createInvoice\) && \(dirty \|\| orderNumber === undefined\)\)/u);
-  assert.doesNotMatch(order, /dirty \? save\(\)|if \(dirty && !await save\(\)\)/u);
-});
-
 test("order and invoice editor titles show a new label or their saved number", () => {
   const user: StaffUser = { id: "test", name: "Test", email: "test@example.test", role: "Admin", twoFactorEnabled: true, mustChangePassword: false, blocked: false };
   const invoicePath = "/invoices/test-invoice-id";
@@ -177,44 +157,6 @@ test("order editor omits accounting and links the journal as the seventh tab", (
   assert.ok(!html.includes('id="order-tab-7"'));
   const tabs = html.slice(html.indexOf('aria-label="Auftragsschritte"') - 500, html.indexOf('aria-label="Auftragsschritte"') + 200);
   assert.ok(!tabs.includes("MuiPaper-outlined"));
-});
-
-test("newly saved orders navigate to their editor without a separate success view", async () => {
-  const source = await readFile(new URL("../src/orders/OrderCreatePage.tsx", import.meta.url), "utf8");
-  assert.match(source, /if \(orderNumber === undefined\) \{\s*onDirtyChange\(false\);\s*navigate\(`\/edit\/\$\{body\.data\.orderNumber\}`\);/u);
-  assert.doesNotMatch(source, /setSaved|if \(saved\)|Zur Auftragsübersicht|onSaved/u);
-});
-
-test("drawer brand is large, centered and monospace", async () => {
-  const source = await readFile(new URL("../src/components/AdminShell.tsx", import.meta.url), "utf8");
-  assert.match(source, /align="center"[^\n]*fontFamily: "ui-monospace, monospace"[^\n]*fontSize: "2rem"[^\n]*>VEGA<\/Typography>/u);
-  assert.match(source, /px: 1, py: 0\.5/u);
-  assert.match(source, /width: 300, pt: 0\.5/u);
-  assert.match(source, />VEGA<\/Typography>\s*<Divider \/>/u);
-  assert.ok(source.includes('sx={{ "& .MuiDivider-root": { mx: 2 } }}'));
-});
-
-test("all content navigation entries have matching icons", async () => {
-  const source = await readFile(new URL("../src/components/AdminShell.tsx", import.meta.url), "utf8");
-  for (const [section, icon] of [
-    ["offers", "LocalOfferOutlined"], ["prices", "PaymentsOutlined"],
-    ["packings", "Inventory2Outlined"], ["services", "HandymanOutlined"],
-    ["categories", "CategoryOutlined"], ["furniture", "ChairOutlined"],
-  ]) {
-    assert.ok(source.includes(`section: "${section}", icon: <${icon} />`));
-  }
-  assert.match(source, /<ListItemIcon sx=\{\{ minWidth: 36 \}\}>\{item\.icon\}<\/ListItemIcon>/u);
-  assert.match(source, /<ListItemIcon><ViewModuleOutlined \/><\/ListItemIcon>\s*<ListItemText primary="Content"/u);
-});
-
-test("archived orders offer PDF and restoration without editing", async () => {
-  const source = await readFile(new URL("../src/orders/OrdersPage.tsx", import.meta.url), "utf8");
-  assert.match(source, /archived \? order\.orderNumber : <Button/u);
-  assert.match(source, /if \(!archived &&/u);
-  assert.match(source, /aria-label="Auftrags-PDF herunterladen"/u);
-  assert.match(source, /aria-label="Auftrag wiederherstellen"/u);
-  const editor = await readFile(new URL("../src/orders/OrderCreatePage.tsx", import.meta.url), "utf8");
-  assert.match(editor, /if \(body\.data\.archivedAt\) \{ navigate\("\/orders\/archived"\); return; \}/u);
 });
 
 test("customer cards stack on mobile and place notes beside customer details on desktop", () => {

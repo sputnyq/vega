@@ -1,4 +1,4 @@
-import { deliverDueOutboxMail } from "./mail-outbox-service.js";
+import { deliverDueOutboxMail, type MailMaintenanceResult } from "./mail-outbox-service.js";
 import type { MailService } from "./mail-service.js";
 
 export const MAIL_MAINTENANCE_DEFAULT_LIMIT = 25;
@@ -13,8 +13,8 @@ export function resolveMaintenanceLimit(raw: string | undefined): number {
 export async function runMailMaintenance(
   mailService: MailService,
   limit: number = MAIL_MAINTENANCE_DEFAULT_LIMIT,
-  deliver: (service: MailService, capped: number) => Promise<{ sent: number; failed: number }> = deliverDueOutboxMail,
-): Promise<{ sent: number; failed: number }> {
+  deliver: (service: MailService, capped: number) => Promise<MailMaintenanceResult> = deliverDueOutboxMail,
+): Promise<MailMaintenanceResult> {
   const capped = Number.isInteger(limit) && limit >= 1
     ? Math.min(limit, MAIL_MAINTENANCE_MAX_LIMIT)
     : MAIL_MAINTENANCE_DEFAULT_LIMIT;

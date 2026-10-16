@@ -17,6 +17,13 @@ export type OrderInputValidation =
   | { ok: true; value: CreateOrderInput }
   | { ok: false; issues: OrderInputIssue[] };
 
+export class OrderInputError extends Error {
+  constructor(readonly issues: OrderInputIssue[]) {
+    super("INVALID_ORDER");
+  }
+}
+
+const MAX_FURNITURE_VOLUME = 100_000;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const TIME_PATTERN = /^\d{2}:\d{2}$/u;
 const ORDER_SOURCES = ["express", "individuelle", "Moebelliste", "UmzugRuckZuck", "check24", "umzugruckzuck24.de"] as const;
@@ -157,7 +164,7 @@ function validateFurniture(value: unknown, issues: OrderInputIssue[]): OrderDeta
     issues.push({ field: "details.furniture", message: "Ungültige Möbelliste." });
     return undefined;
   }
-  const volume = numeric(value, "volume", "details.furniture.volume", issues, { required: true, max: 100000 });
+  const volume = numeric(value, "volume", "details.furniture.volume", issues, { required: true, max: MAX_FURNITURE_VOLUME });
   const volumeComplete = bool(value, "volumeComplete", "details.furniture.volumeComplete", issues);
   const boxes = numeric(value, "boxes", "details.furniture.boxes", issues, { required: true, max: 100000 });
   const wardrobeBoxes = numeric(value, "wardrobeBoxes", "details.furniture.wardrobeBoxes", issues, { required: true, max: 100000 });
@@ -181,6 +188,9 @@ function validateFurniture(value: unknown, issues: OrderInputIssue[]): OrderDeta
     const itemVolume = numeric(rawItem, "volume", `details.furniture.items.${index}.volume`, issues, { max: 100000 });
     const category = text(rawItem, "category", `details.furniture.items.${index}.category`, issues, { max: 191 });
     const catalogId = rawItem.catalogId === undefined ? undefined : numeric(rawItem, "catalogId", `details.furniture.items.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
+    if (catalogId !== undefined && (!Number.isInteger(catalogId) || catalogId < 1)) {
+      issues.push({ field: `details.furniture.items.${index}.catalogId`, message: "Ungültige Katalogreferenz." });
+    }
     if (name !== undefined && quantity !== undefined) items.push({
       name,
       quantity,
@@ -189,6 +199,10 @@ function validateFurniture(value: unknown, issues: OrderInputIssue[]): OrderDeta
       ...(catalogId !== undefined ? { catalogId } : {}),
     });
   });
+  const itemVolumeTotal = items.reduce((total, item) => total + item.quantity * (item.volume ?? 0), 0);
+  if (!Number.isFinite(itemVolumeTotal) || itemVolumeTotal > MAX_FURNITURE_VOLUME) {
+    issues.push({ field: "details.furniture.items", message: `Das Gesamtvolumen der Möbel darf ${MAX_FURNITURE_VOLUME} m³ nicht überschreiten.` });
+  }
   if (volume === undefined || boxes === undefined || wardrobeBoxes === undefined || ownItems === undefined || expensiveText === undefined || heavyText === undefined || bulkyText === undefined || expensive === undefined || heavy === undefined || bulky === undefined) return undefined;
   return {
     volume, boxes, wardrobeBoxes, ownItems, items, expensive, expensiveText, heavy, heavyText, bulky, bulkyText,
@@ -214,6 +228,9 @@ function validateExtras(value: unknown, issues: OrderInputIssue[]): OrderDetails
     const quantity = numeric(rawService, "quantity", `details.extras.services.${index}.quantity`, issues, { required: true, max: 100000 });
     const kind = rawService.kind;
     const catalogId = rawService.catalogId === undefined ? undefined : numeric(rawService, "catalogId", `details.extras.services.${index}.catalogId`, issues, { required: true, max: 2_147_483_647 });
+    if (catalogId !== undefined && (!Number.isInteger(catalogId) || catalogId < 1)) {
+      issues.push({ field: `details.extras.services.${index}.catalogId`, message: "Ungültige Katalogreferenz." });
+    }
     if (kind !== "packaging" && kind !== "service") issues.push({ field: `details.extras.services.${index}.kind`, message: "Ungültige Leistungsart." });
     if (name !== undefined && quantity !== undefined && (kind === "packaging" || kind === "service")) services.push({ name, quantity, kind, ...(catalogId !== undefined ? { catalogId } : {}) });
   });
@@ -415,4 +432,10 @@ export function validateCustomerFormInput(input: CreateOrderInput): OrderInputIs
     issues.push({ field: "details", message: "Bitte verwenden Sie ausschließlich freigegebene Katalogpositionen." });
   }
   return issues;
+}
+
+export function validateOrderWriteInput(input: CreateOrderInput): CreateOrderInput {
+  const validation = validateOrderCreateInput(input, { allowStaffPricing: true, allowIncomplete: true });
+  if (!validation.ok) throw new OrderInputError(validation.issues);
+  return validation.value;
 }

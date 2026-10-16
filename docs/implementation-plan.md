@@ -119,6 +119,11 @@ Exakte Versionen sind in `package.json`/`package-lock.json` gepinnt; offen ist n
   die transaktionale automatische Vergabe. Änderungen bestehender Rechnungen
   beeinflussen den Nummernkreis weiterhin nicht (ADR 0005).
 - Rechnungen sind einfache CRUD-Datensätze ohne Versionshistorie. Änderungen überschreiben den aktuellen DB-Stand.
+- Auftrags- und Rechnungsänderungen verlangen die geladene `revision`.
+  Der Server erhöht sie atomar; ein überholter Stand liefert `409`, ohne
+  den gespeicherten Beleg oder den lokalen Entwurf zu überschreiben.
+  Archivieren und Restore erhöhen die Revision ebenfalls. Das ist
+  Konfliktschutz, keine Versionshistorie.
 - PDFs werden im Backend bei Bedarf erzeugt und heruntergeladen bzw. als Mailanhang erzeugt; es gibt keine dauerhaft gespeicherten PDF-Dateien. Admins sichern benötigte externe PDF-Stände selbst.
 - Gutschriften bleiben optional, eine pro Rechnung, in eigener Tabelle und mit Nummerierungsverhalten wie bisher. Mahnungen werden als Ereignisse an Rechnungen gespeichert. Rechnungen, Gutschriften und Mahnungsereignisse erhalten eigene Archiv-/Purge-Felder; Admins archivieren sie einheitlich und der App-Purge erfolgt jeweils 30 Tage danach.
 
@@ -128,8 +133,15 @@ Exakte Versionen sind in `package.json`/`package-lock.json` gepinnt; offen ist n
 - E-Mail-Vorlagen bleiben codebasiert wie bisher. Kundenberater dürfen den konkreten Text/Betreff vor jedem Versand bearbeiten.
 - Firmenempfänger, Absendername und Absenderadresse sind nicht geheime Admin-Einstellungen. Hostinger API-Token und Mailbox-ID sind ausschließlich serverseitige Umgebungsvariablen.
 - Requests werden zuerst gespeichert. Mailfehler verlieren keine Anfrage; Fehler werden angezeigt/protokolliert und können erneut versucht werden.
+- Automatische Wiederholung gilt nur bei sicher nicht erfolgtem Versand.
+  Unklare Ergebnisse nach dem Send-POST oder verwaiste `SENDING`-Claims
+  werden `UNKNOWN` und benötigen einen belegten Providerabgleich; kein
+  Blind-Retry. Die Bedienung und Recovery stehen in `hostinger-mail-cron.md`.
 - In-App-Mailaktionen protokollieren Actor/Aktion/Zeit. Versand gilt nur bei erfolgreicher Hostinger-API-Antwort als gesendet. Kopieren eines Texts für externen Versand protokolliert keinen tatsächlichen Versand.
 - Bestehende Angebots-/Rechnungs-PDF-Layouts bleiben zunächst erhalten; PDF-Erzeugung wandert vom Browser ins Backend.
+- Lange Rechnungen, Gutschriften und Mahnungen erhalten explizite
+  Seitenumbrüche und wiederholte Tabellenköpfe; Positionen, Summen und
+  Schlussangaben dürfen nicht außerhalb der Seite verschwinden.
 
 ### 4.7 Bilder
 

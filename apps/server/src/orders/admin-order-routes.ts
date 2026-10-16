@@ -3,7 +3,7 @@ import type { Prisma } from "../generated/prisma/client.js";
 import { Router, type Response } from "express";
 import { prisma } from "../prisma.js";
 import { createAdminRateLimit } from "../http-rate-limit.js";
-import { hasUnchangedCustomerDateRange, validateOrderCreateInput } from "./order-input.js";
+import { hasUnchangedCustomerDateRange, OrderInputError, validateOrderCreateInput, validateOrderWriteInput } from "./order-input.js";
 import { normalizeOrderCatalogInput } from "./order-service.js";
 import { orderDataWithRelations, orderRelationCreates, orderRelations } from "./order-relations.js";
 import { renderOrderPdf } from "./order-pdf-service.js";
@@ -96,14 +96,17 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
       if (orderNumber === null) return notFound(res);
       const actorName = String(res.locals.staffUser.name);
       const copy = await prisma.$transaction(async (tx) => {
+        const active = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM \`order\` WHERE orderNumber = ${orderNumber} AND archivedAt IS NULL FOR UPDATE`;
+        if (!active.length) throw new Error("ORDER_NOT_FOUND");
         const source = await tx.order.findFirst({ where: { orderNumber, archivedAt: null }, include: orderRelations });
         if (!source) throw new Error("ORDER_NOT_FOUND");
+        const input = validateOrderWriteInput(orderDataWithRelations(source));
         const sequence = await tx.orderNumberSequence.update({ where: { id: 1 }, data: { nextValue: { increment: 1 } }, select: { nextValue: true } });
         const copied = await tx.order.create({ data: {
           id: randomUUID(), orderNumber: sequence.nextValue - 1, customerName: source.customerName,
           customerEmail: source.customerEmail, customerPhone: source.customerPhone, source: source.source,
-          data: source.data as Prisma.InputJsonValue, edited: true, originOrderId: source.originOrderId ?? source.id,
-          ...orderRelationCreates(orderDataWithRelations(source)),
+          data: JSON.parse(JSON.stringify(input)) as Prisma.InputJsonValue, edited: true, originOrderId: source.originOrderId ?? source.id,
+          ...orderRelationCreates(input),
         }, select: { id: true, orderNumber: true } });
         const images = await tx.orderImage.findMany({ where: { orderId: source.id } });
         if (images.length) await tx.orderImage.createMany({ data: images.map((image) => ({
@@ -114,37 +117,44 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
       }).catch((error: unknown) => error instanceof Error && error.message === "ORDER_NOT_FOUND" ? null : Promise.reject(error));
       if (!copy) return notFound(res);
       res.status(201).json({ data: { orderNumber: copy.orderNumber } });
-    } catch (error) { next(error); }
+    } catch (error) {
+      if (error instanceof OrderInputError) return invalidOrder(res, error.issues);
+      if (isInvalidStoredOrder(error)) return invalidOrder(res, [{ field: "details", message: "Die gespeicherten Auftragsdaten sind ungültig und können nicht kopiert werden." }]);
+      if (isTransactionConflict(error)) return orderConflict(res);
+      next(error);
+    }
   });
 
   router.put("/:orderNumber", async (req, res, next) => {
     try {
       const orderNumber = parseOrderNumber(req.params.orderNumber);
       if (orderNumber === null) return notFound(res);
+      const revision: unknown = req.body?.revision;
+      if (typeof revision !== "number" || !Number.isInteger(revision) || revision < 0 || revision >= 2_147_483_647) {
+        return invalidOrder(res, [{ field: "revision", message: "Bitte laden Sie den aktuellen Auftragsstand vor dem Speichern." }]);
+      }
       const validation = validateOrderCreateInput(req.body, { allowStaffPricing: true, allowIncomplete: true });
       if (!validation.ok) return invalidOrder(res, validation.issues);
       if (validation.value.imageClaims?.length) return invalidOrder(res, [{ field: "imageClaims", message: "Bilder können nur bei der Anfrageanlage zugeordnet werden." }]);
-      let normalized;
-      try { normalized = await normalizeOrderCatalogInput(validation.value); }
-      catch (error) {
-        if (error instanceof Error && error.message === "INVALID_ORDER_CATALOG_REFERENCE") {
-          res.status(400).json({ error: { code: "INVALID_ORDER_CATALOG_REFERENCE", message: "Eine ausgewählte Katalogposition ist nicht mehr verfügbar." } });
-          return;
-        }
-        throw error;
-      }
-      const customerName = `${normalized.customer.firstName} ${normalized.customer.lastName}`.trim();
       const actorName = String(res.locals.staffUser.name);
       try {
         const order = await prisma.$transaction(async (tx) => {
-          const existing = await tx.order.findUnique({ where: { orderNumber }, select: { id: true, archivedAt: true, data: true } });
+          const existing = await tx.order.findUnique({ where: { orderNumber }, include: orderRelations });
           if (!existing) throw new Error("ORDER_NOT_FOUND");
           if (existing.archivedAt) throw new Error("ORDER_ARCHIVED");
-          if (!hasUnchangedCustomerDateRange(normalized, existing.data)) throw new Error("CUSTOMER_DATE_RANGE_READ_ONLY");
+          if (existing.revision !== revision) throw new Error("ORDER_CONFLICT");
+          if (!hasUnchangedCustomerDateRange(validation.value, existing.data)) throw new Error("CUSTOMER_DATE_RANGE_READ_ONLY");
+          const normalized = await normalizeOrderCatalogInput(validation.value, orderDataWithRelations(existing), tx);
+          const customerName = `${normalized.customer.firstName} ${normalized.customer.lastName}`.trim();
           const relations = orderRelationCreates(normalized);
-          const updated = await tx.order.update({ where: { id: existing.id, archivedAt: null }, data: {
+          // Claim and lock the parent before Prisma can execute nested relation writes.
+          const claimed = await tx.order.updateMany({ where: { id: existing.id, revision, archivedAt: null }, data: {
+            revision: { increment: 1 },
             customerName, customerEmail: normalized.customer.email || null, customerPhone: normalized.customer.phone,
             source: normalized.orderSource ?? "individuelle", data: JSON.parse(JSON.stringify(normalized)) as Prisma.InputJsonValue, edited: true,
+          } });
+          if (claimed.count !== 1) throw new Error("ORDER_CONFLICT");
+          const updated = await tx.order.update({ where: { id: existing.id }, data: {
             addresses: { deleteMany: {}, ...relations.addresses },
             positions: { deleteMany: {}, ...relations.positions },
           }, select: orderDetailSelect });
@@ -154,8 +164,13 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
         res.setHeader("Cache-Control", "no-store");
         res.json({ data: toOrderDetail(order) });
       } catch (error) {
-        if (isMissingOrder(error)) return notFound(res);
+        if (isMissingOrder(error) || isTransactionConflict(error) || (error instanceof Error && error.message === "ORDER_CONFLICT")) return orderConflict(res);
         if (error instanceof Error && error.message === "ORDER_NOT_FOUND") return notFound(res);
+        if (error instanceof OrderInputError) return invalidOrder(res, error.issues);
+        if (error instanceof Error && error.message === "INVALID_ORDER_CATALOG_REFERENCE") {
+          res.status(400).json({ error: { code: "INVALID_ORDER_CATALOG_REFERENCE", message: "Eine ausgewählte Katalogposition ist nicht mehr verfügbar." } });
+          return;
+        }
         if (error instanceof Error && error.message === "CUSTOMER_DATE_RANGE_READ_ONLY") {
           return invalidOrder(res, [{ field: "dateFrom", message: "Von/Bis können nur im Kundenformular gesetzt werden." }]);
         }
@@ -176,15 +191,18 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
       const purgeAt = new Date(now.getTime() + ARCHIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
       const actorName = String(res.locals.staffUser.name);
       const updated = await prisma.$transaction(async (tx) => {
-        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: null }, select: { id: true, updatedAt: true } });
+        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: null }, select: { id: true, updatedAt: true, revision: true } });
         if (!existing) throw new Error("ORDER_NOT_FOUND");
-        const order = await tx.order.update({ where: { id: existing.id, archivedAt: null, updatedAt: existing.updatedAt }, data: { archivedAt: now, purgeAt, updatedAt: existing.updatedAt }, select: { id: true, orderNumber: true, archivedAt: true, purgeAt: true } });
+        const order = await tx.order.update({ where: { id: existing.id, archivedAt: null, revision: existing.revision, updatedAt: existing.updatedAt }, data: { archivedAt: now, purgeAt, updatedAt: existing.updatedAt, revision: { increment: 1 } }, select: { id: true, orderNumber: true, archivedAt: true, purgeAt: true } });
         await tx.orderActivityEvent.create({ data: { id: randomUUID(), orderId: order.id, action: "ARCHIVED", actorName } });
         return order;
-      }).catch((error: unknown) => isMissingOrder(error) || (error instanceof Error && error.message === "ORDER_NOT_FOUND") ? null : Promise.reject(error));
+      }).catch((error: unknown) => error instanceof Error && error.message === "ORDER_NOT_FOUND" ? null : Promise.reject(error));
       if (!updated) return notFound(res);
       res.json({ data: updated });
-    } catch (error) { next(error); }
+    } catch (error) {
+      if (isMissingOrder(error) || isTransactionConflict(error)) return orderConflict(res);
+      next(error);
+    }
   });
 
   router.post("/:orderNumber/restore", async (req, res, next) => {
@@ -193,21 +211,24 @@ export function createAdminOrderRouter(config: Pick<AppConfig, "mail"> = { mail:
       if (orderNumber === null) return notFound(res);
       const actorName = String(res.locals.staffUser.name);
       const updated = await prisma.$transaction(async (tx) => {
-        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: { not: null } }, select: { id: true, updatedAt: true } });
+        const existing = await tx.order.findFirst({ where: { orderNumber, archivedAt: { not: null } }, select: { id: true, updatedAt: true, revision: true } });
         if (!existing) throw new Error("ORDER_NOT_FOUND");
-        const order = await tx.order.update({ where: { id: existing.id, archivedAt: { not: null }, updatedAt: existing.updatedAt }, data: { archivedAt: null, purgeAt: null, updatedAt: existing.updatedAt }, select: { id: true, orderNumber: true } });
+        const order = await tx.order.update({ where: { id: existing.id, archivedAt: { not: null }, revision: existing.revision, updatedAt: existing.updatedAt }, data: { archivedAt: null, purgeAt: null, updatedAt: existing.updatedAt, revision: { increment: 1 } }, select: { id: true, orderNumber: true } });
         await tx.orderActivityEvent.create({ data: { id: randomUUID(), orderId: order.id, action: "RESTORED", actorName } });
         return order;
-      }).catch((error: unknown) => isMissingOrder(error) || (error instanceof Error && error.message === "ORDER_NOT_FOUND") ? null : Promise.reject(error));
+      }).catch((error: unknown) => error instanceof Error && error.message === "ORDER_NOT_FOUND" ? null : Promise.reject(error));
       if (!updated) return notFound(res);
       res.json({ data: updated });
-    } catch (error) { next(error); }
+    } catch (error) {
+      if (isMissingOrder(error) || isTransactionConflict(error)) return orderConflict(res);
+      next(error);
+    }
   });
   return router;
 }
 
 const orderListSelect = { orderNumber: true, customerName: true, source: true, createdAt: true, updatedAt: true, edited: true, archivedAt: true, purgeAt: true, originOrderId: true, data: true, ...orderRelations } satisfies Prisma.OrderSelect;
-const orderDetailSelect = { id: true, ...orderListSelect, data: true, originOrderId: true } satisfies Prisma.OrderSelect;
+const orderDetailSelect = { id: true, revision: true, ...orderListSelect, data: true, originOrderId: true } satisfies Prisma.OrderSelect;
 
 function toOrderListItem(order: Prisma.OrderGetPayload<{ select: typeof orderListSelect }>) {
   const data = asRecord(orderDataWithRelations(order));
@@ -234,7 +255,10 @@ function parsePositiveInteger(value: unknown): number | null { return typeof val
 function parseOrderNumber(value: unknown): number | null { const parsed = parsePositiveInteger(value); return parsed && parsed <= 2_147_483_647 ? parsed : null; }
 function notFound(res: Response) { res.status(404).json({ error: { code: "ORDER_NOT_FOUND", message: "Auftrag nicht gefunden." } }); }
 function invalidOrder(res: Response, issues: unknown) { res.status(400).json({ error: { code: "INVALID_ORDER", message: "Bitte prüfen Sie die Auftragsdaten.", issues } }); }
+function orderConflict(res: Response) { res.status(409).json({ error: { code: "ORDER_CONFLICT", message: "Der Auftrag wurde zwischenzeitlich geändert. Ihr Entwurf bleibt erhalten. Bitte laden Sie den aktuellen Stand neu und gleichen Sie Ihre Änderungen ab." } }); }
 function isMissingOrder(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && error.code === "P2025"; }
+function isTransactionConflict(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && error.code === "P2034"; }
+function isInvalidStoredOrder(error: unknown): boolean { return error instanceof Error && /^INVALID_STORED_ORDER(?:_RELATIONS)?$/u.test(error.message); }
 function asRecord(value: unknown): Record<string, unknown> | undefined { return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
 function stringValue(value: unknown): string { return typeof value === "string" ? value : ""; }
 function numberValue(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }

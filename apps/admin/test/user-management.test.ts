@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { loadStaffAccounts, staffAccountActions, StaffAccountStatus, UserManagementPage } from "../src/settings/UserManagementPage.js";
+import { mount } from "./dom-test-helpers.js";
 
 test("user management has no search or pagination controls", () => {
   const previous = Reflect.get(globalThis, "React");
@@ -27,17 +27,23 @@ test("user management has no search or pagination controls", () => {
 });
 
 test("user management uses separate name and email table columns", async () => {
-  const source = await readFile(new URL("../src/settings/UserManagementPage.tsx", import.meta.url), "utf8");
-  assert.match(source, /<TableCell>Name<\/TableCell>\s*<TableCell>E-Mail<\/TableCell>/u);
-  assert.match(source, /<TableCell align="center">Status<\/TableCell><TableCell>Name/u);
-  assert.match(source, /<TableCell>Rolle<\/TableCell><TableCell>OTP<\/TableCell>/u);
-  assert.match(source, /<TableCell><Stack spacing=\{0\.5\} sx=\{\{ alignItems: "flex-start" \}\}>/u);
-  assert.match(source, /<TableCell align="center"><StaffAccountStatus blocked=\{user\.blocked\} \/><\/TableCell>\s*<TableCell>\{user\.name\}/u);
-  assert.match(source, /<TableCell>\{user\.name\}<\/TableCell>\s*<TableCell>\{user\.email\}<\/TableCell>/u);
-  assert.doesNotMatch(source, /Name \/ E-Mail/u);
-  assert.match(source, /<MoreVert\s*\/>/u);
-  assert.match(source, /aria-haspopup="menu"/u);
-  assert.match(source, /<Menu id="staff-actions-menu"/u);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ data: { items: [{
+    id: "test-admin", name: "Test Admin", email: "admin@example.test", role: "Admin",
+    blocked: false, mustChangePassword: false, twoFactorEnabled: true,
+  }], total: 1 } });
+  const app = await mount(createElement(UserManagementPage, { currentUserId: "test-admin" }));
+  try {
+    assert.deepEqual([...app.container.querySelectorAll("th")].map((cell) => cell.textContent), ["Status", "Name", "E-Mail", "Rolle", "OTP", "Aktionen"]);
+    const row = app.container.querySelector("tbody tr")!;
+    const cells = [...row.querySelectorAll("td")];
+    assert.equal(cells[1]!.textContent, "Test Admin");
+    assert.equal(cells[2]!.textContent, "admin@example.test");
+    await app.click(row.querySelector('button[aria-haspopup="menu"]')!);
+    const items = [...app.window.document.querySelectorAll('[role="menuitem"]')];
+    assert.deepEqual(items.map((item) => item.textContent), ["Als Kundenberater setzen", "Sperren", "Passwort-Reset-Mail", "2FA zurücksetzen"]);
+    assert.deepEqual(items.map((item) => item.getAttribute("aria-disabled") === "true"), [true, true, false, true]);
+  } finally { globalThis.fetch = originalFetch; await app.cleanup(); }
 });
 
 test("account status uses small badges sized to their labels", () => {

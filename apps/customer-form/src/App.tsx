@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -12,9 +12,6 @@ import {
   ThemeProvider,
   useMediaQuery,
 } from "@mui/material";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import { de } from "date-fns/locale";
 import { theme } from "./theme.js";
 import { Column } from "./components.js";
 import {
@@ -28,10 +25,14 @@ import {
   type ImageDraft,
 } from "./form-model.js";
 import { loadResources, request } from "./api.js";
-import { Contact, MovingStep } from "./MovingSteps.js";
-import { Packaging, RequestStep, Success } from "./FinalSteps.js";
-import { ImageUploader } from "./ImageUploader.js";
+import { Contact } from "./ContactStep.js";
 import { ValidationFieldProvider } from "./components.js";
+
+const Packaging = lazy(() => import("./FinalSteps.js").then((module) => ({ default: module.Packaging })));
+const MovingStep = lazy(() => import("./MovingSteps.js").then((module) => ({ default: module.MovingStep })));
+const RequestStep = lazy(() => import("./FinalSteps.js").then((module) => ({ default: module.RequestStep })));
+const Success = lazy(() => import("./FinalSteps.js").then((module) => ({ default: module.Success })));
+const ImageUploader = lazy(() => import("./ImageUploader.js").then((module) => ({ default: module.ImageUploader })));
 
 export function App() {
   const [draft, setDraft] = useState(initialDraft);
@@ -39,6 +40,7 @@ export function App() {
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
+  const [requestVisited, setRequestVisited] = useState(false);
   const [error, setError] = useState("");
   const [validationField, setValidationField] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -48,6 +50,7 @@ export function App() {
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const narrow = useMediaQuery(theme.breakpoints.down("sm"));
+  useEffect(() => { if (activeStep === 4) setRequestVisited(true); }, [activeStep]);
   useEffect(() => {
     const controller = new AbortController();
     setLoadError("");
@@ -170,7 +173,6 @@ export function App() {
   const props = resources ? { draft, setDraft, resources } : null;
   return (
     <ThemeProvider theme={theme}>
-      <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
         <ScopedCssBaseline
           className="vega-customer-form"
           sx={{ fontFamily: theme.typography.fontFamily }}
@@ -203,6 +205,7 @@ export function App() {
                     ))}
                   </Stepper>
                 )}
+                <Suspense fallback={<CircularProgress aria-label="Formularschritt wird geladen" />}>
                 {success ? (
                   <Success />
                 ) : (
@@ -221,7 +224,7 @@ export function App() {
                         <MovingStep {...props!} departure={false} />
                       )}
                       {activeStep === 3 && <Packaging {...props!} />}
-                      <Box
+                      {(activeStep === 4 || requestVisited) && <Box
                         sx={{ display: activeStep === 4 ? "block" : "none" }}
                       >
                         <RequestStep
@@ -237,10 +240,11 @@ export function App() {
                             />
                           }
                         />
-                      </Box>
+                      </Box>}
                     </ValidationFieldProvider>
                   </Box>
                 )}
+                </Suspense>
                 {!success && (
                   <Box
                     sx={{ display: "flex", gap: 4, justifyContent: "center" }}
@@ -279,7 +283,6 @@ export function App() {
             </Snackbar>
           </Box>
         </ScopedCssBaseline>
-      </LocalizationProvider>
     </ThemeProvider>
   );
 }

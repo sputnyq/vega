@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Stack } from "@mui/material";
-import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
+import type { AdminOrderDetail, CreateOrderInput, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
 import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import { useAdminNotification } from "../components/AdminNotifications.js";
 import { SectionTabs } from "../components/SectionTabs.js";
@@ -16,6 +16,18 @@ import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
 import { downloadOrderPdf, saveAndFetchOrderPdf } from "./order-pdf-download.js";
 
 const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Journal"];
+
+function toFormValue(data: CreateOrderInput): OrderFormValue {
+  const base = createEmptyOrder();
+  return {
+    ...base,
+    ...data,
+    customer: { ...base.customer, ...data.customer },
+    from: { ...base.from, ...data.from },
+    to: { ...base.to, ...data.to },
+    details: data.details ?? base.details,
+  };
+}
 
 interface OrderCreatePageProps {
   navigate: (path: string) => void;
@@ -41,6 +53,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
   const notify = useAdminNotification();
   const [loading, setLoading] = useState(orderNumber !== undefined);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [revision, setRevision] = useState<number | null>(null);
 
   useEffect(() => {
     onBusyChange(loading || busy || loadFailed);
@@ -49,22 +62,18 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
   useEffect(() => {
     if (orderNumber === undefined) return;
     let cancelled = false;
+    setLoading(true);
+    setLoadFailed(false);
+    setRevision(null);
+    setError(null);
     void fetch(`/api/admin/orders/${orderNumber}`, { credentials: "same-origin" })
       .then(async (response) => ({ response, body: await response.json() as { data?: AdminOrderDetail; error?: { message?: string } } }))
       .then(({ response, body }) => {
         if (cancelled) return;
         if (!response.ok || !body.data) { setError(body.error?.message ?? "Auftrag konnte nicht geladen werden."); setLoadFailed(true); return; }
         if (body.data.archivedAt) { navigate("/orders/archived"); return; }
-        const base = createEmptyOrder();
-        const data = body.data.data;
-        setValue({
-          ...base,
-          ...data,
-          customer: { ...base.customer, ...data.customer },
-          from: { ...base.from, ...data.from },
-          to: { ...base.to, ...data.to },
-          details: data.details ?? base.details,
-        });
+        setRevision(body.data.revision);
+        setValue(toFormValue(body.data.data));
         onCopyChange?.(body.data.isCopy);
         onDirtyChange(false);
       })
@@ -88,7 +97,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
       method: orderNumber === undefined ? "POST" : "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify(value),
+      body: JSON.stringify(orderNumber === undefined ? value : { ...value, revision }),
     });
     const body = await response.json() as { data?: CreateOrderResult | AdminOrderDetail } & ApiErrorResponse;
     if (!response.ok || !body.data) {
@@ -109,6 +118,9 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
       navigate(`/edit/${body.data.orderNumber}`);
       notify("success", "Auftrag angelegt.");
     } else {
+      const saved = body.data as AdminOrderDetail;
+      setRevision(saved.revision);
+      setValue(toFormValue(saved.data));
       onDirtyChange(false);
       notify("success", "Auftrag gespeichert.");
     }

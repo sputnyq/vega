@@ -1,20 +1,40 @@
 import type { Prisma } from "../generated/prisma/client.js";
-import { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE, type InvoiceInput } from "@vega/domain";
+import {
+  calculateInvoiceTotals, isInvoiceAmount, isInvoiceDate, manualInvoiceNextValue,
+  MAX_INVOICE_SEQUENCE_VALUE, validateInvoiceEntries, type InvoiceInput,
+} from "@vega/domain";
 
 export function validateInvoice(value: unknown, creating = false): { ok: true; value: InvoiceInput } | { ok: false; message: string } {
   if (!isRecord(value)) return { ok: false, message: "Ungültige Rechnungsdaten." };
   if (value.taxPercent !== 19 && value.taxPercent !== 0) return { ok: false, message: "Umsatzsteuer muss 19 % oder 0 % sein." };
-  const strings = ["invoiceDate", "company", "customerName", "customerStreet", "customerPostalCity", "text"] as const;
-  if (strings.some((key) => typeof value[key] !== "string") || typeof value.taxPercent !== "number" || !Number.isFinite(value.taxPercent) || value.taxPercent < 0 || value.taxPercent > 100 || !Array.isArray(value.entries) || !Array.isArray(value.dueDates)) return { ok: false, message: "Bitte prüfen Sie die Rechnungsdaten." };
-  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value.invoiceDate as string) || (value.customerName as string).trim().length === 0) return { ok: false, message: "Rechnungsdatum und Kunde sind erforderlich." };
-  const entries = value.entries as unknown[];
-  if (entries.length > 200 || entries.some((entry) => !isRecord(entry) || typeof entry.description !== "string" || typeof entry.quantity !== "number" || typeof entry.unitPrice !== "number" || entry.quantity < 0 || entry.unitPrice < 0)) return { ok: false, message: "Ungültige Rechnungspositionen." };
-  const dueDates = value.dueDates as unknown[];
-  if (dueDates.length > 20 || dueDates.some((entry) => !isRecord(entry) || typeof entry.date !== "string" || typeof entry.amount !== "number" || typeof entry.text !== "string" || entry.amount < 0)) return { ok: false, message: "Ungültige Fälligkeiten." };
-  const invoiceNumber = typeof value.invoiceNumber === "string" && value.invoiceNumber.trim() ? value.invoiceNumber.trim().slice(0, 64) : undefined;
+  const limits = { company: 191, customerName: 300, customerStreet: 191, customerPostalCity: 191, text: 10000 };
+  for (const [key, limit] of Object.entries(limits)) {
+    if (typeof value[key] !== "string" || value[key].length > limit) return { ok: false, message: "Bitte prüfen Sie die Rechnungsdaten und Textlängen." };
+  }
+  if (!isInvoiceDate(value.invoiceDate) || !(value.customerName as string).trim()) return { ok: false, message: "Ein gültiges Rechnungsdatum und ein Kunde sind erforderlich." };
+  const entries = validateInvoiceEntries(value.entries);
+  if (!entries || !isInvoiceAmount(calculateInvoiceTotals(entries, value.taxPercent).total)) return { ok: false, message: "Ungültige Rechnungspositionen oder Rechnungssumme." };
+  if (!Array.isArray(value.dueDates) || value.dueDates.length > 20) return { ok: false, message: "Ungültige Fälligkeiten." };
+  const dueDates: InvoiceInput["dueDates"] = [];
+  for (const entry of value.dueDates) {
+    if (!isRecord(entry) || !isInvoiceDate(entry.date) || !isInvoiceAmount(entry.amount)
+      || typeof entry.text !== "string" || entry.text.length > 2000) return { ok: false, message: "Ungültige Fälligkeiten." };
+    dueDates.push({ date: entry.date, amount: entry.amount, text: entry.text });
+  }
+  if (value.invoiceNumber !== undefined && (typeof value.invoiceNumber !== "string" || value.invoiceNumber.trim().length > 64)) return { ok: false, message: "Ungültige Rechnungsnummer (max. 64 Zeichen)." };
+  const invoiceNumber = typeof value.invoiceNumber === "string" && value.invoiceNumber.trim() ? value.invoiceNumber.trim() : undefined;
   const nextValue = manualInvoiceNextValue(invoiceNumber);
   if (creating && nextValue !== undefined && (!Number.isSafeInteger(nextValue) || nextValue > MAX_INVOICE_SEQUENCE_VALUE)) return { ok: false, message: "Rechnungsnummer überschreitet den unterstützten Nummernkreis (maximal R-2147483646)." };
-  return { ok: true, value: { ...(invoiceNumber ? { invoiceNumber } : {}), invoiceDate: value.invoiceDate as string, company: (value.company as string).trim().slice(0, 191), customerName: (value.customerName as string).trim().slice(0, 300), customerStreet: (value.customerStreet as string).trim().slice(0, 191), customerPostalCity: (value.customerPostalCity as string).trim().slice(0, 191), taxPercent: value.taxPercent as number, text: (value.text as string).slice(0, 10000), entries: entries as InvoiceInput["entries"], dueDates: dueDates as InvoiceInput["dueDates"] } };
+  return {
+    ok: true,
+    value: {
+      ...(invoiceNumber ? { invoiceNumber } : {}),
+      invoiceDate: value.invoiceDate, company: (value.company as string).trim(),
+      customerName: (value.customerName as string).trim(), customerStreet: (value.customerStreet as string).trim(),
+      customerPostalCity: (value.customerPostalCity as string).trim(), taxPercent: value.taxPercent,
+      text: value.text as string, entries, dueDates,
+    },
+  };
 }
 
 export function invoiceData(input: InvoiceInput, invoiceNumber: string): Omit<Prisma.InvoiceUncheckedCreateInput, "id" | "orderId" | "orderNumberSnapshot"> {
@@ -35,6 +55,7 @@ export function invoiceData(input: InvoiceInput, invoiceNumber: string): Omit<Pr
 export function toInvoiceDto(invoice: Prisma.InvoiceGetPayload<object>) {
   return {
     id: invoice.id,
+    revision: invoice.revision,
     invoiceNumber: invoice.invoiceNumber,
     orderNumber: invoice.orderNumberSnapshot,
     invoiceDate: invoice.invoiceDate.toISOString().slice(0, 10),

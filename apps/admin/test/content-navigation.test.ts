@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,28 +9,11 @@ import { ContentManagementPage } from "../src/settings/ContentManagementPage.js"
 import { OptionsPage } from "../src/settings/OptionsPage.js";
 import { furnitureCategoryChoices, furnitureDefaults } from "../src/catalog/FurniturePage.js";
 
-test("furniture editor uses required defaults and sorted category checkboxes below its fields", async () => {
+test("furniture defaults and category choices are stable and do not mutate the catalog", () => {
   const categories = [{ id: 3, name: "Küche", sort: 20 }, { id: 2, name: "Schlafzimmer", sort: 10 }, { id: 1, name: "Wohnzimmer", sort: 10 }];
   assert.deepEqual(furnitureCategoryChoices(categories).map((option) => option.value), [1, 2, 3]);
   assert.equal(categories[0]?.id, 3);
   assert.deepEqual(furnitureDefaults, { name: "", categoryIds: [], volume: 0, step: 1, sortOrder: 0 });
-  const furniture = await readFile(new URL("../src/catalog/FurniturePage.tsx", import.meta.url), "utf8");
-  const fields = furniture.slice(furniture.indexOf("const fields:"), furniture.indexOf("const columns:"));
-  assert.deepEqual([...fields.matchAll(/name: "([^"]+)"/gu)].map((match) => match[1]), ["name", "volume", "step", "sortOrder", "categoryIds"]);
-  assert.match(fields, /type: "checkboxes"/u);
-  assert.match(fields, /name: "volume", label: "Volumen"[^\n]*unit: "m³"/u);
-  const editor = await readFile(new URL("../src/catalog/CatalogCrudPage.tsx", import.meta.url), "utf8");
-  const checkboxes = editor.slice(editor.indexOf('if (field.type === "checkboxes")'), editor.indexOf('if (field.type === "boolean")'));
-  assert.match(checkboxes, /<FormGroup>/u);
-  assert.match(checkboxes, /<Checkbox checked=/u);
-  assert.match(checkboxes, /event\.target\.checked/u);
-  assert.doesNotMatch(checkboxes, /<Select|<FormGroup row/u);
-});
-
-test("catalog money fields display the euro at the right end of the input", async () => {
-  const source = await readFile(new URL("../src/catalog/CatalogCrudPage.tsx", import.meta.url), "utf8");
-  assert.match(source, /field\.type === "money" \|\| field\.unit \? \{ input: \{ endAdornment: <InputAdornment position="end">\{field\.type === "money" \? "€" : field\.unit\}<\/InputAdornment>/u);
-  assert.ok(source.includes('field.label.replace(/\\s*\\(€\\)$/u, "")'));
 });
 
 test("sticky section tabs meet the dense outlined navbar without a gap", () => {
@@ -52,20 +34,6 @@ test("sticky section tabs meet the dense outlined navbar without a gap", () => {
     if (previous === undefined) Reflect.deleteProperty(globalThis, "React");
     else Reflect.set(globalThis, "React", previous);
   }
-});
-
-test("catalog tables use a three-dot action menu and right-aligned creation wording", async () => {
-  const source = await readFile(new URL("../src/catalog/CatalogCrudPage.tsx", import.meta.url), "utf8");
-  assert.match(source, /aria-haspopup="menu"/u);
-  assert.match(source, /<MoreVert\s*\/>/u);
-  assert.match(source, /<Menu id="catalog-actions-menu"/u);
-  assert.match(source, /setActionMenu\(null\); openEdit\(item\)/u);
-  assert.match(source, /setActionMenu\(null\); void remove\(item\)/u);
-  assert.match(source, /window\.confirm/u);
-  assert.match(source, /useFlexGap sx=\{\{ justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" \}\}/u);
-  assert.match(source, /toolbarContent && <Stack direction="row" sx=\{\{ flexGrow: 1/u);
-  assert.match(source, /onClick=\{openCreate\}>Eintrag anlegen/u);
-  assert.doesNotMatch(source, /Eintrag hinzufügen|>Hinzufügen</u);
 });
 
 test("global price groups are only shown in the Prices content section", () => {

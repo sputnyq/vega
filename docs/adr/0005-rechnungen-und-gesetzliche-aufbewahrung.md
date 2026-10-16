@@ -31,6 +31,11 @@
   `R-2147483646`, damit `Nummer + 1` darstellbar bleibt; größere Werte werden
   mit Validierungsfehler abgewiesen. Die bisherige Editierbarkeit bleibt erhalten.
 - Rechnung ist einfache CRUD; keine Versionshistorie. Änderungen überschreiben den aktuellen DB-Stand.
+- `Invoice.revision` schützt diesen aktuellen Stand vor Lost Updates:
+  PUT verlangt die geladene Revision, vergleicht und erhöht sie atomar.
+  Ein veralteter Entwurf bleibt lokal erhalten und erhält
+  `409 INVOICE_CONFLICT`; Archiv/Restore erhöhen ebenfalls die Revision.
+  Der Zähler speichert keine früheren Rechnungsstände.
 - Nach erfolgreichem Speichern übernimmt der Editor die bestätigten API-Daten
   in das Formular, bevor der Dirty-State zurückgesetzt wird. Normalisierte
   Werte und die verbindliche Rechnungsnummer bleiben so mit dem PDF konsistent.
@@ -43,6 +48,20 @@
   weist andere Steuersätze zurück. Vorhandene abweichende Werte werden nicht
   automatisch umgerechnet. Der Editor verlangt dafür eine ausdrückliche
   Auswahl eines zulässigen Satzes, bevor erneut gespeichert werden kann.
+- Kalenderdaten und Zahlen werden auch serverseitig strikt geprüft;
+  unmögliche Daten, `Infinity`, negative oder nicht darstellbare Zeilen-/
+  Gesamtbeträge werden abgewiesen. UI und PDF verwenden denselben
+  Domain-Summenhelper ohne zusätzliche Zwischenrundung je Zeile.
+- Hauptrechnung, Gutschrift und Mahnungen behalten getrennte Entwürfe
+  über Tabwechsel. Navigation verlangt vor dem Verwerfen eine Bestätigung;
+  Speichern eines Unterbelegs verwirft keinen anderen Entwurf. PDF-, Mail-
+  und Archivaktionen sind bei ungespeicherten Änderungen gesperrt.
+- Fehlgeschlagene Lesezugriffe auf Gutschrift oder Mahnungen beenden den
+  Ladezustand und bieten eine gezielte Wiederholung, ohne andere Entwürfe
+  zu verwerfen. Fehlende Unterbeleg-Daten gelten nicht als leere Liste;
+  sie sperren die Hauptrechnung nach Abschluss der Anfrage nicht dauerhaft.
+- Aktive und archivierte Rechnungslisten sind serverseitig paginiert;
+  Suchtreffer hinter den ersten 100 Datensätzen bleiben erreichbar.
 - Wird eine Rechnung während des Speicherns archiviert, antwortet die API
   mit `409 INVOICE_ARCHIVED`; bei zwischenzeitlicher Löschung mit `404`.
 - PDF wird bei Bedarf aus dem aktuellen DB-Stand im Backend erzeugt und vom Admin lokal gespeichert. App speichert keine PDF-Dateien.

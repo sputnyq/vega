@@ -5,7 +5,7 @@ import type { createAuth } from "../auth-config.js";
 import type { AppConfig } from "../config.js";
 import { createOrder } from "./order-service.js";
 import { consumePublicApiRateLimit } from "../public-rate-limit.js";
-import { validateCustomerFormInput, validateOrderCreateInput } from "./order-input.js";
+import { OrderInputError, validateCustomerFormInput, validateOrderCreateInput } from "./order-input.js";
 import { createConfiguredMailService } from "../mail/configured-mail-service.js";
 import { deliverOutboxMail } from "../mail/mail-outbox-service.js";
 import { UploadError } from "../uploads/upload-service.js";
@@ -83,6 +83,10 @@ export function createOrderRouter(auth: AuthInstance, config: AppConfig) {
       res.setHeader("Cache-Control", "no-store");
       res.status(201).json({ data: { orderNumber: created.orderNumber } });
     } catch (error) {
+      if (error instanceof OrderInputError) {
+        res.status(400).json({ error: { code: "INVALID_ORDER", message: "Bitte prüfen Sie die markierten Auftragsdaten.", issues: error.issues } });
+        return;
+      }
       if (error instanceof UploadError) {
         res.status(error.status).json({ error: { code: error.code, message: error.message } });
         return;

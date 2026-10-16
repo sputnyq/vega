@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { AppSettingsDto, CreateOrderInput } from "@vega/domain";
+import type { AppSettingsDto, CreateOrderInput, OrderFurnitureInput, OrderServiceInput } from "@vega/domain";
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../prisma.js";
 import { emailDefaults } from "../mail/email-template.js";
 import { attachUploadClaims } from "../uploads/upload-service.js";
 import { orderRelationCreates } from "./order-relations.js";
+import { validateOrderWriteInput } from "./order-input.js";
 
 export async function createOrder(input: CreateOrderInput, source: "public" | "admin", actorName = "-", settings?: AppSettingsDto) {
   let normalizedInput = await normalizeOrderCatalogInput(input);
@@ -22,6 +23,7 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
       },
     } };
   }
+  normalizedInput = validateOrderWriteInput(normalizedInput);
   const customerName = `${normalizedInput.customer.firstName} ${normalizedInput.customer.lastName}`.trim();
   const { imageClaims = [], ...storedInput } = normalizedInput;
   const data = JSON.parse(JSON.stringify(storedInput)) as Prisma.InputJsonValue;
@@ -71,11 +73,31 @@ export async function createOrder(input: CreateOrderInput, source: "public" | "a
   });
 }
 
-export async function normalizeOrderCatalogInput(input: CreateOrderInput): Promise<CreateOrderInput> {
+export async function normalizeOrderCatalogInput(
+  input: CreateOrderInput,
+  storedInput?: CreateOrderInput,
+  catalog: Pick<Prisma.TransactionClient, "catalogFurniture" | "catalogService" | "catalogPacking"> = prisma,
+): Promise<CreateOrderInput> {
+  input = validateOrderWriteInput(input);
   let normalizedInput = input;
-  const catalogIds = [...new Set(input.details?.furniture.items.flatMap((item) => item.catalogId === undefined ? [] : [item.catalogId]) ?? [])];
+  const storedFurniture = [...(storedInput?.details?.furniture.items ?? [])];
+  const furnitureSnapshots = new Map<OrderFurnitureInput, OrderFurnitureInput>();
+  // Only persisted snapshots qualify as historical, at most once per saved row.
+  // A quantity edit keeps that snapshot; replacing its metadata uses today's catalog.
+  for (const item of input.details?.furniture.items ?? []) {
+    if (item.catalogId === undefined) continue;
+    const index = storedFurniture.findIndex((stored) => stored.catalogId === item.catalogId
+      && stored.name === item.name && stored.volume === item.volume && stored.category === item.category);
+    if (index >= 0) {
+      const [stored] = storedFurniture.splice(index, 1);
+      furnitureSnapshots.set(item, { ...stored!, quantity: item.quantity });
+    }
+  }
+  const catalogIds = [...new Set(input.details?.furniture.items.flatMap((item) => (
+    item.catalogId === undefined || furnitureSnapshots.has(item) ? [] : [item.catalogId]
+  )) ?? [])];
   if (catalogIds.length > 0) {
-    const catalogFurniture = await prisma.catalogFurniture.findMany({
+    const catalogFurniture = await catalog.catalogFurniture.findMany({
       where: { id: { in: catalogIds } },
       include: { categories: { include: { category: { select: { name: true } } } } },
     });
@@ -88,6 +110,8 @@ export async function normalizeOrderCatalogInput(input: CreateOrderInput): Promi
         furniture: {
           ...input.details!.furniture,
           items: input.details!.furniture.items.map((item) => {
+            const snapshot = furnitureSnapshots.get(item);
+            if (snapshot) return snapshot;
             if (item.catalogId === undefined) return item;
             const catalogItem = byId.get(item.catalogId);
             if (!catalogItem) throw new Error("INVALID_ORDER_CATALOG_REFERENCE");
@@ -107,11 +131,24 @@ export async function normalizeOrderCatalogInput(input: CreateOrderInput): Promi
   }
 
   const submittedServices = normalizedInput.details?.extras.services ?? [];
-  const selectedServiceIds = [...new Set(submittedServices.flatMap((service) => service.catalogId === undefined ? [] : [service.catalogId]))];
+  const storedServices = [...(storedInput?.details?.extras.services ?? [])];
+  const serviceSnapshots = new Map<OrderServiceInput, OrderServiceInput>();
+  for (const service of submittedServices) {
+    if (service.catalogId === undefined) continue;
+    const index = storedServices.findIndex((stored) => stored.catalogId === service.catalogId
+      && stored.name === service.name && stored.kind === service.kind);
+    if (index >= 0) {
+      const [stored] = storedServices.splice(index, 1);
+      serviceSnapshots.set(service, { ...stored!, quantity: service.quantity });
+    }
+  }
+  const selectedServiceIds = [...new Set(submittedServices.flatMap((service) => (
+    service.catalogId === undefined || serviceSnapshots.has(service) ? [] : [service.catalogId]
+  )))];
   if (selectedServiceIds.length > 0) {
     const [serviceItems, packingItems] = await Promise.all([
-      prisma.catalogService.findMany({ where: { id: { in: selectedServiceIds }, show: true }, select: { id: true, name: true } }),
-      prisma.catalogPacking.findMany({ where: { id: { in: selectedServiceIds }, show: true }, select: { id: true, name: true } }),
+      catalog.catalogService.findMany({ where: { id: { in: selectedServiceIds }, show: true }, select: { id: true, name: true } }),
+      catalog.catalogPacking.findMany({ where: { id: { in: selectedServiceIds }, show: true }, select: { id: true, name: true } }),
     ]);
     const namesByKind = {
       service: new Map(serviceItems.map((item) => [item.id, item.name])),
@@ -124,6 +161,8 @@ export async function normalizeOrderCatalogInput(input: CreateOrderInput): Promi
         extras: {
           ...normalizedInput.details!.extras,
           services: submittedServices.map((service) => {
+            const snapshot = serviceSnapshots.get(service);
+            if (snapshot) return snapshot;
             if (service.catalogId === undefined) return service;
             const catalogName = namesByKind[service.kind].get(service.catalogId);
             if (!catalogName) throw new Error("INVALID_ORDER_CATALOG_REFERENCE");
@@ -133,5 +172,5 @@ export async function normalizeOrderCatalogInput(input: CreateOrderInput): Promi
       },
     };
   }
-  return normalizedInput;
+  return validateOrderWriteInput(normalizedInput);
 }

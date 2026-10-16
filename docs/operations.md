@@ -56,6 +56,12 @@ versioniert). `dev` und `build` generieren automatisch. Migrationen seeden nicht
 dafür `npm run db:seed`. Der `mariadb@3.5.4`-Override ist in
 `proof-01-integration-compatibility.md` begründet.
 
+Die Migration `20261016150000_document_revisions` muss vor dem neuen
+Serverstand ausgerollt sein. Sie ergänzt `Order.revision` und
+`Invoice.revision` mit Startwert `0`; alte offene Bearbeitungsseiten müssen
+neu geladen werden. PUTs ohne Revision werden mit `400`, überholte Stände
+mit `409` abgewiesen.
+
 ## Erstadmin
 
 `npm run db:seed` legt einmalig `root_user` mit `INITIAL_ADMIN_EMAIL` und
@@ -91,6 +97,10 @@ npm run test:deployment   # nach build: startet den kompilierten Server
 DB-Tests nur gegen eine **separate leere Datenbank mit Namen auf `_test`**:
 Migrationen mit `DATABASE_URL` darauf ausrollen, dann
 `TEST_DATABASE_URL=… npm run test:database`. Niemals die App-Datenbank verwenden.
+Die Regressionen umfassen echte konkurrierende Auftrags-/Rechnungs-PUTs:
+genau ein Update muss erfolgreich sein, das andere muss `409` liefern,
+ohne Teiländerungen an Beziehungen. UI-Interaktionen laufen lokal mit
+jsdom; sie ersetzen keinen Browser-/WordPress-Proof.
 
 CI (`.github/workflows/ci.yml`) nutzt Node 24 und MariaDB 10.11.19 inkl. frischer
 Migrationen und Drift-Prüfung.

@@ -18,23 +18,31 @@ export interface OutgoingMail {
 }
 
 export class MailDeliveryError extends Error {
-  constructor(readonly code: string, readonly retryable: boolean, readonly status?: number) {
+  constructor(
+    readonly code: string,
+    readonly retryable: boolean,
+    readonly status?: number,
+    readonly outcome: "NOT_SENT" | "UNKNOWN" = "NOT_SENT",
+  ) {
     super(code);
     this.name = "MailDeliveryError";
   }
 }
 
+export const HOSTINGER_MAIL_TIMEOUT_MS = 10_000;
+
 export class HostingerMailClient {
   constructor(
     private readonly config: HostingerMailConfig,
     private readonly fetchImpl: typeof fetch = fetch,
-    private readonly timeoutMs = 10_000,
+    private readonly timeoutMs = HOSTINGER_MAIL_TIMEOUT_MS,
   ) {}
 
   async send(message: OutgoingMail): Promise<void> {
     const endpoint = new URL(`/api/v1/mailboxes/${encodeURIComponent(this.config.mailboxResourceId)}/send`, this.config.apiBaseUrl);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    let sendStarted = false;
     try {
       if (message.expectedFromAddress) {
         const accountResponse = await this.fetchImpl(new URL("/api/v1/me", this.config.apiBaseUrl), {
@@ -48,6 +56,15 @@ export class HostingerMailClient {
           throw new MailDeliveryError("MAIL_SENDER_ADDRESS_MISMATCH", false);
         }
       }
+      const body = JSON.stringify({
+        to: message.to,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        ...(message.displayName ? { displayName: message.displayName } : {}),
+        ...(message.attachments?.length ? { attachments: message.attachments } : {}),
+      });
+      sendStarted = true;
       const response = await this.fetchImpl(endpoint, {
         method: "POST",
         headers: {
@@ -55,23 +72,19 @@ export class HostingerMailClient {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({
-          to: message.to,
-          subject: message.subject,
-          html: message.html,
-          text: message.text,
-          ...(message.displayName ? { displayName: message.displayName } : {}),
-          ...(message.attachments?.length ? { attachments: message.attachments } : {}),
-        }),
+        body,
         signal: controller.signal,
       });
       // Per Hostinger OpenAPI, successful send is explicitly 204 with no body.
       if (response.status === 204) return;
       const code = await responseCode(response);
-      throw new MailDeliveryError(code, response.status === 429 || response.status >= 500, response.status);
+      // A failed upstream response can follow a successful submission. The API
+      // offers neither a send idempotency key nor a delivery-status endpoint.
+      const rejected = [401, 403, 422, 429].includes(response.status);
+      throw new MailDeliveryError(code, rejected && response.status === 429, response.status, rejected ? "NOT_SENT" : "UNKNOWN");
     } catch (error) {
       if (error instanceof MailDeliveryError) throw error;
-      throw new MailDeliveryError(error instanceof DOMException && error.name === "AbortError" ? "MAIL_TIMEOUT" : "MAIL_NETWORK_ERROR", true);
+      throw new MailDeliveryError(controller.signal.aborted ? "MAIL_TIMEOUT" : "MAIL_NETWORK_ERROR", !sendStarted, undefined, sendStarted ? "UNKNOWN" : "NOT_SENT");
     } finally {
       clearTimeout(timeout);
     }

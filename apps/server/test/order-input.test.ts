@@ -63,6 +63,21 @@ test("rejects malformed and oversized payload sections", () => {
   assert.equal(validateOrderCreateInput(null).ok, false);
 });
 
+test("catalog references must be positive integer IDs for furniture, services and packing", () => {
+  for (const catalogId of [0, 0.5, -1, 2_147_483_648]) {
+    const input = orderFixture();
+    input.details!.furniture.items[0]!.catalogId = catalogId;
+    input.details!.extras.services[0]!.catalogId = catalogId;
+    input.details!.extras.services[1]!.catalogId = catalogId;
+    const result = validateOrderCreateInput(input, { allowStaffPricing: true });
+    assert.equal(result.ok, false);
+    if (result.ok) continue;
+    for (const field of ["details.furniture.items.0.catalogId", "details.extras.services.0.catalogId", "details.extras.services.1.catalogId"]) {
+      assert.ok(result.issues.some((issue) => issue.field === field));
+    }
+  }
+});
+
 test("validates and persists secondary addresses while keeping prices staff-only", () => {
   const details = {
     showSecondaryFrom: true,
