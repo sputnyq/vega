@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
-import { addIsoDays, DEFAULT_REMINDER_FEE, formatGermanDate, MAX_REMINDER_LEVEL, REMINDER_WAITING_DAYS, reminderGreeting, reminderText, type CreateOrderInput, type EmailDraft } from "@vega/domain";
+import { addIsoDays, calculateInvoiceTotals, DEFAULT_REMINDER_FEE, formatGermanDate, isInvoiceAmount, MAX_REMINDER_LEVEL, REMINDER_WAITING_DAYS, reminderGreeting, reminderText, type CreateOrderInput, type EmailDraft } from "@vega/domain";
 import type { AppConfig } from "../config.js";
 import type { Invoice, Prisma, ReminderEvent } from "../generated/prisma/client.js";
 import { createConfiguredMailService } from "../mail/configured-mail-service.js";
 import { reminderEmail } from "../mail/staff-email-templates.js";
-import { invalidEmail, mailNotConfigured, respondWithSendResult, sendStaffEmail, validateStaffEmailInput } from "../mail/staff-email-service.js";
+import { invalidEmail, mailNotConfigured, respondWithSendResult, respondWithStaffEmailStatus, sendStaffEmail, validateStaffEmailInput } from "../mail/staff-email-service.js";
 import { orderDataWithRelations, orderRelations } from "../orders/order-relations.js";
-import { calculateInvoiceTotals, parseEntries } from "../pdf/accounting-pdf.js";
+import { parseEntries } from "../pdf/accounting-pdf.js";
 import { generateReminderPdf, reminderPdfFilename } from "../pdf/reminder-pdf.js";
 import { prisma } from "../prisma.js";
 import { loadSignatureName } from "../staff/signature-name.js";
@@ -52,6 +52,9 @@ export function createReminderRouter(config: Pick<AppConfig, "mail"> = { mail: n
         const dueDates = [invoiceDueDate(invoice), ...active.map((reminder) => isoDate(reminder.dueDate))];
         const dueDate = addIsoDays(dueDates.at(-1)!, REMINDER_WAITING_DAYS);
         const outstandingAmount = active.length ? Number(active.at(-1)!.outstandingAmount) : round(calculateInvoiceTotals(parseEntries(invoice.entries), Number(invoice.taxPercent)).total);
+        if (!isIsoDate(dueDate) || !isInvoiceAmount(outstandingAmount)) {
+          throw new ReminderConflict("REMINDER_VALUES_OUT_OF_RANGE", "Datum oder Rechnungsbetrag überschreitet den unterstützten Bereich.");
+        }
         const text = reminderText({ level, greeting: greetingFor(invoice), outstandingAmount, dueDates: [...dueDates, dueDate] });
         return tx.reminderEvent.create({
           data: {
@@ -118,6 +121,13 @@ export function createReminderRouter(config: Pick<AppConfig, "mail"> = { mail: n
       const body: EmailDraft = { to: invoice.order?.customerEmail ?? "", ...reminderEmail(reminder.level, invoice.invoiceNumber, formatGermanDate(isoDate(reminder.dueDate)), greetingFor(invoice)), attachmentNames: [reminderPdfFilename(reminder, invoice.company)] };
       res.setHeader("Cache-Control", "no-store");
       res.json({ data: body });
+    } catch (error) { next(error); }
+  });
+  router.post("/:id/emails/status", async (req, res, next) => {
+    try {
+      const reminder = await prisma.reminderEvent.findUnique({ where: { id: req.params.id }, select: { id: true, invoice: { select: { orderId: true } } } });
+      if (!reminder) return notFound(res);
+      await respondWithStaffEmailStatus(req, res, `reminder:${reminder.id}`, { reminderEventId: reminder.id, ...(reminder.invoice?.orderId ? { orderId: reminder.invoice.orderId } : {}) });
     } catch (error) { next(error); }
   });
   router.post("/:id/emails", async (req, res, next) => {

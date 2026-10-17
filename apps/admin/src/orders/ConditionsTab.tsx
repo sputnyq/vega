@@ -1,15 +1,34 @@
 import { AddOutlined, DeleteOutlined } from "@mui/icons-material";
 import { Alert, Box, Button, Grid, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
-import type { OrderConditionInput, OrderDetailsInput } from "@vega/domain";
+import { addInvoiceAmounts, type OrderConditionInput, type OrderDetailsInput } from "@vega/domain";
 import type { OrderFormValue } from "./order-form-types.js";
 
 interface ConditionsTabProps {
   value: OrderFormValue;
   onConditionsChange: (conditions: OrderDetailsInput["conditions"]) => void;
+  onCalculate: () => void;
 }
 
-export function ConditionsTab({ value, onConditionsChange }: ConditionsTabProps) {
+export function ConditionsTab({ value, onConditionsChange, onCalculate }: ConditionsTabProps) {
   const { basis, conditions } = value.details;
+  const pricingChanged = value.pricingSnapshot && JSON.stringify(value.pricingSnapshot.source) !== JSON.stringify({
+    offerId: basis.offerId ?? null,
+    workers: basis.workers,
+    trucks: basis.trucks,
+    hours: basis.hours,
+    basePrice: basis.basePrice,
+    extraHourPrice: basis.extraHourPrice,
+    discountPercent: basis.discountPercent,
+    distanceKm: value.details.distanceKm,
+    ...(value.details.distanceSource ? { distanceSource: value.details.distanceSource } : {}),
+    addresses: [
+      value.from,
+      value.to,
+      ...(value.details.showSecondaryFrom && value.details.secondaryFrom ? [value.details.secondaryFrom] : []),
+      ...(value.details.showSecondaryTo && value.details.secondaryTo ? [value.details.secondaryTo] : []),
+    ].map(({ city, parkingSlot }) => ({ city, parkingSlot: parkingSlot === true })),
+    services: value.details.extras.services.map(({ kind, catalogId, quantity }) => ({ kind, catalogId: catalogId ?? null, quantity })),
+  });
 
   function updateEntry(index: number, patch: Partial<OrderConditionInput>) {
     onConditionsChange(conditions.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...patch } : entry));
@@ -26,7 +45,8 @@ export function ConditionsTab({ value, onConditionsChange }: ConditionsTabProps)
             <Typography component="span" variant="body2">{basis.trucks} × LKW 3,5t</Typography>
             <Typography component="span" variant="body2">{basis.hours} Stunden</Typography>
           </Stack>
-          <Alert severity="info">Entfernung, Halteverbotszonen und Katalogpreise werden erst mit der serverseitigen Preisberechnung zu Konditionen berechnet.</Alert>
+          <Button variant="contained" onClick={onCalculate}>Konditionen serverseitig berechnen</Button>
+          {pricingChanged && <Alert severity="warning">Preisrelevante Angaben wurden geändert. Die gespeicherten Konditionen bleiben unverändert, bis Sie neu kalkulieren.</Alert>}
         </Stack>
       </Paper>
       <Paper variant="outlined" sx={{ p: 2.5, minWidth: 0 }}>
@@ -48,8 +68,8 @@ export function ConditionsTab({ value, onConditionsChange }: ConditionsTabProps)
           <Button startIcon={<AddOutlined />} onClick={() => onConditionsChange([...conditions, { description: "", amount: 0 }])} sx={{ alignSelf: "flex-end" }}>
             Kondition hinzufügen
           </Button>
-          <Typography variant="h6" sx={{ textAlign: "right" }}>Summe: {conditions.reduce((sum, item) => sum + item.amount, 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</Typography>
-          <Alert severity="warning">Konditionsbeträge werden als explizite Staff-Eingaben gespeichert und serverseitig validiert. Automatische Angebotskalkulation ist noch nicht angebunden.</Alert>
+          <Typography variant="h6" sx={{ textAlign: "right" }}>Summe: {addInvoiceAmounts(conditions.map((item) => item.amount)).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</Typography>
+          <Alert severity="info">Konditionen bleiben bearbeitbar. Verpackung wird nach Verbrauch berechnet; der ausgewiesene Betrag beruht auf der aktuellen Menge.</Alert>
         </Stack>
       </Paper>
     </Box>

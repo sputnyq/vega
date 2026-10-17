@@ -16,8 +16,8 @@ test("mail maintenance delegates to the due-delivery run without touching mail c
   const fakeService = {} as MailService;
   const result = await runMailMaintenance(fakeService, 10, async (_service, limit) => {
     calls.push({ limit });
-    return { sent: 2, failed: 1 };
+    return { sent: 2, failed: 1, unknown: 3 };
   });
-  assert.deepEqual(result, { sent: 2, failed: 1 });
+  assert.deepEqual(result, { sent: 2, failed: 1, unknown: 3 });
   assert.deepEqual(calls, [{ limit: 10 }]);
 });

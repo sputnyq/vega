@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Stack } from "@mui/material";
-import type { AdminOrderDetail, CreateOrderResult, OrderDetailsInput } from "@vega/domain";
+import type { AdminOrderDetail, CreateOrderInput, CreateOrderResult, OrderDetailsInput, OrderPricingPreview } from "@vega/domain";
 import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import { useAdminNotification } from "../components/AdminNotifications.js";
 import { SectionTabs } from "../components/SectionTabs.js";
@@ -16,6 +16,18 @@ import { createEmptyOrder, type OrderFormValue } from "./order-form-types.js";
 import { downloadOrderPdf, saveAndFetchOrderPdf } from "./order-pdf-download.js";
 
 const tabNames = ["Kunde", "Adressen", "Umzugsgut", "Extras", "Basis", "Konditionen", "Journal"];
+
+function toFormValue(data: CreateOrderInput): OrderFormValue {
+  const base = createEmptyOrder();
+  return {
+    ...base,
+    ...data,
+    customer: { ...base.customer, ...data.customer },
+    from: { ...base.from, ...data.from },
+    to: { ...base.to, ...data.to },
+    details: data.details ?? base.details,
+  };
+}
 
 interface OrderCreatePageProps {
   navigate: (path: string) => void;
@@ -37,10 +49,12 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
   const [value, setValue] = useState(createEmptyOrder);
   const [activeTab, setActiveTab] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [pricingBusy, setPricingBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const notify = useAdminNotification();
   const [loading, setLoading] = useState(orderNumber !== undefined);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [revision, setRevision] = useState<number | null>(null);
 
   useEffect(() => {
     onBusyChange(loading || busy || loadFailed);
@@ -49,22 +63,18 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
   useEffect(() => {
     if (orderNumber === undefined) return;
     let cancelled = false;
+    setLoading(true);
+    setLoadFailed(false);
+    setRevision(null);
+    setError(null);
     void fetch(`/api/admin/orders/${orderNumber}`, { credentials: "same-origin" })
       .then(async (response) => ({ response, body: await response.json() as { data?: AdminOrderDetail; error?: { message?: string } } }))
       .then(({ response, body }) => {
         if (cancelled) return;
         if (!response.ok || !body.data) { setError(body.error?.message ?? "Auftrag konnte nicht geladen werden."); setLoadFailed(true); return; }
         if (body.data.archivedAt) { navigate("/orders/archived"); return; }
-        const base = createEmptyOrder();
-        const data = body.data.data;
-        setValue({
-          ...base,
-          ...data,
-          customer: { ...base.customer, ...data.customer },
-          from: { ...base.from, ...data.from },
-          to: { ...base.to, ...data.to },
-          details: data.details ?? base.details,
-        });
+        setRevision(body.data.revision);
+        setValue(toFormValue(body.data.data));
         onCopyChange?.(body.data.isCopy);
         onDirtyChange(false);
       })
@@ -88,7 +98,7 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
       method: orderNumber === undefined ? "POST" : "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify(value),
+      body: JSON.stringify(orderNumber === undefined ? value : { ...value, revision }),
     });
     const body = await response.json() as { data?: CreateOrderResult | AdminOrderDetail } & ApiErrorResponse;
     if (!response.ok || !body.data) {
@@ -109,10 +119,50 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
       navigate(`/edit/${body.data.orderNumber}`);
       notify("success", "Auftrag angelegt.");
     } else {
+      const saved = body.data as AdminOrderDetail;
+      setRevision(saved.revision);
+      setValue(toFormValue(saved.data));
       onDirtyChange(false);
       notify("success", "Auftrag gespeichert.");
     }
     return true;
+  }
+
+  async function previewPricing() {
+    if (busy || loading || loadFailed) return;
+    setBusy(true);
+    setPricingBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/orders/pricing-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(value),
+      });
+      const body = await response.json() as { data?: OrderPricingPreview; error?: { message?: string; issues?: Array<{ message: string }> } };
+      const preview = body.data;
+      if (!response.ok || !preview) {
+        setError(body.error?.issues?.map((issue) => issue.message).join(" · ") || body.error?.message || "Das Angebot konnte nicht berechnet werden.");
+        return;
+      }
+      if (value.details.conditions.length > 0
+        && !window.confirm("Die neue Kalkulation ersetzt alle bisherigen Konditionen. Möchten Sie fortfahren?")) return;
+      setValue((current) => ({
+        ...current,
+        pricingSnapshot: preview.pricingSnapshot,
+        details: { ...current.details, conditions: preview.conditions },
+      }));
+      onDirtyChange(true);
+      notify("success", "Kalkulation übernommen. Bitte speichern Sie den Auftrag.");
+    } catch (reason) {
+      setError(reason instanceof Error && !(reason instanceof TypeError)
+        ? reason.message
+        : "Der Server ist derzeit nicht erreichbar. Bitte versuchen Sie es erneut.");
+    } finally {
+      setPricingBusy(false);
+      setBusy(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -188,13 +238,13 @@ export function OrderCreatePage({ navigate, onDirtyChange, onBusyChange, onCopyC
           <BasisTab value={value} update={update} onBasisChange={(basis) => updateDetails({ ...value.details, basis })} />
         </div>
         <div role="tabpanel" id="order-tabpanel-5" aria-labelledby="order-tab-5" hidden={activeTab !== 5}>
-          <ConditionsTab value={value} onConditionsChange={(conditions) => updateDetails({ ...value.details, conditions })} />
+          <ConditionsTab value={value} onConditionsChange={(conditions) => updateDetails({ ...value.details, conditions })} onCalculate={() => void previewPricing()} />
         </div>
         <div role="tabpanel" id="order-tabpanel-6" aria-labelledby="order-tab-6" hidden={activeTab !== 6}>
           {activeTab === 6 && <JournalTab {...(orderNumber === undefined ? {} : { orderNumber })} />}
         </div>
       </fieldset>
-      {busy && <Alert severity="info" role="status">Auftrag wird gespeichert …</Alert>}
+      {busy && <Alert severity="info" role="status">{pricingBusy ? "Kalkulation wird erstellt …" : "Auftrag wird gespeichert …"}</Alert>}
     </Stack>
   );
 }

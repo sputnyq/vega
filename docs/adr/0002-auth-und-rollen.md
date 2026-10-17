@@ -26,6 +26,10 @@ Rollen sind `Admin` und `Kundenberater`. Berechtigungen werden serverseitig auf 
 - TOTP-Enrollment/Recovery muss vor Produktivbetrieb getestet werden.
 - Rollenänderung oder Account-Sperre wirkt auf API-Zugriff, nicht nur auf sichtbare Menüs.
 - Passwortreset versendet generische Antworten, nutzt kurzlebige Einmal-Token und widerruft bestehende Sessions.
+- Der verpflichtende Initialpasswortwechsel widerruft andere Sessions;
+  Ersatzcookies erhalten die aktuelle Sitzung. TOTP-Start, erfolgreicher
+  Enrollment-Abschluss und erlaubte Deaktivierung widerrufen andere
+  Sitzungen, ohne unabhängige normale TOTP-Logins gegenseitig abzumelden.
 - Eine Anmeldung ist spätestens alle 30 Tage erforderlich. Die absolute Sessiondauer beträgt höchstens 30 Tage und wird durch laufende Aktivität nicht verlängert.
 - Fachentscheidung vom 2026-10-09: Anlage, Sperrung/Entsperrung, Rollenwechsel,
   Passwort-Reset-Mail und 2FA-Reset verlangen jeweils das aktuelle Passwort des

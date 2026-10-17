@@ -1,5 +1,4 @@
-import type { CreateOrderInput } from "@vega/domain";
-import { orderGrossTotal } from "../pdf/order-pdf.js";
+import { addInvoiceAmounts, type CreateOrderInput } from "@vega/domain";
 import { escapeHtml } from "./email-template.js";
 
 /**
@@ -75,7 +74,7 @@ function optionHtml({ data }: OfferOption): string {
   }
   const rows = (data.details?.conditions ?? [])
     .map((entry) => `<tr><td><p>${escapeHtml(entry.description)}</p></td><td><p>${escapeHtml(euro(entry.amount))}</p></td></tr>`);
-  rows.push(`<tr><td><p><strong>Gesamtbetrag inkl. MwSt:</strong></p></td><td><p><strong>${escapeHtml(euro(orderGrossTotal(data)))}</strong></p></td></tr>`);
+  rows.push(`<tr><td><p><strong>Gesamtbetrag inkl. MwSt:</strong></p></td><td><p><strong>${escapeHtml(euro(addInvoiceAmounts((data.details?.conditions ?? []).map((entry) => entry.amount))))}</strong></p></td></tr>`);
   blocks.push(`<h3>Konditionen</h3><table><tbody>${rows.join("")}</tbody></table>`);
   return blocks.join("");
 }

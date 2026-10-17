@@ -77,6 +77,10 @@ test("Better Auth is mounted and protected admin APIs reject anonymous requests"
   assert.equal(protectedOrders.status, 401);
   const protectedOrderPdf = await fetch(`${baseUrl}/api/admin/orders/1000/pdf`);
   assert.equal(protectedOrderPdf.status, 401);
+  const protectedPricingPreview = await fetch(`${baseUrl}/api/admin/orders/pricing-preview`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+  });
+  assert.equal(protectedPricingPreview.status, 401);
 
   const protectedInvoices = await fetch(`${baseUrl}/api/admin/invoices`);
   assert.equal(protectedInvoices.status, 401);

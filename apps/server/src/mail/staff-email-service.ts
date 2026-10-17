@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
-import { isValidEmailAddress } from "@vega/domain";
+import { isValidEmailAddress, type StaffEmailSendResult } from "@vega/domain";
+import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../prisma.js";
 import { htmlToPlainText, sanitizeEmailHtml } from "./email-template.js";
 import { MailDeliveryError } from "./hostinger-mail-client.js";
-import { deliverOutboxMail, queueMail, type QueueMailInput } from "./mail-outbox-service.js";
+import { deliverOutboxMail, queueMail, recoverStaleMailClaims, type QueueMailInput } from "./mail-outbox-service.js";
 import type { MailService } from "./mail-service.js";
 
 export interface StaffEmailInput {
@@ -34,11 +36,7 @@ export function validateStaffEmailInput(body: unknown): StaffEmailValidation {
   return issues.length ? { ok: false, issues } : { ok: true, value: { to, subject, contentHtml, idempotencyKey } };
 }
 
-export type StaffSendResult =
-  | { status: "SENT" }
-  | { status: "SENDING" }
-  | { status: "RETRY_SCHEDULED"; errorCode: string }
-  | { status: "FAILED"; errorCode: string };
+export type StaffSendResult = StaffEmailSendResult;
 
 /**
  * Queues and immediately delivers one staff mail. `scope` namespaces the
@@ -58,30 +56,85 @@ export async function sendStaffEmail(
   try {
     if (await deliverOutboxMail(outboxId, mailService) === "sent") return { outboxId, result: { status: "SENT" } };
   } catch (error) {
-    const deliveryError = error instanceof MailDeliveryError ? error : new MailDeliveryError("MAIL_SEND_FAILED", true);
-    return { outboxId, result: deliveryError.retryable
-      ? { status: "RETRY_SCHEDULED", errorCode: deliveryError.code }
-      : { status: "FAILED", errorCode: deliveryError.code } };
+    if (!(error instanceof MailDeliveryError)) {
+      return { outboxId, result: { status: "UNKNOWN", errorCode: "MAIL_OUTBOX_STATE_UNAVAILABLE" } };
+    }
+    return { outboxId, result: error.outcome === "UNKNOWN"
+      ? { status: "UNKNOWN", errorCode: error.code }
+      : error.retryable ? { status: "RETRY_SCHEDULED", errorCode: error.code }
+      : { status: "FAILED", errorCode: error.code } };
   }
   const row = await prisma.emailOutbox.findUniqueOrThrow({ where: { id: outboxId }, select: { status: true, lastErrorCode: true } });
-  if (row.status === "SENT") return { outboxId, result: { status: "SENT" } };
-  if (row.status === "SENDING" || row.status === "PENDING") return { outboxId, result: { status: "SENDING" } };
-  return { outboxId, result: { status: "RETRY_SCHEDULED", errorCode: row.lastErrorCode ?? "MAIL_SEND_FAILED" } };
+  return { outboxId, result: storedSendResult(row) };
+}
+
+function storedSendResult(row: { status: string; lastErrorCode: string | null }): StaffSendResult {
+  if (row.status === "NOT_QUEUED") return { status: "NOT_QUEUED" };
+  if (row.status === "SENT") return { status: "SENT" };
+  if (row.status === "SENDING" || row.status === "PENDING") return { status: "SENDING" };
+  if (row.status === "UNKNOWN") return { status: "UNKNOWN", errorCode: row.lastErrorCode ?? "MAIL_SEND_UNCERTAIN" };
+  if (row.status === "REJECTED") return { status: "FAILED", errorCode: row.lastErrorCode ?? "MAIL_SEND_REJECTED" };
+  return { status: "RETRY_SCHEDULED", errorCode: row.lastErrorCode ?? "MAIL_SEND_FAILED" };
+}
+
+/** A status check never builds or sends mail, even if the first request was lost. */
+export async function checkStaffEmailStatus(
+  scope: string,
+  idempotencyKey: string,
+  references: { orderId?: string; reminderEventId?: string; actorName?: string } = {},
+): Promise<{ outboxId: string; result: StaffSendResult }> {
+  if (!/^[A-Za-z0-9-]{16,100}$/u.test(idempotencyKey)) throw new Error("INVALID_MAIL_STATUS_KEY");
+  const key = `staff:${scope}:${idempotencyKey}`;
+  let row: { id: string };
+  try {
+    row = await prisma.emailOutbox.upsert({
+      where: { idempotencyKey: key },
+      create: {
+        id: randomUUID(), idempotencyKey: key, ...references,
+        kind: "MAIL_CANCELLED", status: "NOT_QUEUED", recipients: [], subject: "", contentHtml: "", nextAttemptAt: new Date(),
+      },
+      update: {},
+      select: { id: true },
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    row = await prisma.emailOutbox.findUniqueOrThrow({ where: { idempotencyKey: key }, select: { id: true } });
+  }
+  // The terminal tombstone fences a delayed POST (including PDF generation
+  // already in flight) before explicitly permitting a new draft/key.
+  await recoverStaleMailClaims(new Date(), row.id);
+  const stored = await prisma.emailOutbox.findUniqueOrThrow({ where: { id: row.id }, select: { status: true, lastErrorCode: true } });
+  return { outboxId: row.id, result: storedSendResult(stored) };
+}
+
+export async function respondWithStaffEmailStatus(
+  req: Request,
+  res: Response,
+  scope: string,
+  references: { orderId?: string; reminderEventId?: string } = {},
+): Promise<void> {
+  const key = req.body?.idempotencyKey;
+  if (typeof key !== "string" || !/^[A-Za-z0-9-]{16,100}$/u.test(key)) {
+    invalidEmail(res, [{ field: "idempotencyKey", message: "Ungültige Versandkennung." }]);
+    return;
+  }
+  const { outboxId, result } = await checkStaffEmailStatus(scope, key, { ...references, actorName: String(res.locals.staffUser.name) });
+  respondWithSendResult(req, res, outboxId, result);
 }
 
 export function respondWithSendResult(req: Request, res: Response, outboxId: string, result: StaffSendResult): void {
   res.setHeader("Cache-Control", "no-store");
-  if (result.status === "SENT") {
-    res.json({ data: result });
+  if (result.status === "SENT" || result.status === "NOT_QUEUED") {
+    res.json({ data: { ...result, outboxId } });
     return;
   }
   // Only the outbox id and machine code are logged, never recipients or content.
   if ("errorCode" in result) req.log.warn({ outboxId, code: result.errorCode }, "staff mail delivery failed");
   if (result.status === "FAILED") {
-    res.status(502).json({ error: { code: "MAIL_DELIVERY_FAILED", providerCode: result.errorCode, message: `Die E-Mail wurde vom Mailanbieter abgelehnt (${result.errorCode}). Bitte Empfänger und Inhalt prüfen und erneut senden.` } });
+    res.status(502).json({ data: { ...result, outboxId }, error: { code: "MAIL_DELIVERY_FAILED", providerCode: result.errorCode, message: `Die E-Mail wurde vom Mailanbieter abgelehnt (${result.errorCode}). Bitte Empfänger und Inhalt prüfen und erneut senden.` } });
     return;
   }
-  res.status(202).json({ data: result });
+  res.status(202).json({ data: { ...result, outboxId } });
 }
 
 export function mailNotConfigured(res: Response): void {

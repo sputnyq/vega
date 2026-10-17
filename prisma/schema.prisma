@@ -109,6 +109,7 @@ model RateLimit {
 
 model Order {
   id            String               @id @default(cuid())
+  revision      Int                  @default(0)
   orderNumber   Int                  @unique
   customerName  String               @db.VarChar(300)
   customerEmail String?              @db.VarChar(254)
@@ -205,6 +206,7 @@ model OrderImage {
 
 model Invoice {
   id                   String          @id
+  revision             Int             @default(0)
   invoiceNumber        String          @unique @db.VarChar(64)
   orderId              String?         @unique
   order                Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)

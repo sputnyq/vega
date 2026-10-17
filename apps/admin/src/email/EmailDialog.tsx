@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
@@ -31,6 +31,7 @@ import type { AdminOrderFamilyMember, EmailDraft, OrderEmailKind, StaffEmailSend
 import { apiRequest, type ApiEnvelope } from "../api/api-request.js";
 import { AdminAlert as Alert, useAdminNotification } from "../components/AdminNotifications.js";
 import { familyLabel } from "./family-label.js";
+import { EmailSendAttempt, mailAttemptStorage } from "./email-send-attempt.js";
 
 export type EmailTarget =
   | { type: "order"; orderNumber: number; kind: OrderEmailKind }
@@ -71,9 +72,15 @@ export function EmailDialog({ target, onClose, onSent }: EmailDialogProps) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [outcome, setOutcome] = useState<StaffEmailSendResult>();
+  const [, updateAttempt] = useState(0);
   const basePath = target.type === "order" ? `/api/admin/orders/${target.orderNumber}` : `${DOCUMENT_PATHS[target.type]}/${encodeURIComponent(target.id)}`;
   const ownOrderNumber = target.type === "order" ? target.orderNumber : undefined;
   const query = target.type === "order" ? `?kind=${target.kind}${isPair ? `&partner=${partner ?? ""}` : ""}` : "";
+  const attempt = useMemo(() => new EmailSendAttempt(`vega:mail:${basePath}`, mailAttemptStorage()), [basePath]);
+  const frozen = sending || attempt.frozen;
+  const completed = attempt.status === "FAILED" || attempt.status === "SENT" || attempt.status === "NOT_QUEUED";
 
   useEffect(() => {
     if (!isPair) return;
@@ -101,31 +108,43 @@ export function EmailDialog({ target, onClose, onSent }: EmailDialogProps) {
   }, [basePath, isPair, partner, query]);
 
   async function send() {
-    if (sending || !draft) return;
+    const checking = attempt.frozen;
+    if (sending || (!checking && !draft)) return;
+    const body = checking ? attempt.beginStatusCheck() : attempt.begin({
+      to, subject, contentHtml: html,
+      ...(target.type === "order" ? { kind: target.kind, ...(isPair && partner !== undefined ? { partnerOrderNumber: partner } : {}) } : {}),
+    });
+    if (!body) return;
+    setCheckingStatus(checking);
     setSending(true);
     setError("");
-    // One key per click: a retried request of the same click cannot send twice,
-    // while a later click after editing creates a new mail.
-    const body = {
-      to, subject, contentHtml: html, idempotencyKey: crypto.randomUUID(),
-      ...(target.type === "order" ? { kind: target.kind, ...(isPair && partner !== undefined ? { partnerOrderNumber: partner } : {}) } : {}),
-    };
     try {
-      const response = await fetch(`${basePath}/emails`, {
+      const response = await fetch(`${basePath}/emails${checking ? "/status" : ""}`, {
         method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       const result = await response.json() as ApiEnvelope<StaffEmailSendResult>;
-      if (!response.ok || !result.data) {
+      if (!result.data) {
+        if (result.error?.code === "INVALID_EMAIL" || result.error?.code === "MAIL_NOT_CONFIGURED") {
+          const refused = attempt.rejectBeforeQueue(result.error.code);
+          if (refused) setOutcome(refused);
+        }
         setError(result.error?.issues?.map((issue) => issue.message).join(" · ") || result.error?.message || "Die E-Mail konnte nicht versendet werden.");
         return;
       }
-      if (result.data.status === "SENT") notify("success", "E-Mail versendet.");
-      else notify("warning", "Der Mailanbieter ist gerade nicht erreichbar. Die E-Mail wird automatisch erneut versendet.");
-      onSent?.();
-      onClose();
+      attempt.finish(result.data);
+      setOutcome(result.data);
+      if (result.data.status === "SENT") {
+        notify("success", "E-Mail versendet.");
+        attempt.newMessage();
+        onSent?.();
+        onClose();
+      } else if (result.data.status === "RETRY_SCHEDULED") {
+        onSent?.();
+      }
     } catch {
-      setError("Der Server ist derzeit nicht erreichbar. Bitte versuchen Sie es erneut.");
+      setError(`${checking ? "Die Statusantwort" : "Die Versandantwort"} fehlt. Bitte Status prüfen; dieselbe Versandkennung wird wiederverwendet. Es wird keine neue E-Mail angelegt.`);
     } finally {
+      attempt.finish();
       setSending(false);
     }
   }
@@ -137,29 +156,40 @@ export function EmailDialog({ target, onClose, onSent }: EmailDialogProps) {
       <DialogContent dividers>
         <Stack spacing={1}>
           {error && <Alert severity="error" role="alert">{error}</Alert>}
+          {(outcome?.status === "UNKNOWN" || attempt.status === "UNKNOWN" || attempt.status === "UNCONFIRMED") && (
+            <Alert severity="warning" role="status">Der Versandausgang ist unklar. Nicht erneut als neue E-Mail senden. „Status prüfen“ verwendet dieselbe Versandkennung. Bleibt der Status unklar, muss der Betrieb den Versand mit dem Anbieter abgleichen.{outcome?.outboxId ? ` Versandreferenz: ${outcome.outboxId}.` : ""}</Alert>
+          )}
+          {(outcome?.status === "SENDING" || attempt.status === "SENDING") && <Alert severity="info" role="status">Der Versand läuft bereits. Bitte den Status prüfen; es wird keine weitere E-Mail angelegt.</Alert>}
+          {(outcome?.status === "RETRY_SCHEDULED" || attempt.status === "RETRY_SCHEDULED") && <Alert severity="warning" role="status">Die E-Mail wurde noch nicht gesendet. Ein sicher wiederholbarer Fehler wird automatisch erneut versucht.</Alert>}
+          {(outcome?.status === "FAILED" || attempt.status === "FAILED") && <Alert severity="error" role="status">Die E-Mail wurde nicht gesendet{outcome?.status === "FAILED" ? ` (${outcome.errorCode})` : ""}. Nach Korrektur können Sie ausdrücklich eine neue E-Mail vorbereiten.</Alert>}
+          {(outcome?.status === "NOT_QUEUED" || attempt.status === "NOT_QUEUED") && <Alert severity="info" role="status">Die ursprüngliche E-Mail wurde nicht eingereiht. Ihre alte Versandkennung ist sicher gesperrt. Sie können jetzt ausdrücklich eine neue E-Mail mit dem angezeigten Entwurf vorbereiten.</Alert>}
           {isPair && partners && partners.length > 0 && (
-            <TextField select label="Zweites Angebot" value={partner ?? ""} disabled={sending} onChange={(event) => setPartner(Number(event.target.value))}
+            <TextField select label="Zweites Angebot" value={partner ?? ""} disabled={frozen} onChange={(event) => setPartner(Number(event.target.value))}
               helperText="Ein Wechsel lädt den Entwurf neu; eigene Textänderungen gehen dabei verloren.">
               {partners.map((item) => <MenuItem key={item.orderNumber} value={item.orderNumber}>{familyLabel(item)}</MenuItem>)}
             </TextField>
           )}
           {!draft && !error && <Stack sx={{ py: 4, alignItems: "center" }}><CircularProgress aria-label="Entwurf wird geladen" /></Stack>}
           {draft && <>
-            <TextField label="Empfänger" type="email" required value={to} disabled={sending} onChange={(event) => setTo(event.target.value)} />
-            <TextField label="Betreff" required value={subject} disabled={sending} onChange={(event) => setSubject(event.target.value)} />
+            <TextField label="Empfänger" type="email" required value={to} disabled={frozen} onChange={(event) => setTo(event.target.value)} />
+            <TextField label="Betreff" required value={subject} disabled={frozen} onChange={(event) => setSubject(event.target.value)} />
             {draft.attachmentNames.length > 0 && (
               <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }} aria-label="Anhänge">
                 {draft.attachmentNames.map((name) => <Chip key={name} label={name} size="small" variant="outlined" />)}
               </Stack>
             )}
-            <RichTextEditor key={draft.subject + draft.contentHtml} initialHtml={draft.contentHtml} disabled={sending} onChange={setHtml} />
+            <RichTextEditor key={draft.subject + draft.contentHtml} initialHtml={draft.contentHtml} disabled={frozen} onChange={setHtml} />
           </>}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={sending}>Abbrechen</Button>
-        <Button variant="contained" onClick={() => void send()} disabled={!draft || sending || !to.trim() || !subject.trim()}>
-          {sending ? "Wird gesendet …" : "Senden"}
+        <Button onClick={onClose} disabled={sending}>{attempt.frozen ? "Schließen" : "Abbrechen"}</Button>
+        <Button variant="contained" onClick={() => {
+          if (completed) {
+            attempt.newMessage(); setOutcome(undefined); setError(""); updateAttempt((value) => value + 1);
+          } else void send();
+        }} disabled={sending || (!attempt.frozen && (!draft || !to.trim() || !subject.trim()))}>
+          {sending ? checkingStatus ? "Status wird geprüft …" : "Wird gesendet …" : completed ? "Neue E-Mail vorbereiten" : attempt.frozen ? "Status prüfen" : "Senden"}
         </Button>
       </DialogActions>
     </Dialog>
