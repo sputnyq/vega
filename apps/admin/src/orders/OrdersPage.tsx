@@ -4,10 +4,11 @@ import SearchIcon from "@mui/icons-material/Search";
 import AddOutlined from "@mui/icons-material/AddOutlined";
 import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
 import RestoreOutlined from "@mui/icons-material/RestoreOutlined";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, CircularProgress, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableHead, TablePagination, TableRow, TextField, Tooltip } from "@mui/material";
 import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import type { AdminOrderListItem } from "@vega/domain";
+import { apiRequest } from "../api/api-request.js";
 
 const PAGE_SIZE = 10;
 
@@ -19,6 +20,8 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
   const [page, setPage] = useState(() => pageFromUrl());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const archiveLock = useRef(false);
+  const [archiveBusy, setArchiveBusy] = useState(false);
 
   const loadOrders = useCallback(async (nextPage: number, searchValue = "") => {
     setLoading(true); setError("");
@@ -40,7 +43,7 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
 
   function setCurrentPage(nextPage: number) {
     const safePage = Math.max(1, nextPage);
-    window.history.pushState(null, "", `${window.location.pathname}?page=${safePage}`);
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}?page=${safePage}`);
     setPage(safePage);
   }
 
@@ -61,9 +64,19 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
 
   function onClear() { setSearch(""); setActiveSearch(""); setCurrentPage(1); }
   async function changeArchive(orderNumber: number) {
-    const response = await fetch(`/api/admin/orders/${orderNumber}/${archived ? "restore" : "archive"}`, { method: "POST", credentials: "same-origin" });
-    if (!response.ok) { setError("Aktion konnte nicht ausgeführt werden."); return; }
-    void loadOrders(page, activeSearch);
+    if (archiveLock.current) return;
+    archiveLock.current = true;
+    setArchiveBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/api/admin/orders/${orderNumber}/${archived ? "restore" : "archive"}`, "POST");
+      await loadOrders(page, activeSearch);
+    } catch (reason) {
+      setError(reason instanceof Error && !(reason instanceof TypeError) ? reason.message : "Aktion konnte nicht ausgeführt werden.");
+    } finally {
+      archiveLock.current = false;
+      setArchiveBusy(false);
+    }
   }
 
   return <Stack spacing={2}>
@@ -115,7 +128,7 @@ export function OrdersPage({ archived = false, navigate }: { archived?: boolean;
           <TableCell>{order.source}</TableCell><TableCell>{order.customerName}</TableCell><TableCell>{formatDate(order.movingDate)}</TableCell><TableCell>{order.fromAddress}</TableCell><TableCell padding="checkbox">{order.fromParkingSlot && <CheckCircleIcon color="success" fontSize="small" />}</TableCell><TableCell>{order.toAddress}</TableCell><TableCell padding="checkbox">{order.toParkingSlot && <CheckCircleIcon color="success" fontSize="small" />}</TableCell><TableCell>{order.workers ?? ""}</TableCell><TableCell>{order.trucks ?? ""}</TableCell><TableCell>{order.hours ?? ""}</TableCell>
           {archived && <TableCell sx={{ whiteSpace: "nowrap" }}>
             <Tooltip title="PDF herunterladen"><IconButton component="a" href={`/api/admin/orders/${order.orderNumber}/pdf`} aria-label="Auftrags-PDF herunterladen"><FileDownloadOutlined /></IconButton></Tooltip>
-            <Tooltip title="Wiederherstellen"><IconButton onClick={() => void changeArchive(order.orderNumber)} aria-label="Auftrag wiederherstellen"><RestoreOutlined /></IconButton></Tooltip>
+            <Tooltip title="Wiederherstellen"><IconButton disabled={archiveBusy} onClick={() => void changeArchive(order.orderNumber)} aria-label="Auftrag wiederherstellen"><RestoreOutlined /></IconButton></Tooltip>
           </TableCell>}
         </TableRow>)}
         {items.length === 0 && <TableRow><TableCell colSpan={archived ? 12 : 11} align="center">Keine Aufträge gefunden.</TableCell></TableRow>}

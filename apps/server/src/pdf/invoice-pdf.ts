@@ -1,6 +1,6 @@
 import type { Buffer } from "node:buffer";
 import type { Invoice } from "../generated/prisma/client.js";
-import { calculateInvoiceTotals, drawBankFooter, drawEntriesTable, drawHeading, drawRight, drawText, euro, filenameName, formatDate, formatNumber, parseEntries, startAccountingPdf } from "./accounting-pdf.js";
+import { calculateInvoiceTotals, drawBankFooter, drawEntriesTable, drawHeading, drawTotals, drawText, euro, filenameName, formatDate, formatNumber, parseEntries, startAccountingPdf } from "./accounting-pdf.js";
 
 export { calculateInvoiceTotals } from "./accounting-pdf.js";
 
@@ -11,9 +11,8 @@ export async function generateInvoicePdf(invoice: Invoice): Promise<Buffer> {
   drawHeading(doc, `Rechnung Nr: ${invoice.invoiceNumber}`, 356.6);
   const entries = parseEntries(invoice.entries);
   let y = drawEntriesTable(doc, entries, 375.4);
-  y = Math.max(y + 28, 462.7);
   const totals = calculateInvoiceTotals(entries, Number(invoice.taxPercent));
-  drawRight(doc, [`Nettobetrag:   ${euro(totals.net)}`, `${formatNumber(Number(invoice.taxPercent))}% MwSt:     ${euro(totals.tax)}`, `Gesamtbetrag:   ${euro(totals.total)}`], y, 10); y += 55;
+  y = drawTotals(doc, [`Nettobetrag:   ${euro(totals.net)}`, `${formatNumber(Number(invoice.taxPercent))}% MwSt:     ${euro(totals.tax)}`, `Gesamtbetrag:   ${euro(totals.total)}`], y + 28);
   y = drawText(doc, invoice.text, y);
   drawBankFooter(doc, Math.max(y, 711.7), "Die Rechnung wurde maschinell erstellt und ist ohne Unterschrift gültig.");
   doc.end(); return done;

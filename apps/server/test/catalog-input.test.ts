@@ -22,7 +22,10 @@ test("furniture uses only required catalog fields with step and sorting defaults
   assert.deepEqual(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 0.5, step: 2, sortOrder: 7 }), {
     ok: true, value: { name: "Stuhl", categoryIds: [], volume: 0.5, step: 2, sortOrder: 7 },
   });
-  for (const step of [null, 0, -1, 1.5, "1"]) assert.equal(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 1, step }).ok, false);
+  assert.deepEqual(validateFurnitureInput({ name: "Regalboden", categoryIds: [], volume: 0.5, step: 0.5 }), {
+    ok: true, value: { name: "Regalboden", categoryIds: [], volume: 0.5, step: 0.5, sortOrder: 0 },
+  });
+  for (const step of [null, 0, -1, 0.25, 1.25, "1"]) assert.equal(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 1, step }).ok, false);
 });
 
 test("furniture rejects malformed category references, negative measures, and invalid steps", () => {
@@ -46,7 +49,10 @@ test("service and packing data validate customer-visible prices and safe media U
 test("offers validate bounded workforce and prices; service rates only accept allowlisted keys", () => {
   assert.equal(validateOfferInput({ name: "3 Träger · 1 LKW", workers: 3, trucks: 1, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, true);
   assert.equal(validateOfferInput({ name: "Bad offer", workers: 0, trucks: 1, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, false);
+  assert.equal(validateOfferInput({ name: "7 Träger · 4 LKW", workers: 7, trucks: 4, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, true);
+  assert.equal(validateOfferInput({ name: "5 LKW ohne Tarif", workers: 3, trucks: 5, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, false);
   assert.equal(validateServiceRateInput("kmPrice", { price: 2.5 }).ok, true);
+  assert.equal(validateServiceRateInput("ridingCostsTruck4", { price: 85 }).ok, true);
   assert.equal(validateServiceRateInput("databaseUrl", { price: 2.5 }).ok, false);
   assert.equal(validateServiceRateInput("hvzPrice", { price: -2 }).ok, false);
 });

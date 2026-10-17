@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
-import { pinoHttp } from "pino-http";
+import { pinoHttp, type Options as HttpLogOptions } from "pino-http";
+import { APIError } from "better-auth/api";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { isValidEmailAddress } from "@vega/domain";
 import { createAuth } from "./auth-config.js";
@@ -24,6 +25,7 @@ import { createUploadRouter } from "./uploads/upload-routes.js";
 import { createUploadService, UploadError } from "./uploads/upload-service.js";
 import { createCustomerFormRouter } from "./customer-form-routes.js";
 import { createSettingsRouter } from "./settings/settings-routes.js";
+import { createMaintenanceRouter } from "./maintenance/maintenance-routes.js";
 import { createRouteRouter } from "./maps/route-routes.js";
 import { createAdminPlacesRouter } from "./maps/admin-places-routes.js";
 import { createStaffRouter } from "./staff/staff-routes.js";
@@ -32,9 +34,12 @@ import { loadSignatureName, validateSignatureName } from "./staff/signature-name
 const adminBuild = fileURLToPath(new URL("../../admin/dist", import.meta.url));
 const customerFormBuild = fileURLToPath(new URL("../../customer-form/dist", import.meta.url));
 
-export function createApp(config: AppConfig) {
+export function createApp(config: AppConfig, dependencies: {
+  auth?: ReturnType<typeof createAuth>;
+  logStream?: HttpLogOptions["stream"];
+} = {}) {
   const app = express();
-  const auth = createAuth(config);
+  const auth = dependencies.auth ?? createAuth(config);
   app.disable("x-powered-by");
 
   app.use((req, res, next) => {
@@ -46,13 +51,18 @@ export function createApp(config: AppConfig) {
   app.use(pinoHttp({
     customProps: (_req, res) => ({ requestId: res.locals.requestId }),
     genReqId: (_req, res) => String(res.locals.requestId),
-    redact: ["req.headers.authorization", "req.headers.cookie"],
-    autoLogging: {
-      // Better Auth reset links and the SPA callback both contain one-time tokens.
-      // Do not let pino's default request URL serializer persist them in logs.
-      ignore: (req) => req.url.startsWith("/api/auth/reset-password/") || req.url.startsWith("/reset-password"),
+    serializers: {
+      req: (req) => ({
+        id: req.id,
+        method: req.method,
+        url: safeRequestPath(String(req.url ?? "")),
+      }),
+      res: (res) => ({ statusCode: res.statusCode }),
+      // Error messages, stacks and enumerable properties can contain submitted
+      // JSON, Prisma query arguments or provider credentials.
+      err: () => ({ type: "Error" }),
     },
-  }));
+  }, dependencies.logStream));
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -145,16 +155,20 @@ export function createApp(config: AppConfig) {
         return;
       }
 
+      let passwordChangeHeaders: Headers;
       try {
-        await auth.api.changePassword({
+        const changed = await auth.api.changePassword({
           body: {
             currentPassword: body.currentPassword,
             newPassword: body.newPassword,
-            revokeOtherSessions: false,
+            revokeOtherSessions: true,
           },
           headers: fromNodeHeaders(req.headers),
+          returnHeaders: true,
         });
-      } catch {
+        passwordChangeHeaders = changed.headers;
+      } catch (error) {
+        if (!(error instanceof APIError) || error.statusCode >= 500) throw error;
         res.status(400).json({ error: { code: "PASSWORD_CHANGE_FAILED", message: "Das Passwort konnte nicht geändert werden." } });
         return;
       }
@@ -163,6 +177,9 @@ export function createApp(config: AppConfig) {
         where: { id: session.user.id },
         data: { mustChangePassword: false },
       });
+      // changePassword revokes every old session and issues a replacement.
+      // Forward its cookies so the confirmed browser can continue TOTP setup.
+      for (const cookie of passwordChangeHeaders.getSetCookie()) res.append("Set-Cookie", cookie);
       res.setHeader("Cache-Control", "no-store");
       res.json({ data: { passwordChanged: true } });
     } catch (error) {
@@ -175,6 +192,7 @@ export function createApp(config: AppConfig) {
   // their 401/403 responses and only completed staff consume quota.
   app.use("/api/admin", requireCompletedStaff(auth));
   app.use("/api/admin", createAdminRateLimit());
+  app.use("/api/admin/maintenance", requireAdmin(auth), createMaintenanceRouter(config, customerFormBuild));
   app.use("/api/admin/settings", requireAdmin(auth), createSettingsRouter(config));
   app.use("/api/admin/staff", requireAdmin(auth), createStaffRouter(auth, config));
   app.use("/api/admin/places", createAdminPlacesRouter(config));
@@ -246,7 +264,8 @@ export function createApp(config: AppConfig) {
       const headers = fromNodeHeaders(req.headers);
       try {
         await auth.api.verifyPassword({ body: { password: body.currentPassword }, headers });
-      } catch {
+      } catch (error) {
+        if (!(error instanceof APIError) || error.statusCode >= 500) throw error;
         res.status(400).json({ error: { code: "PASSWORD_CONFIRMATION_FAILED", message: "Das aktuelle Passwort ist nicht korrekt." } });
         return;
       }
@@ -345,7 +364,7 @@ import(${JSON.stringify(asset)}).catch(() => { root.textContent = "Das Umzugsfor
     if (!existsSync(`${adminBuild}/index.html`)) return next();
     res.sendFile(`${adminBuild}/index.html`);
   });
-  app.get(["/forgot-password", "/reset-password"], assetRateLimit, (_req, res, next) => {
+  app.get(["/forgot-password", "/reset-password", "/maintenance"], assetRateLimit, (_req, res, next) => {
     if (!existsSync(`${adminBuild}/index.html`)) return next();
     return res.sendFile(`${adminBuild}/index.html`);
   });
@@ -362,14 +381,40 @@ import(${JSON.stringify(asset)}).catch(() => { root.textContent = "Das Umzugsfor
 
   const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     const requestId = String(res.locals.requestId ?? "unbekannt");
-    req.log.error({ err: error, requestId }, "request failed");
-    res.status(500).json({
-      error: { code: "INTERNAL_SERVER_ERROR", message: "Interner Serverfehler.", requestId },
+    const failure = requestFailure(error);
+    const metadata = { code: failure.code, statusCode: failure.status, requestId };
+    if (failure.status < 500) req.log.warn(metadata, "request rejected");
+    else req.log.error(metadata, "request failed");
+    res.status(failure.status).json({
+      error: { code: failure.code, message: failure.message, requestId },
     });
   };
   app.use(errorHandler);
 
   return app;
+}
+
+function safeRequestPath(url: string): string {
+  const path = url.split(/[?#]/u, 1)[0] ?? "";
+  return path.replace(/^(\/api\/auth\/reset-password\/)[^/]+/u, "$1[redacted]");
+}
+
+function requestFailure(error: unknown): { status: number; code: string; message: string } {
+  const type = typeof error === "object" && error !== null && "type" in error ? error.type : undefined;
+  switch (type) {
+    case "entity.parse.failed":
+      return { status: 400, code: "INVALID_JSON", message: "Ungültige JSON-Anfrage." };
+    case "entity.too.large":
+      return { status: 413, code: "PAYLOAD_TOO_LARGE", message: "Die Anfrage ist zu groß." };
+    case "encoding.unsupported":
+    case "charset.unsupported":
+      return { status: 415, code: "UNSUPPORTED_ENCODING", message: "Die Zeichen- oder Inhaltskodierung wird nicht unterstützt." };
+    case "request.aborted":
+    case "request.size.invalid":
+      return { status: 400, code: "INVALID_REQUEST", message: "Die Anfrage ist unvollständig oder ungültig." };
+    default:
+      return { status: 500, code: "INTERNAL_SERVER_ERROR", message: "Interner Serverfehler." };
+  }
 }
 
 function isValidEmail(value: string): boolean {

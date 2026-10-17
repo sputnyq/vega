@@ -1,5 +1,7 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useContext,
   useId,
   type PropsWithChildren,
@@ -23,13 +25,18 @@ import {
 import AddOutlined from "@mui/icons-material/AddOutlined";
 import RemoveOutlined from "@mui/icons-material/RemoveOutlined";
 import type { ReactNode } from "react";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import { format, isValid, parseISO } from "date-fns";
+
+const LazyDateField = lazy(() => import("./DateField.js").then((module) => ({ default: module.DateField })));
 
 const ValidationFieldContext = createContext<{
   label: string | null;
   clear: () => void;
 }>({ label: null, clear: () => undefined });
+
+export function useFieldValidation(label: ReactNode) {
+  const validation = useContext(ValidationFieldContext);
+  return { error: isValidationError(label, validation.label), clear: validation.clear };
+}
 
 export function ValidationFieldProvider({
   label,
@@ -177,28 +184,10 @@ export function DateField({
   onChange: (value: string) => void;
   min?: string;
 }) {
-  const validation = useContext(ValidationFieldContext);
-  const validationError = isValidationError(label, validation.label);
   return (
-    <DatePicker
-      label={label}
-      disablePast
-      {...(min ? { minDate: parseISO(min) } : {})}
-      value={value ? parseISO(value) : null}
-      onChange={(date) => {
-        onChange(date && isValid(date) ? format(date, "yyyy-MM-dd") : "");
-        if (validationError) validation.clear();
-      }}
-      slotProps={{
-        textField: {
-          required: true,
-          fullWidth: true,
-          size: "small",
-          error: validationError,
-          sx: { "& .MuiPickersInputBase-root": { minHeight: 43 } },
-        },
-      }}
-    />
+    <Suspense fallback={<Field label={label} value={value} disabled fullWidth helperText="Datumsauswahl wird geladen …" />}>
+      <LazyDateField label={label} value={value} onChange={onChange} {...(min ? { min } : {})} />
+    </Suspense>
   );
 }
 export function NumberInput({

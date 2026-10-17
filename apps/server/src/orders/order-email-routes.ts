@@ -5,7 +5,7 @@ import type { AppConfig } from "../config.js";
 import { prisma } from "../prisma.js";
 import { createConfiguredMailService } from "../mail/configured-mail-service.js";
 import { declineEmail, offerEmail, type EmailDraftContent } from "../mail/staff-email-templates.js";
-import { invalidEmail, mailNotConfigured, respondWithSendResult, sendStaffEmail, validateStaffEmailInput } from "../mail/staff-email-service.js";
+import { invalidEmail, mailNotConfigured, respondWithSendResult, respondWithStaffEmailStatus, sendStaffEmail, validateStaffEmailInput } from "../mail/staff-email-service.js";
 import { orderPdfFilename } from "../pdf/order-pdf.js";
 import { orderDataWithRelations, orderRelations } from "./order-relations.js";
 import { renderOrderPdf } from "./order-pdf-service.js";
@@ -66,6 +66,16 @@ export function registerOrderEmailRoutes(router: Router, config: Pick<AppConfig,
       const body: EmailDraft = { to: order.customerEmail ?? "", subject: draft.subject, contentHtml: draft.contentHtml, attachmentNames };
       res.setHeader("Cache-Control", "no-store");
       res.json({ data: body });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/:orderNumber/emails/status", async (req, res, next) => {
+    try {
+      const orderNumber = parseOrderNumber(req.params.orderNumber);
+      if (orderNumber === null) return notFound(res);
+      const order = await prisma.order.findUnique({ where: { orderNumber }, select: { id: true } });
+      if (!order) return notFound(res);
+      await respondWithStaffEmailStatus(req as Request, res, `order:${order.id}`, { orderId: order.id });
     } catch (error) { next(error); }
   });
 

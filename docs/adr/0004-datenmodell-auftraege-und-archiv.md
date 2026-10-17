@@ -19,6 +19,15 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
 - Rechnungen dürfen nicht per FK-Cascade mit Orders gelöscht werden.
 - Startkatalog/Preise werden nach Setup manuell durch Admins angelegt.
 - Das Frontend erhält keinen Zugriff auf beliebige Order-IDs/öffentliche Order-Reads.
+- Auftrags-PUTs vergleichen `revision` atomar vor Relationsänderungen;
+  ein veralteter Stand liefert `409`. Archiv/Restore erhöhen die Revision,
+  behalten aber `updatedAt` bei. Kopien sperren ihre aktive Quelle während
+  der Transaktion.
+- Historische Katalog-Snapshots bleiben auch nach Kataloglöschung oder
+  Ausblenden bearbeitbar; Mengenänderungen aktualisieren keine alten
+  Namen/Volumina. Neue bzw. geänderte Referenzen benötigen einen gültigen
+  aktuellen Katalogeintrag. Normalisierte Daten werden vor Persistenz
+  nochmals vollständig validiert.
 
 ## Umsetzungsstand (2026-10-09)
 
@@ -35,3 +44,47 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
   Auftragseigene Mail-Outbox-Inhalte und Mailereignisse werden ebenso wie das
   Aktionsjournal mit dem Auftrag gelöscht, nicht als personenbezogene Waisen
   weiter aufbewahrt.
+
+## Preisstand und serverseitige Kalkulation (2026-10-16)
+
+- Die automatische Preisvorschau ist eine ausdrückliche Staff-Aktion. Sie
+  ersetzt vorhandene Konditionen nur nach Bestätigung; direkte individuelle
+  Konditionsänderungen bleiben möglich.
+- Gespeicherte Angebotsbeträge ändern sich nicht bei Katalogänderung,
+  erneutem Speichern, Kopie, Export oder Mailversand. Nur eine bestätigte
+  Neukalkulation verwendet aktuelle Katalogwerte.
+- Die Berechnungsgrundlage und verwendeten Einzelpreis-/Tarifstände liegen als
+  validierter `pricingSnapshot` im bestehenden Order-JSON. Die endgültigen
+  Angebotspreise sind die gespeicherten Konditionen, keine zweite
+  konkurrierende Preisliste. Kopien erhalten eigenständige Snapshots.
+- Orders ohne Snapshot behalten ihre bisherigen Konditionen; fehlende
+  historische Einzelpreise werden in Preislisten nicht durch aktuelle
+  Katalogwerte ersetzt. Es erfolgt keine Migration von Bestandsdaten.
+- Serverseitige Dezimalarithmetik rundet fertige Konditionen auf Cent und
+  summiert diese Bruttobeträge. Rechnungs- und Mahnberechnungen bleiben
+  getrennt.
+
+## Positionspreise für Leistungen und Packmaterial (2026-10-17)
+
+- Beim Auswählen eines Katalogeintrags wird dessen Einzelpreis im
+  Auftragseditor vorbelegt. Admins und Kundenberater können den Preis pro
+  Auftragsposition ändern; Freitextpositionen benötigen für die automatische
+  Kalkulation einen explizit eingegebenen Einzelpreis.
+- Der optionale Einzelpreis gehört zum jeweiligen Auftrags-JSON, nicht zum
+  globalen Katalog. Die serverseitige Staff-Validierung begrenzt den Wert;
+  öffentliche Anfragen dürfen keine Einzelpreise setzen. Die ausdrückliche
+  Konditionsberechnung verwendet den eingegebenen Einzelpreis, andernfalls
+  den aktuellen Katalogpreis.
+- Der Preis-Override ist Teil der Preisgrundlage im `pricingSnapshot`. Eine
+  spätere Katalogänderung überschreibt gespeicherte Auftrags-Einzelpreise
+  nicht; erst eine ausdrückliche Änderung oder Neukalkulation kann sie ändern.
+
+## Informative Netto-/MwSt.-Anzeige der Konditionssumme (2026-10-17)
+
+- Die gespeicherte Konditionssumme bleibt ein Bruttobetrag und wird nicht
+  verändert. Die Admin-Konditionskarte zeigt zusätzlich eine informative
+  Aufteilung mit fest 19 %: Netto = Brutto / 1,19, MwSt. = Brutto − Netto;
+  Rundung erfolgt auf Cent und die MwSt. wird als Differenz berechnet.
+- Diese Anzeige ist keine Rechnungsberechnung und legt keinen
+  Rechnungssteuersatz fest. Rechnungssteuer bleibt unabhängig am jeweiligen
+  Rechnungsbeleg.

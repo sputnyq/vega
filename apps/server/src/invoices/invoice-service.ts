@@ -11,6 +11,8 @@ export class InvoiceOrderError extends Error {
   }
 }
 
+export class InvoiceUpdateConflict extends Error {}
+
 export async function createInvoice(input: InvoiceInput, order?: { id: string; orderNumber: number }) {
   return prisma.$transaction(async (tx) => {
     if (order) {
@@ -48,10 +50,14 @@ export async function createInvoice(input: InvoiceInput, order?: { id: string; o
   });
 }
 
-export function updateInvoice(id: string, input: InvoiceInput, invoiceNumber: string) {
-  return prisma.invoice.update({
-    where: { id, archivedAt: null },
-    data: invoiceData(input, input.invoiceNumber ?? invoiceNumber),
+export function updateInvoice(id: string, input: InvoiceInput, invoiceNumber: string, revision: number) {
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.invoice.updateMany({
+      where: { id, revision, archivedAt: null },
+      data: { ...invoiceData(input, input.invoiceNumber ?? invoiceNumber), revision: { increment: 1 } },
+    });
+    if (result.count !== 1) throw new InvoiceUpdateConflict("Die Rechnung wurde zwischenzeitlich geändert.");
+    return tx.invoice.findUniqueOrThrow({ where: { id } });
   });
 }
 
@@ -63,7 +69,7 @@ export function archiveInvoice(id: string, archivedAt: Date) {
     await tx.reminderEvent.updateMany({ where: { invoiceId: id, archivedAt: null }, data: { archivedAt, purgeAt } });
     return tx.invoice.update({
       where: { id, updatedAt: existing.updatedAt },
-      data: { archivedAt, purgeAt, updatedAt: existing.updatedAt },
+      data: { archivedAt, purgeAt, updatedAt: existing.updatedAt, revision: { increment: 1 } },
     });
   });
 }
@@ -74,7 +80,7 @@ export function restoreInvoice(id: string) {
     await tx.reminderEvent.updateMany({ where: { invoiceId: id, archivedAt: { not: null } }, data: { archivedAt: null, purgeAt: null } });
     return tx.invoice.update({
       where: { id, updatedAt: existing.updatedAt },
-      data: { archivedAt: null, purgeAt: null, updatedAt: existing.updatedAt },
+      data: { archivedAt: null, purgeAt: null, updatedAt: existing.updatedAt, revision: { increment: 1 } },
     });
   });
 }

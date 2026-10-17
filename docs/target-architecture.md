@@ -12,7 +12,7 @@ Kunde
 
 Kundenberater/Admin
   └─ vega.umzugruckzuck24.de
-       ├─ React/Vite Admin-SPA am Origin-Root (`/`); Redirect zu `/login` bzw. `/two-factor`, unbekannte Pfade zeigen 404
+       ├─ React/Vite Admin-SPA am Origin-Root (`/`); Redirect zu `/login` bzw. nach erfolgreicher Passwortprüfung zu `/two-factor`; direkter Aufruf von `/two-factor` ohne laufende Anmelde-Challenge führt zu `/login`, unbekannte Pfade zeigen 404
        ├─ Better Auth + TOTP
        ├─ Express 5 API / Domain Services
        ├─ Prisma → Hostinger MySQL
@@ -26,6 +26,25 @@ Optionen (`/settings`), Katalogbereiche (`/settings/*`) und
 Nutzer (`/settings/users`) gegliedert. Legacy-Content-Pfade bleiben
 als weitergeleitete Aliase verfügbar; archivierte Orders/Rechnungen und Profil
 haben eigene Routen.
+
+Maintenance (`/maintenance`) ist ein eigenständiger Hauptmenüpunkt auf derselben
+Ebene wie Optionen und ausschließlich für Admins sichtbar und zugänglich.
+Der bisherige Pfad `/settings/setup` leitet auf `/maintenance` weiter.
+Die Seite stellt den serverseitig aus `APP_BASE_URL` erzeugten WordPress-Loadercode
+und eine explizit freigegebene Liste von Runtime-Variablennamen mit Setzstatus
+bereit, niemals geheime Werte. Ein manuell gestarteter, begrenzter Smoke-Test
+prüft Datenbank, Formular-Build und konfigurierte Mail-/Google-/GCS-Zugänge
+ohne Fachdatenänderung oder Mailversand; Einzelheiten und Prüfgrenzen stehen
+in `operations.md`.
+
+Die Admin-Oberfläche unterstützt unter „Mein Profil“ → „Darstellung“ die Auswahl
+„Hell“, „Dunkel“ und „System“, auch auf Mobilgeräten. „System“ ist der Standard
+und folgt Änderungen der Betriebssystemeinstellung automatisch. Eine Auswahl
+bleibt lokal im Browser gespeichert. Glasflächen in Navigation und Kopfzeile
+passen sich dem Modus an, Inhaltsflächen bleiben undurchsichtig.
+Die fixierte Reiternavigation im Auftragseditor hat einen undurchsichtigen,
+modusabhängigen Hintergrund und schließt beim Scrollen unterhalb der
+responsiven Kopfzeile an, damit Formularinhalte nicht durchscheinen.
 
 Nach erfolgreicher Neuanlage öffnet die Admin-App direkt den gespeicherten
 Auftrag unter `/edit/<Auftragsnummer>`. Es gibt keine separate Erfolgsansicht.
@@ -64,7 +83,8 @@ Formularpositionen verwenden „Objekt hinzufügen“, ebenfalls rechtsbündig.
 Katalogtabellen bündeln Bearbeiten und Löschen in Drei-Punkte-Menüs.
 
 Der Möbelkatalog enthält neben ID und Kategoriezuordnungen nur Name, Volumen,
-Schrittgröße (Standard 1) und Sortierung (Standard 0). Im Bearbeitungsdialog
+Schrittgröße in Vielfachen von 0,5 (Minimum 0,5, Standard 1) und Sortierung
+(Standard 0). Im Bearbeitungsdialog
 folgen unter diesen Feldern die Kategorien als vertikale Checkbox-Liste,
 geordnet nach Kategorie-Sortierung und bei Gleichstand nach ID.
 Gewicht, Montage-/Aufpreise und die bisherigen Möbel-Flags entfallen aus
@@ -125,21 +145,25 @@ WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend,
   Admins, Konfliktschutz über Revision; leere Werte bleiben unkonfiguriert.
 - PDF Service: Rechnungen werden serverseitig aus aktuellen DB-Daten im
   übernommenen Legacy-Layout erzeugt; Gutschrift- und Mahn-PDFs ebenso.
+  Lange Positionen und Texte werden vollständig auf Folgeseiten verteilt,
+  Tabellenköpfe wiederholt und Summen zusammengehalten. UI, Validierung und
+  PDF verwenden dieselbe Summenberechnung aus `@vega/domain`, ohne
+  zusätzliche Zwischenrundung je Position.
 
 ## Rollen-/Berechtigungsmatrix
 
-| Bereich/Aktion | Admin | Kundenberater | Öffentlich |
-|---|---:|---:|---:|
-| Eigene Authentifizierung/2FA | ja | ja | nein |
-| Kundenanfragen lesen/bearbeiten | ja | ja | nein |
-| Angebotskopie erstellen/kopieren/anpassen/archivieren | ja | ja | nein |
-| Preis einer einzelnen Angebotskopie anpassen | ja | ja | nein |
-| Globale Preise, Services, Möbel, Kategorien ändern | ja | nein | nein |
-| Mitarbeiter/Accounts verwalten | ja | nein | nein |
-| Rechnungen, Gutschriften, Mahnungen | ja | nein | nein |
-| Öffentliche Katalogprojektion lesen | ja | ja | ja, nur Safe DTO |
-| Neue Anfrage absenden | ja | ja | ja, Rate-Limited |
-| Aufträge/Kunden öffentlich lesen | nein | nein | nein |
+| Bereich/Aktion                                        | Admin | Kundenberater |       Öffentlich |
+| ----------------------------------------------------- | ----: | ------------: | ---------------: |
+| Eigene Authentifizierung/2FA                          |    ja |            ja |             nein |
+| Kundenanfragen lesen/bearbeiten                       |    ja |            ja |             nein |
+| Angebotskopie erstellen/kopieren/anpassen/archivieren |    ja |            ja |             nein |
+| Preis einer einzelnen Angebotskopie anpassen          |    ja |            ja |             nein |
+| Globale Preise, Services, Möbel, Kategorien ändern    |    ja |          nein |             nein |
+| Mitarbeiter/Accounts verwalten                        |    ja |          nein |             nein |
+| Rechnungen, Gutschriften, Mahnungen                   |    ja |          nein |             nein |
+| Öffentliche Katalogprojektion lesen                   |    ja |            ja | ja, nur Safe DTO |
+| Neue Anfrage absenden                                 |    ja |            ja | ja, Rate-Limited |
+| Aufträge/Kunden öffentlich lesen                      |  nein |          nein |             nein |
 
 Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater` erhält keine versteckten Admin-APIs.
 
@@ -149,6 +173,10 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - Better-Auth-Konfiguration benennt Prisma-Modelle gemäß ORM-Modellnamen (nicht SQL-Tabellennamen); generiertes Plugin-Schema wird nicht von Hand an der CLI vorbei geändert.
 - E-Mail/Passwort aktiv; neu gesetzte Passwörter erfordern mindestens 8 Zeichen sowie Großbuchstabe, Kleinbuchstabe und Zahl. `sendResetPassword` nutzt den serverseitigen Hostinger-Maildienst. Reset-Antworten geben nicht preis, ob ein Account existiert; Reset-Token sind kurzlebig/einmalig und Passwortreset widerruft bestehende Sessions.
 - `twoFactor` Server- und Client-Plugin für TOTP. Enrollment benötigt Passwortbestätigung und einen erfolgreichen ersten Code; nur dann gilt 2FA als aktiviert. Einmalige Recovery-Codes verschlüsselt speichern/anzeigen; Pflicht nur für Admins; Kundenberater richten TOTP optional ein und können es mit Passwortbestätigung deaktivieren. 2FA-Reset erzwingt bei Admins erneutes Enrollment.
+- Der Initialpasswortwechsel widerruft andere Sitzungen und übernimmt die
+  Ersatzcookies der aktuellen Sitzung. TOTP-Start, Enrollment-Abschluss und
+  erlaubte Deaktivierung widerrufen ebenfalls andere Sitzungen; eine bereits
+  aktive Sitzung darf nicht allein durch die Konto-Freischaltung Zugriff erhalten.
 - Serverseitige Middleware blockiert geschützte Kundendatenrouten, bis 2FA aktiviert ist. Kein „trusted device“-Bypass zum Start.
 - `BETTER_AUTH_SECRET` ist ein zufälliges, einzigartiges Secret (mindestens 32 Zeichen/hohe Entropie) aus Hostinger Runtime-Variablen.
 - Trusted Origins werden exakt aus Runtime-Konfiguration abgeleitet. Der Public-Form-Origin ist CORS-Origin, aber nicht automatisch Auth-Origin. Kein Wildcard-Origin, keine deaktivierte CSRF-/Origin-Prüfung und keine Cross-Subdomain-Cookies, da Login und Admin auf derselben Vega-Origin liegen.
@@ -170,6 +198,17 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   Beziehungen transaktional geschrieben; API-Reads und Rechnungsadressen
   verwenden die relationalen Werte. Der validierte Formularsnapshot bleibt
   für die übrigen Details erhalten.
+- Nach der serverseitigen Katalognormalisierung wird der gesamte Auftrag
+  erneut validiert, bevor Nummer oder Datensatz geschrieben werden.
+  Bereits gespeicherte Katalogpositionen bleiben historische Snapshots,
+  auch nach Ausblenden oder Löschen im Katalog; Mengen dürfen angepasst
+  werden. Neue Positionen und geänderte Katalogmetadaten müssen dagegen
+  anhand des aktuellen Katalogs zulässig sein.
+- `Order.revision` und `Invoice.revision` sichern Updates per atomarem
+  Vergleich ab. Veraltete PUTs liefern `409`, fehlende Revisionen `400`.
+  Beziehungen und Journal werden erst nach erfolgreichem Claim in derselben
+  Transaktion geändert. Archivieren und Restore erhöhen den Zähler, ohne
+  das fachliche Bearbeitungsdatum zu verändern. Es entsteht keine Historie.
 - Der Intake-Endpunkt `POST /api/orders` ist öffentlich und für abgeschlossene
   Staff-Sessions verwendbar. Er speichert validierte Kunden-, Mehrfachadress-,
   Umzugsgut-, Zusatzleistungs-, Termin- und Konditionsdaten, vergibt die Nummer
@@ -177,6 +216,37 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   Preisfelder sind bei anonymen Requests verboten; Staff-Preisangaben werden
   serverseitig typ- und wertebereichsgeprüft. Öffentliche Order-Reads bleiben
   verboten; anonyme Requests werden serverseitig limitiert.
+- Die serverseitige Angebotskalkulation ist eine ausdrückliche Staff-Aktion
+  (`POST /api/admin/orders/pricing-preview`), kein Effekt beim Speichern,
+  Kopieren, Exportieren oder Mailversand. Sie verwendet den gepflegten
+  `CatalogOffer.sum`, einen Basisrabatt, Fahrtkosten, Halteverbotszonen sowie
+  ausgewählte Katalog-Services und Packungen. Der Katalog-Einzelpreis wird bei
+  Auswahl vorbelegt; Admins und Kundenberater dürfen ihn pro Auftragsposition
+  überschreiben oder für Freitextpositionen eingeben. Die API validiert und
+  persistiert diese Staff-Einzelpreise und verwendet sie bei der ausdrücklichen
+  Vorschau; Freitextpositionen ohne Einzelpreis sind nicht automatisch
+  kalkulierbar. Fahrtkosten außerhalb Münchens
+  sind das Maximum aus dem zentralen Anfahrtstarif pro LKW-Anzahl (unabhängig
+  von der Trägerzahl) und Kilometerpreis mal Entfernung und LKW-Anzahl; der
+  Kilometerbetrag wird auf das nächste Vielfache von 5 EUR gerundet. In München
+  gilt der zentrale Anfahrtstarif pro LKW-Anzahl. Der Rabatt gilt nur für den
+  Basispreis. Fertige Konditionen werden
+  auf Cent gerundet und als Bruttobeträge summiert; die Rechnungsarithmetik
+  bleibt davon getrennt. Die Konditionskarte darf zusätzlich die
+  Bruttosumme informativ mit fest 19 % in Netto und MwSt. aufteilen
+  (`Netto = Brutto / 1,19`); diese Anzeige ändert weder Orders noch
+  Rechnungssteuersätze.
+- Berechnete Konditionen bleiben im Admin-Editor anpassbar. Erneutes Ersetzen
+  vorhandener Konditionen verlangt eine Bestätigung. Katalognormaländerungen
+  ändern gespeicherte Preise nicht. Der serverseitige `pricingSnapshot` im
+  bestehenden Order-JSON hält verwendete Katalog-/Tarifpreise, optionale
+  positionsbezogene Staff-Einzelpreise und Berechnungsgrundlagen fest; die finalen Beträge liegen ausschließlich in den
+  Konditionen. Vorschau- und Katalogkonflikte liefern `409`. Orders ohne
+  Snapshot bleiben bearbeitbar und werden nicht nachträglich neu bepreist.
+- Preisrelevante fehlende Grundlagen, insbesondere eine unbekannte Entfernung
+  für Nicht-München, blockieren nur die automatische Kalkulation. Manuelle
+  Angebote und unvollständige Entwürfe bleiben möglich. Anonyme Requests
+  können weder den Staff-Preisweg noch einen `pricingSnapshot` setzen.
 - Öffentliche Katalogprojektionen sind getrennte, rate-limitierte GETs unter
   `/api/catalog/categories`, `/api/catalog/furniture`, `/api/catalog/offers`,
   `/api/catalog/packings`, `/api/catalog/services` und
@@ -208,6 +278,12 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   Aktionen umfassen Anlage, Bearbeitung, Kopie, Archivierung, Wiederherstellung
   und Rechnungs-PDF-Export. Order-Purge entfernt seine Events.
 - `EmailOutbox`/`EmailEvent` hält Retry-Zustand und erfolgreichen Versand inkl. Benutzer/Aktion/Zeitpunkt.
+- Nur nachweislich nicht gesendete Mails sind automatisch wiederholbar.
+  `UNKNOWN` blockiert Wiederholung; Recovery erfolgt operatorgestützt und
+  protokolliert nach Providerabgleich. Statuschecks schicken keine Mailtexte
+  und können keinen Versand auslösen. Fehlende Versandkennungen werden
+  terminal als `NOT_QUEUED` gesperrt, um verspätete Originalrequests
+  abzufangen (siehe `hostinger-mail-cron.md`).
 - Auftragseigene Outbox-Inhalte und Mailereignisse werden beim Order-Purge
   ebenfalls gelöscht. Nicht auftragsgebundene Auth-Mails sind davon unabhängig.
 - Katalog-/Preisstammdaten werden initial manuell gepflegt.
@@ -222,7 +298,8 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   Kein generischer Google-Proxy, kein Place-Speicher, kein öffentlicher Order-Read.
 - `admin` Router verlangen gültige Better-Auth-Session plus Rollen-/Capability-Check.
 - Die Streckenberechnung unter `/api/admin/routes` (Depot → 2–4 Umzugsadressen → Depot,
-  nur auf expliziten Klick, Kilometer gerundet in den ungespeicherten Entwurf) ist
+  Kilometer gerundet in den ungespeicherten Entwurf; automatische Erst- und
+  Adressänderungsberechnung über dieselbe Staff-API, Button als manueller Retry) ist
   ausschließlich authentifizierte Admin-API für Admin/Kundenberater.
 - Admin-only Finanzrouten liegen unter `/api/admin/invoices`; Kundenberater und
   öffentliche Clients erhalten keinen Finanzbeleg-Zugriff.
@@ -230,6 +307,13 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 - Better Auth Trusted Origins sind eine separate, engere Liste als CORS und umfassen nur Vega plus ausdrücklich eingerichtete lokale/Staging-Origin.
 - Rate-Limits für öffentliche GET/POST/Upload-Anbahnung; Werte werden anhand Hostinger Proxy/IP-Verhalten im A0-Proof gesetzt.
 - Server-Schema validiert jedes Eingabefeld, IDs, Zahlen/Preise, Arrays, Upload-Claims und Payload-Größen.
+- Finanzdaten verlangen echte Kalenderdaten, endliche nichtnegative Zahlen
+  und Beträge innerhalb der Datenbankgrenzen; auch Zeilen- und Gesamtsummen
+  werden geprüft. Fehlerhafte JSON-Bodies liefern `400`, zu große `413`
+  und nicht unterstützte Body-Encoding-/Charset-Angaben `415`, keine `500`.
+- HTTP-Logs enthalten nur Methoden, bereinigte Pfade, Request-ID und
+  Fehlercodes/Status, keine Query-Werte, Reset-Pfadtoken oder
+  ungefilterten Error-Payloads.
 - Keine Provider-API-Schlüssel, Mail-Tokens, GCS-Credentials oder Preise als allein browserseitige Wahrheit.
 
 ## Loader-/WordPress-Integration
@@ -250,14 +334,14 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 
 ## Privacy/Retention und unbeaufsichtigte Tasks
 
-| Objekt | Verhalten |
-|---|---|
-| Neue Anfrage | `edited=false`; bleibt aktiv, bis explizit archiviert |
-| Angebotskopie | eigenständiger Datensatz, eigene Nummer, `edited=true` |
-| Archivierter Auftrag/Kopie | Restore-fähig; Purge nach 60 Tagen ab aktueller Archivierung |
-| Audit eines Auftrags | minimaler Aktionsdatensatz; zusammen mit Order-Purge entfernt |
-| GCS-Objekt | keine Order-Purge-Kaskade; Lifecycle nach 180 Tagen ab Upload |
+| Objekt                                 | Verhalten                                                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Neue Anfrage                           | `edited=false`; bleibt aktiv, bis explizit archiviert                                                                                                         |
+| Angebotskopie                          | eigenständiger Datensatz, eigene Nummer, `edited=true`                                                                                                        |
+| Archivierter Auftrag/Kopie             | Restore-fähig; Purge nach 60 Tagen ab aktueller Archivierung                                                                                                  |
+| Audit eines Auftrags                   | minimaler Aktionsdatensatz; zusammen mit Order-Purge entfernt                                                                                                 |
+| GCS-Objekt                             | keine Order-Purge-Kaskade; Lifecycle nach 180 Tagen ab Upload                                                                                                 |
 | Rechnung, Gutschrift, Mahnungsereignis | Admin-Archivierung und Restore; einheitlicher App-Purge 30 Tage nach Archivierung. Externe gesetzliche Archivierung bleibt Betreiberprozess und Go-live-Gate. |
-| Invoice PDF | bei Bedarf aus aktuellem DB-Stand; nicht persistent in App/GCS |
+| Invoice PDF                            | bei Bedarf aus aktuellem DB-Stand; nicht persistent in App/GCS                                                                                                |
 
 Hostinger Cron läuft täglich, verarbeitet abgelaufene archivierte Datensätze und Mail-Retries. Purge ist transaktional/idempotent. Vor finaler Implementierung ist zu prüfen, ob Managed Node Cron eine CLI-Ausführung erlaubt; sonst wird ein kurzlebiger, signierter interner Trigger verwendet.

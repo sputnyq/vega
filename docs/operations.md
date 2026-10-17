@@ -44,6 +44,25 @@ Hostinger nennt MariaDB, aber keine Version
 ([Hostinger-Support](https://www.hostinger.com/support/1583226-which-database-management-system-is-used-at-hostinger/));
 vor dem Deployment auf der Zieldatenbank `SELECT VERSION();` prüfen.
 
+### Hostinger-Datenbank einrichten
+
+In hPanel eine MySQL-Datenbank und einen Datenbankbenutzer anlegen und dem
+Benutzer Zugriff auf diese Datenbank geben. Für `DATABASE_URL` benötigt die App
+alle vier Verbindungsangaben: Datenbankname, Benutzername, Passwort und den
+Datenbank-Host. Den Host sowie einen abweichenden Port aus den Datenbankdetails
+in hPanel übernehmen; `127.0.0.1` aus der lokalen `.env` gilt nur für die
+Docker-Datenbank. Ein Benutzername und Passwort allein reichen nicht. Falls
+Host, Datenbankname oder Benutzer in hPanel noch fehlen, zuerst die Datenbank
+einrichten oder die Angaben beim Hostinger-Support erfragen.
+
+Die URL im Format `mysql://BENUTZER:PASSWORT@HOST:PORT/DATENBANKNAME` als
+serverseitige Runtime-Variable `DATABASE_URL` in der Hostinger-App konfigurieren,
+nicht in ein Frontend-Build eintragen oder in Git committen. Sonderzeichen in
+Benutzername und Passwort müssen URL-prozentkodiert sein. TLS-Optionen nur
+konfigurieren, wenn Hostingers Datenbankdetails sie verlangen und das passende
+CA-Zertifikat verfügbar ist. Anschließend die Verbindung und Version auf der
+Zieldatenbank prüfen und Migrationen mit `npm run db:migrate:deploy` ausrollen.
+
 ```sh
 npm run db:migrate:dev -- --name describe_change   # neue Migration
 npm run db:generate                                  # Prisma-Client nach Schemaänderung
@@ -55,6 +74,37 @@ Prisma 7.10.0 generiert nach `apps/server/src/generated/prisma/` (nicht
 versioniert). `dev` und `build` generieren automatisch. Migrationen seeden nicht;
 dafür `npm run db:seed`. Der `mariadb@3.5.4`-Override ist in
 `proof-01-integration-compatibility.md` begründet.
+
+### Legacy-Katalogimport
+
+`npm run db:import-legacy-catalog` liest den Katalog der Bestands-App
+(`umzug-meister.de/wp-json/um-configurator/v1`) und überträgt ihn in die
+aktuellen Katalogtabellen:
+
+```sh
+npm run db:import-legacy-catalog             # Vorschau ohne Datenänderung
+npm run db:import-legacy-catalog -- --apply  # schreibt transaktional
+```
+
+Der Import ersetzt den gesamten Katalog (Kategorien, Möbel mit
+Kategorie-Verknüpfungen, Services, Packmaterial, Angebote) sowie `boxCbm` und
+`kleiderboxCbm` in `appSettings`; die Transaktion ist dabei atomar. Er
+übernimmt nur Felder der Zielstruktur: Legacy-`t35` wird zu `trucks`,
+`desc`/`description` zu `description`, `imgUrl` zu `media`; die entfernten
+Felder (`montagePrice`, `extraPrice`, `bulky`, `m100`, `m150`, `colli`, Slug)
+und `Counter`-Zähler werden verworfen. Schrittgrößen in Vielfachen von 0,5,
+einschließlich 0,5, werden übernommen; ungültige Schrittgrößen werden auf 1
+gesetzt und als Hinweis gemeldet. Datensätze ohne Namen oder Kategorie sowie
+mit ungültigen Preisen/Volumen werden übersprungen und als Hinweis gemeldet.
+Der Plan liegt in
+`apps/server/src/catalog/legacy-import.ts`, das Skript in
+`prisma/import-legacy-catalog.ts`.
+
+Die Migration `20261016150000_document_revisions` muss vor dem neuen
+Serverstand ausgerollt sein. Sie ergänzt `Order.revision` und
+`Invoice.revision` mit Startwert `0`; alte offene Bearbeitungsseiten müssen
+neu geladen werden. PUTs ohne Revision werden mit `400`, überholte Stände
+mit `409` abgewiesen.
 
 ## Erstadmin
 
@@ -91,6 +141,17 @@ npm run test:deployment   # nach build: startet den kompilierten Server
 DB-Tests nur gegen eine **separate leere Datenbank mit Namen auf `_test`**:
 Migrationen mit `DATABASE_URL` darauf ausrollen, dann
 `TEST_DATABASE_URL=… npm run test:database`. Niemals die App-Datenbank verwenden.
+Die Regressionen umfassen echte konkurrierende Auftrags-/Rechnungs-PUTs:
+genau ein Update muss erfolgreich sein, das andere muss `409` liefern,
+ohne Teiländerungen an Beziehungen. UI-Interaktionen laufen lokal mit
+jsdom; sie ersetzen keinen Browser-/WordPress-Proof.
+
+Die Suite priorisiert Fachregeln, Berechtigungen, Datenintegrität,
+Fehlerbehandlung und reale Bedienabläufe. Reine CSS-/MUI-Strukturprüfungen,
+Quelltext-Regex und redundante Wrapper-Tests werden nicht gepflegt.
+PDF-Tests sichern vollständige Inhalte und Seitenbegrenzungen statt exakter
+Zeichenkoordinaten oder Zeichenstrom-Hashes; die globale Vorgabe kompakter
+Admin-Eingabefelder bleibt separat abgesichert.
 
 CI (`.github/workflows/ci.yml`) nutzt Node 24 und MariaDB 10.11.19 inkl. frischer
 Migrationen und Drift-Prüfung.
@@ -101,7 +162,47 @@ Nach dem Produktionsbuild `<APP_BASE_URL>/customer-form/loader.js` in WordPress
 einbinden (kein iframe). Den WordPress-Origin in `CORS_ALLOWED_ORIGINS` aufnehmen
 und Styles/CSP dort prüfen.
 
+### Maintenance und Smoke-Test
+
+Admins finden im eigenständigen Hauptmenüpunkt **Maintenance** (`/maintenance`) die
+Loader-URL und einen kopierbaren `<script>`-Einbettungscode für einen
+WordPress-Block „Individuelles HTML“. Die URL wird serverseitig aus
+`APP_BASE_URL` erzeugt, nicht aus der aktuellen Browseradresse.
+
+Die Seite zeigt ausschließlich Namen und Setzstatus freigegebener
+Runtime-Variablen, keine Secrets, Datenbank-URLs, Credential-Dateipfade oder
+Provider-Rohantworten. Pflichtwerte, optionale Integrationen, aktive Standards
+und nach dem Seed zu entfernende Erstadmin-Werte sind getrennt gekennzeichnet.
+Die Übersicht beschreibt den Stand beim Serverstart. Nach Änderungen an der
+Runtime-Konfiguration den Server neu starten und die Seite neu laden.
+Wenn eine beim Start zwingende Variable ungültig ist oder fehlt, startet die
+App weiterhin nicht; diese Fehler müssen im Deployment behoben werden.
+
+**Smoke-Test starten** ruft die Admin-only API
+`POST /api/admin/maintenance/smoke-test` auf (höchstens zweimal pro Minute
+und Mitarbeiter, Origin-Prüfung, `Cache-Control: no-store`). Die Statusübersicht
+`GET /api/admin/maintenance` löst selbst keine Provider-Anfragen aus.
+Der Test prüft parallel mit einem Zeitlimit von zehn Sekunden:
+
+- Datenbank: `SELECT 1`, keine Änderungen an Fachdaten; kein Migrations-/Schema-Proof.
+- Formular-Build: Vite-Manifest sowie referenzierte JS-/CSS-Dateien.
+- Hostinger Mail: authentifizierter Quota-GET der konfigurierten Mailbox.
+  Kein Mailversand, keine Prüfung der Zustellung oder Sendeberechtigung.
+- Google Places (New) und Routes: synthetische Testadresse bzw. Testkoordinaten,
+  keine Kunden-/Betriebsdaten. Die echten API-Aufrufe können Quota und Kosten
+  verursachen.
+- GCS: Bucket-Metadaten und bestehende EU-/Privat-/180-Tage-Löschregeln.
+  Keine Datei wird geschrieben; Schreibrechte und Signierung sind nicht geprüft.
+
+Nicht konfigurierte Provider werden als „Nicht geprüft“ ausgewiesen.
+Fehler einzelner Checks verhindern die übrigen Ergebnisse nicht. Die API und
+Logs enthalten nur sichere Status-/Fehlerhinweise, keine Provider-Inhalte oder
+Zugangsdaten. WordPress-Einbettung, CORS/CSP, Formularübermittlung, vollständiger
+Bildupload und Mailzustellung müssen zusätzlich im echten Zielbetrieb geprüft
+werden. Der Test ersetzt diese Freigabe-Gates nicht.
+
 ## Weitere Anleitungen
 
+- `hostinger-setup.md` – Schritt-für-Schritt-Deployment, Runtime-Variablen, SSH, Migrationen und Go-live-Checkliste
 - `hostinger-mail-cron.md` – Cron für Mail-Retries
 - `gcs-bucket-setup.md` – GCS-Bucket, Lifecycle, CORS, Service Account

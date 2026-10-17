@@ -1,5 +1,5 @@
 import { htmlToPlainText, passwordResetEmail, renderEmailLayout } from "./email-template.js";
-import type { MailAttachment, OutgoingMail } from "./hostinger-mail-client.js";
+import { MailDeliveryError, type MailAttachment, type OutgoingMail } from "./hostinger-mail-client.js";
 import type { AppSettingsDto } from "@vega/domain";
 import { isValidEmailAddress } from "@vega/domain";
 
@@ -26,12 +26,12 @@ export class MailService {
   async send(input: SendMailInput): Promise<void> {
     const recipients = [...new Set(input.to.map((address) => address.trim().toLowerCase()))];
     if (!recipients.length || recipients.some((address) => !isEmail(address))) {
-      throw new Error("INVALID_EMAIL_RECIPIENT");
+      throw new MailDeliveryError("INVALID_EMAIL_RECIPIENT", false);
     }
     if (!input.subject.trim() || input.subject.length > 998 || !input.contentHtml.trim()) {
-      throw new Error("INVALID_EMAIL_CONTENT");
+      throw new MailDeliveryError("INVALID_EMAIL_CONTENT", false);
     }
-    const settings = await this.settingsProvider?.();
+    const settings = await this.settingsProvider?.().catch(() => { throw new MailDeliveryError("MAIL_SETTINGS_UNAVAILABLE", true); });
     const displayName = input.displayName ?? settings?.emailFromName;
     const message: OutgoingMail = {
       to: recipients,

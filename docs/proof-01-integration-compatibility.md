@@ -1,7 +1,12 @@
 # Issue 01 – Integrations- und Kompatibilitäts-Proof
 
-**Stand:** 2026-10-10
+**Stand:** 2026-10-09/10 (punktueller Nachweis-Stand)
 **Status:** Teilproof – lokale Node-24-Auth-/Prisma-Integration verifiziert; Hostinger-/Provider-Proofs offen.
+
+> Hinweis: Dieses Dokument hält die Nachweise zum jeweiligen Laufzeitpunkt fest
+> (u. a. 14 Migrationen, 57/60 Tests, Prisma 6.19.3 vor dem ORM-Upgrade). Die
+> Zahlen und Versionsstände sind historisch; der aktuelle Stand steht in
+> `implementation-status.md`.
 
 ## Lokaler Proof vor dem ORM-Upgrade (2026-10-09)
 

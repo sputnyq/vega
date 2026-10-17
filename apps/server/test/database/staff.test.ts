@@ -135,15 +135,24 @@ test("A3 real auth lifecycle: provisioning, password/TOTP gates, recovery, role 
   assert.equal(await verifyPassword({ hash: account.password!, password: createInput.initialPassword }), true);
   assert.notEqual(account.password, createInput.initialPassword);
   const advisor = new Client();
+  const initialPeer = new Client();
   assert.equal((await advisor.request("/api/auth/sign-in/email", { email: createInput.email, password: createInput.initialPassword })).status, 200);
+  assert.equal((await initialPeer.request("/api/auth/sign-in/email", { email: createInput.email, password: createInput.initialPassword })).status, 200);
   assert.equal((await advisor.request("/api/admin/orders")).status, 403);
   let changed = "Test-only-new-password2";
   assert.equal((await advisor.request("/api/admin/auth/initial-password", { currentPassword: createInput.initialPassword, newPassword: changed })).status, 200);
+  assert.equal((await initialPeer.request("/api/admin/orders")).status, 401);
   // TOTP is optional for Kundenberater: access works without it, and it can be disabled with the password.
   assert.equal((await advisor.request("/api/admin/orders")).status, 200);
+  const optionalPeer = new Client();
+  assert.equal((await optionalPeer.request("/api/auth/sign-in/email", { email: createInput.email, password: changed })).status, 200);
   const optionalEnrollment = await advisor.request("/api/auth/two-factor/enable", { password: changed });
   assert.equal(optionalEnrollment.status, 200);
+  assert.equal((await optionalPeer.request("/api/admin/orders")).status, 401);
+  const duringEnrollment = new Client();
+  assert.equal((await duringEnrollment.request("/api/auth/sign-in/email", { email: createInput.email, password: changed })).status, 200);
   assert.equal((await advisor.request("/api/auth/two-factor/verify-totp", { code: totp(String(optionalEnrollment.body.totpURI)), trustDevice: false })).status, 200);
+  assert.equal((await duringEnrollment.request("/api/admin/orders")).status, 401);
   assert.notEqual((await advisor.request("/api/auth/two-factor/disable", { password: "wrong" })).status, 200);
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).twoFactorEnabled, true);
   assert.equal((await advisor.request("/api/auth/two-factor/disable", { password: changed })).status, 200);

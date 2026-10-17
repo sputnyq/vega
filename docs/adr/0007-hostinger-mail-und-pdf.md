@@ -36,3 +36,15 @@
 - Hostinger API-Attachmentspezifikation muss gegen offizielle API/`hostinger-email-api-definition.json` verifiziert werden.
 - Browser erhält keinen Mail-API-Schlüssel.
 - Mail Outbox/Retry muss idempotent sein, um Doppelversand zu verhindern.
+- Ein mehrdeutiger Send-POST-Ausgang (Netzwerk, Timeout, 5xx) oder ein
+  verwaister Claim wird `UNKNOWN`, nicht automatisch erneut gesendet.
+  Nur sicher nicht gesendete Versuche dürfen in den Retry. Ein
+  Operator kann nach belegtem Providerabgleich auf `SENT` bzw. `PENDING`
+  auflösen; Originalversand und Recovery-Nachweis werden atomar journalisiert.
+  Ablauf und Einschränkungen stehen in `hostinger-mail-cron.md`.
+- Der Versanddialog behält seine Kennung über Remount/Reload, ohne
+  Mailinhalte im Browserstorage abzulegen. Reine Statuschecks legen
+  niemals eine Mail mit einem neu geladenen Entwurf an; fehlende Kennungen
+  werden gegen verspäteten Versand stillgelegt.
+- Finanz-PDFs paginieren lange Positionen und Texte explizit, wiederholen
+  Tabellenköpfe und halten Summen/Schlussangaben innerhalb der Seitenränder.

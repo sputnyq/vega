@@ -209,13 +209,25 @@ test("order create, copy, edit, read and invoice address projection use independ
   edited.details.extras.services = [];
   delete edited.details.secondaryFrom;
   edited.details.showSecondaryFrom = false;
-  const update = await fetch(`${base}/${copiedNumber}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(edited) });
+  const update = await fetch(`${base}/${copiedNumber}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...edited, revision: copied.revision }) });
   assert.equal(update.status, 200);
   assert.deepEqual((await responseData(update)).data, edited);
   assert.deepEqual(orderDataWithRelations(await prisma.order.findUniqueOrThrow({ where: { id: stored.id }, include: orderRelations })), fixture);
   const updated = await prisma.order.findUniqueOrThrow({ where: { id: copied.id }, include: orderRelations });
   assert.equal(updated.addresses.length, 3);
   assert.equal(updated.positions.length, 1);
+  assert.equal(updated.revision, copied.revision + 1);
+  const saves = await Promise.all(["First editor", "Second editor"].map((note) =>
+    fetch(`${base}/${copiedNumber}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...edited, note, revision: updated.revision }),
+    })));
+  assert.deepEqual(saves.map((response) => response.status).sort(), [200, 409]);
+  const winner = saves.find((response) => response.ok)!;
+  const winningOrder = await responseData(winner);
+  const latest = await prisma.order.findUniqueOrThrow({ where: { id: copied.id }, include: orderRelations });
+  assert.equal(latest.revision, updated.revision + 1);
+  assert.deepEqual(orderDataWithRelations(latest), winningOrder.data);
   await prisma.orderAddress.update({ where: { orderId_role: { orderId: copied.id, role: "FROM" } }, data: { street: "Relationale Teststrasse 9" } });
   const read = await fetch(`${base}/${copiedNumber}`);
   const readData = (await responseData(read)).data;
@@ -260,11 +272,13 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   assert.ok(address && typeof address !== "string");
   const base = `http://127.0.0.1:${address.port}/invoices`;
   const sequenceBefore = await prisma.invoiceNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
+  const orderSequenceBefore = await prisma.orderNumberSequence.findUniqueOrThrow({ where: { id: 1 } });
   const orderNumbers: number[] = [];
   const invoiceIds: string[] = [];
   context.after(async () => {
     await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
     await prisma.order.deleteMany({ where: { orderNumber: { in: orderNumbers } } });
+    await prisma.orderNumberSequence.update({ where: { id: 1 }, data: { nextValue: orderSequenceBefore.nextValue } });
     await prisma.invoiceNumberSequence.update({ where: { id: 1 }, data: { nextValue: sequenceBefore.nextValue } });
   });
 
@@ -361,7 +375,7 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   const conflictingUpdate = await fetch(`${base}/${invoiceId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...invoiceInput, invoiceNumber: manualNumber }),
+    body: JSON.stringify({ ...invoiceInput, invoiceNumber: manualNumber, revision: 0 }),
   });
   assert.equal(conflictingUpdate.status, 409);
   assert.deepEqual(await responseError(conflictingUpdate), {
@@ -371,7 +385,7 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   const updateResponse = await fetch(`${base}/${invoiceId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(invoiceInput),
+    body: JSON.stringify({ ...invoiceInput, revision: 0 }),
   });
   assert.equal(updateResponse.status, 200);
   const updated = await responseData(updateResponse);
@@ -385,14 +399,25 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
   assert.deepEqual(updated.entries, invoiceInput.entries);
   assert.deepEqual(updated.dueDates, invoiceInput.dueDates);
   assert.equal(updated.archivedAt, null);
+  assert.equal(updated.revision, 1);
+  const saves = await Promise.all(["First invoice editor", "Second invoice editor"].map((text) =>
+    fetch(`${base}/${invoiceId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...invoiceInput, text, revision: updated.revision }),
+    })));
+  assert.deepEqual(saves.map((response) => response.status).sort(), [200, 409]);
+  const winner = await responseData(saves.find((response) => response.ok)!);
+  const latest = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
+  assert.equal(latest.revision, 2);
+  assert.equal(latest.text, winner.text);
 
   const invalid = await fetch(`${base}/${invoiceId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...invoiceInput, customerName: "" }),
+    body: JSON.stringify({ ...invoiceInput, customerName: "", revision: updated.revision }),
   });
   assert.equal(invalid.status, 400);
-  assert.deepEqual(await responseError(invalid), { code: "INVALID_INVOICE", message: "Rechnungsdatum und Kunde sind erforderlich." });
+  assert.deepEqual(await responseError(invalid), { code: "INVALID_INVOICE", message: "Ein gültiges Rechnungsdatum und ein Kunde sind erforderlich." });
 
   const archiveResponse = await fetch(`${base}/${invoiceId}/archive`, { method: "POST" });
   assert.equal(archiveResponse.status, 200);
@@ -405,7 +430,7 @@ test("invoice HTTP lifecycle preserves envelopes, numbering, archive state, PDF 
     assertRecord(item);
     return item.id === invoiceId;
   }));
-  assert.equal((await fetch(`${base}/${invoiceId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(invoiceInput) })).status, 409);
+  assert.equal((await fetch(`${base}/${invoiceId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...invoiceInput, revision: updated.revision }) })).status, 409);
 
   const restoreResponse = await fetch(`${base}/${invoiceId}/restore`, { method: "POST" });
   assert.equal(restoreResponse.status, 200);
@@ -459,7 +484,7 @@ test("manual invoice creation advances only upwards, rolls back conflicts, and s
   await assert.rejects(persistInvoice({ ...input, invoiceNumber: duplicate.invoiceNumber }), uniqueFailure);
   assert.equal(await currentNext(), beforeFailure);
   const { updateInvoice } = await import("../../src/invoices/invoice-service.js");
-  await updateInvoice(duplicate.id, { ...input, invoiceNumber: `R-${base + 2000}` }, duplicate.invoiceNumber);
+  await updateInvoice(duplicate.id, { ...input, invoiceNumber: `R-${base + 2000}` }, duplicate.invoiceNumber, duplicate.revision);
   assert.equal(await currentNext(), beforeFailure);
 });
 

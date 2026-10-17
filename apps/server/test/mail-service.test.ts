@@ -90,6 +90,35 @@ test("Hostinger client classifies provider errors without retaining an error bod
   await assert.rejects(() => client.send({ to: ["customer@example.test"], subject: "Test", html: "<p>Test</p>", text: "Test" }), (error: unknown) => error instanceof MailDeliveryError && error.code === "ERR_INVALID_RECIPIENT" && !error.retryable);
 });
 
+test("Hostinger send network loss, timeout and upstream failures are ambiguous, not retryable", async () => {
+  const config = { apiToken: "test-token", mailboxResourceId: "mailbox", apiBaseUrl: new URL("https://mail.example.test") };
+  const message = { to: ["customer@example.test"], subject: "Test", html: "<p>Test</p>", text: "Test" };
+  for (const status of [500, 502, 504, 200]) {
+    const client = new HostingerMailClient(config, async () => Response.json({ code: "ERR_GATEWAY_TIMEOUT" }, { status }));
+    await assert.rejects(client.send(message), (error: unknown) => error instanceof MailDeliveryError && error.outcome === "UNKNOWN" && !error.retryable);
+  }
+  const network = new HostingerMailClient(config, async () => { throw new TypeError("connection lost"); });
+  await assert.rejects(network.send(message), (error: unknown) => error instanceof MailDeliveryError && error.code === "MAIL_NETWORK_ERROR" && error.outcome === "UNKNOWN" && !error.retryable);
+  const timeout = new HostingerMailClient(config, async (_url, init) => new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+  }), 1);
+  await assert.rejects(timeout.send(message), (error: unknown) => error instanceof MailDeliveryError && error.code === "MAIL_TIMEOUT" && error.outcome === "UNKNOWN" && !error.retryable);
+});
+
+test("preflight failures are known not sent, rate limits can retry and rejections cannot", async () => {
+  const config = { apiToken: "test-token", mailboxResourceId: "mailbox", apiBaseUrl: new URL("https://mail.example.test") };
+  const message = { to: ["customer@example.test"], subject: "Test", html: "<p>Test</p>", text: "Test" };
+  for (const status of [401, 403, 422, 429]) {
+    const client = new HostingerMailClient(config, async () => Response.json({ code: "ERR_REJECTED" }, { status }));
+    await assert.rejects(client.send(message), (error: unknown) => error instanceof MailDeliveryError && error.outcome === "NOT_SENT" && error.retryable === (status === 429));
+  }
+  let requests = 0;
+  const preflight = new HostingerMailClient(config, async () => { requests++; throw new TypeError("connection lost"); });
+  await assert.rejects(preflight.send({ ...message, expectedFromAddress: "sender@example.test" }),
+    (error: unknown) => error instanceof MailDeliveryError && error.outcome === "NOT_SENT" && error.retryable);
+  assert.equal(requests, 1);
+});
+
 test("stored sender settings are used by all server mail flows", async () => {
   const sent: Array<{ displayName?: string; expectedFromAddress?: string }> = [];
   const service = new MailService({ send: async (message) => { sent.push(message); } },

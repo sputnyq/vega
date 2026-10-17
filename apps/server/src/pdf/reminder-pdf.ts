@@ -1,7 +1,7 @@
 import type { Buffer } from "node:buffer";
-import { formatGermanDate, reminderDelayDays } from "@vega/domain";
+import { addInvoiceAmounts, formatGermanDate, reminderDelayDays } from "@vega/domain";
 import type { Invoice, ReminderEvent } from "../generated/prisma/client.js";
-import { calculateInvoiceTotals, drawBankFooter, drawHeading, drawRight, drawTable, drawText, euro, filenameName, formatDate, PAGE, parseEntries, startAccountingPdf } from "./accounting-pdf.js";
+import { calculateInvoiceTotals, drawBankFooter, drawHeading, drawTotals, drawTable, drawText, euro, filenameName, formatDate, PAGE, parseEntries, startAccountingPdf } from "./accounting-pdf.js";
 
 type ReminderInvoice = Pick<Invoice, "invoiceNumber" | "invoiceDate" | "company" | "customerNameSnapshot" | "customerStreet" | "customerPostalCity" | "entries" | "taxPercent">;
 
@@ -18,8 +18,8 @@ export async function generateReminderPdf(reminder: ReminderEvent, invoice: Remi
   const outstanding = Number(reminder.outstandingAmount);
   y = drawTable(doc, ["Offener Betrag", "Fälligkeit", "Verzug"], [[euro(outstanding), formatGermanDate(previousDueDate), `${reminderDelayDays(previousDueDate, dueDate)} Tage`]], columns, y, center, "#ff0000") + 14;
   const fee = Number(reminder.fee);
-  drawRight(doc, [`Mahngebühr:   ${euro(fee)}`, `Summe fälliger Posten:   ${euro(outstanding + fee)}`], y, 10);
-  drawBankFooter(doc, Math.max(y + 40, 725));
+  y = drawTotals(doc, [`Mahngebühr:   ${euro(fee)}`, `Summe fälliger Posten:   ${euro(addInvoiceAmounts([outstanding, fee]))}`], y, 40, 0);
+  drawBankFooter(doc, Math.max(y, 725));
   doc.end(); return done;
 }
 

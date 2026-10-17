@@ -28,6 +28,7 @@
     "db:migrate:status": "prisma migrate status",
     "db:check-schema": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
     "db:seed": "prisma db seed",
+    "db:import-legacy-catalog": "tsx prisma/import-legacy-catalog.ts",
     "auth:generate-schema": "auth generate --config apps/server/src/auth.ts --adapter prisma --output prisma/schema.prisma",
     "auth:recover-admin": "tsx prisma/recover-admin.ts",
     "build": "npm run db:generate && npm run typecheck && npm run build:server && npm run build:frontends",
@@ -42,9 +43,11 @@
     "start": "npm run start --workspace @vega/server"
   },
   "devDependencies": {
+    "@types/jsdom": "30.0.0",
     "auth": "1.7.7",
     "concurrently": "9.2.5",
     "dotenv": "16.6.1",
+    "jsdom": "30.1.3",
     "oxlint": "1.87.0",
     "prisma": "7.10.0",
     "tsx": "4.23.15",
@@ -55,7 +58,7 @@
     "@prisma/adapter-mariadb": {
       "mariadb": "3.5.4"
     },
-    "mysql2": "3.24.5",
+    "mysql2": "3.24.6",
     "shell-quote": "1.12.0"
   },
   "allowScripts": {
