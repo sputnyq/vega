@@ -27,6 +27,16 @@ Nutzer (`/settings/users`) gegliedert. Legacy-Content-Pfade bleiben
 als weitergeleitete Aliase verfügbar; archivierte Orders/Rechnungen und Profil
 haben eigene Routen.
 
+Maintenance (`/maintenance`) ist ein eigenständiger Hauptmenüpunkt auf derselben
+Ebene wie Optionen und ausschließlich für Admins sichtbar und zugänglich.
+Der bisherige Pfad `/settings/setup` leitet auf `/maintenance` weiter.
+Die Seite stellt den serverseitig aus `APP_BASE_URL` erzeugten WordPress-Loadercode
+und eine explizit freigegebene Liste von Runtime-Variablennamen mit Setzstatus
+bereit, niemals geheime Werte. Ein manuell gestarteter, begrenzter Smoke-Test
+prüft Datenbank, Formular-Build und konfigurierte Mail-/Google-/GCS-Zugänge
+ohne Fachdatenänderung oder Mailversand; Einzelheiten und Prüfgrenzen stehen
+in `operations.md`.
+
 Die Admin-Oberfläche unterstützt unter „Mein Profil“ → „Darstellung“ die Auswahl
 „Hell“, „Dunkel“ und „System“, auch auf Mobilgeräten. „System“ ist der Standard
 und folgt Änderungen der Betriebssystemeinstellung automatisch. Eine Auswahl
@@ -73,7 +83,8 @@ Formularpositionen verwenden „Objekt hinzufügen“, ebenfalls rechtsbündig.
 Katalogtabellen bündeln Bearbeiten und Löschen in Drei-Punkte-Menüs.
 
 Der Möbelkatalog enthält neben ID und Kategoriezuordnungen nur Name, Volumen,
-Schrittgröße (Standard 1) und Sortierung (Standard 0). Im Bearbeitungsdialog
+Schrittgröße in Vielfachen von 0,5 (Minimum 0,5, Standard 1) und Sortierung
+(Standard 0). Im Bearbeitungsdialog
 folgen unter diesen Feldern die Kategorien als vertikale Checkbox-Liste,
 geordnet nach Kategorie-Sortierung und bei Gleichstand nach ID.
 Gewicht, Montage-/Aufpreise und die bisherigen Möbel-Flags entfallen aus

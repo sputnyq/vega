@@ -122,11 +122,13 @@ function planFurniture(raw: unknown, plan: LegacyCatalogImportPlan): void {
       plan.skipped.push(`Möbel "${name}" ohne gültiges Volumen übersprungen.`);
       continue;
     }
-    // The target structure only knows whole steps; legacy half steps are rounded up.
     const rawStep = numberValue(entry.step);
-    const step = rawStep === null ? 1 : Math.max(1, Math.ceil(rawStep));
+    const step = rawStep !== null && rawStep >= 0.5 && rawStep <= 100_000
+      && Math.abs(rawStep * 2 - Math.round(rawStep * 2)) <= 0.00001
+      ? rawStep
+      : 1;
     if (rawStep !== null && rawStep !== step) {
-      plan.skipped.push(`Möbel "${name}" hatte den Bruchschritt ${rawStep}; übernommen mit Schritt ${step}.`);
+      plan.skipped.push(`Möbel "${name}" hatte die ungültige Schrittgröße ${rawStep}; übernommen mit Schritt 1.`);
     }
     const sortOrder = integerValue(entry.sortOrder) ?? 0;
     const categoryNames = Array.isArray(entry.categoryRefs)

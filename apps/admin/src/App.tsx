@@ -12,6 +12,7 @@ import { NotFoundPage } from "./components/NotFoundPage.js";
 import { RoutePlaceholderPage } from "./components/RoutePlaceholderPage.js";
 import { ProfilePage } from "./profile/ProfilePage.js";
 import { OptionsPage } from "./settings/OptionsPage.js";
+import { MaintenancePage } from "./maintenance/MaintenancePage.js";
 import { UserManagementPage } from "./settings/UserManagementPage.js";
 import { resolveAdminRoute } from "./routes.js";
 import type { PendingInitialPassword, StaffUser } from "./types.js";
@@ -174,6 +175,8 @@ export function App() {
           </Suspense>
         : route.settingsArea === "options"
           ? <OptionsPage />
+          : route.path === "/maintenance"
+            ? <MaintenancePage />
           : route.settingsArea === "content"
             ? <Suspense fallback={<Container sx={{ py: 8, display: "flex", justifyContent: "center" }}><CircularProgress /></Container>}>
                 <ContentManagementPage route={route} />

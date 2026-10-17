@@ -58,7 +58,7 @@ test("built single-process deployment serves API, both frontends and absolute lo
   assert.deepEqual(await health.json(), { status: "ok", service: "vega" });
   assert.equal(health.headers.get("access-control-allow-origin"), "https://wordpress.example.test");
   assert.ok(health.headers.get("content-security-policy"));
-  for (const path of ["/login", "/customer-form/"]) {
+  for (const path of ["/login", "/customer-form/", "/maintenance"]) {
     const response = await fetch(`${base}${path}`);
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", /text\/html/u);
@@ -82,4 +82,6 @@ test("built single-process deployment serves API, both frontends and absolute lo
   assert.equal(bundle.includes("https://vega.example.test"), false, "runtime origin must not be embedded in Vite output");
   assert.equal((await fetch(`${base}/api/public/orders/1000`)).status, 404);
   assert.equal((await fetch(`${base}/api/admin/settings`)).status, 401);
+  assert.equal((await fetch(`${base}/api/admin/maintenance`)).status, 401);
+  assert.equal((await fetch(`${base}/api/admin/maintenance/smoke-test`, { method: "POST" })).status, 401);
 });

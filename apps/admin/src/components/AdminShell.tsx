@@ -8,6 +8,7 @@ import {
 } from "react";
 import {
   AccountCircleOutlined,
+  AdminPanelSettingsOutlined,
   CategoryOutlined,
   ChairOutlined,
   ChevronLeft,
@@ -30,6 +31,7 @@ import {
   ReceiptLongOutlined,
   SaveOutlined,
   SettingsOutlined,
+  BuildOutlined,
 } from "@mui/icons-material";
 import {
   AppBar,
@@ -105,6 +107,9 @@ export function AdminShell({
   const [contentOpen, setContentOpen] = useState(
     route.settingsArea === "content",
   );
+  const [managementOpen, setManagementOpen] = useState(
+    route.settingsArea === "users" || route.path === "/maintenance",
+  );
   const [archiveOpen, setArchiveOpen] = useState(
     pathname === "/orders/archived" || pathname === "/invoices/archived",
   );
@@ -124,6 +129,8 @@ export function AdminShell({
   const notify = useAdminNotification();
   const isAdmin = user.role === "Admin";
   const isContentArea = route.settingsArea === "content";
+  const isManagementArea =
+    route.settingsArea === "users" || route.path === "/maintenance";
   const isArchivePath =
     pathname === "/orders/archived" || pathname === "/invoices/archived";
   const editedOrderNumber = pathname.match(/^\/edit\/(-?\d+)$/u)?.[1];
@@ -155,6 +162,10 @@ export function AdminShell({
   useEffect(() => {
     if (isContentArea) setContentOpen(true);
   }, [isContentArea]);
+
+  useEffect(() => {
+    if (isManagementArea) setManagementOpen(true);
+  }, [isManagementArea]);
 
   useEffect(() => {
     if (isArchivePath) setArchiveOpen(true);
@@ -706,6 +717,63 @@ export function AdminShell({
                     {!sidebarCollapsed && <ListItemText primary="Optionen" />}
                   </ListItemButton>
                   <ListItemButton
+                    title="Verwaltung"
+                    aria-label="Verwaltung"
+                    aria-expanded={!sidebarCollapsed && managementOpen}
+                    selected={false}
+                    onClick={() => {
+                      if (sidebarCollapsed) {
+                        setSidebarCollapsed(false);
+                        setManagementOpen(true);
+                      } else {
+                        setManagementOpen((open) => !open);
+                      }
+                    }}
+                  >
+                    <ListItemIcon><AdminPanelSettingsOutlined /></ListItemIcon>
+                    {!sidebarCollapsed && <ListItemText primary="Verwaltung" />}
+                    {!sidebarCollapsed &&
+                      (managementOpen ? <ExpandLess /> : <ExpandMore />)}
+                  </ListItemButton>
+                  <Collapse
+                    in={managementOpen && !sidebarCollapsed}
+                    timeout="auto"
+                    unmountOnExit
+                  >
+                    <List component="div" disablePadding>
+                      <ListItemButton
+                        title="Nutzer"
+                        aria-label="Nutzer"
+                        sx={{ pl: 4 }}
+                        selected={route.settingsArea === "users"}
+                        onClick={() => {
+                          setDrawerOpen(false);
+                          navigate("/settings/users");
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <PeopleAltOutlined />
+                        </ListItemIcon>
+                        {!sidebarCollapsed && <ListItemText primary="Nutzer" />}
+                      </ListItemButton>
+                      <ListItemButton
+                        title="Maintenance"
+                        aria-label="Maintenance"
+                        sx={{ pl: 4 }}
+                        selected={route.path === "/maintenance"}
+                        onClick={() => {
+                          setDrawerOpen(false);
+                          navigate("/maintenance");
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <BuildOutlined />
+                        </ListItemIcon>
+                        {!sidebarCollapsed && <ListItemText primary="Maintenance" />}
+                      </ListItemButton>
+                    </List>
+                  </Collapse>
+                  <ListItemButton
                     title="Content"
                     aria-label="Content"
                     aria-expanded={!sidebarCollapsed && contentOpen}
@@ -791,20 +859,6 @@ export function AdminShell({
                       ))}
                     </List>
                   </Collapse>
-                  <ListItemButton
-                    title="Nutzer"
-                    aria-label="Nutzer"
-                    selected={route.settingsArea === "users"}
-                    onClick={() => {
-                      setDrawerOpen(false);
-                      navigate("/settings/users");
-                    }}
-                  >
-                    <ListItemIcon>
-                      <PeopleAltOutlined />
-                    </ListItemIcon>
-                    {!sidebarCollapsed && <ListItemText primary="Nutzer" />}
-                  </ListItemButton>
                 </>
               )}
               {!sidebarCollapsed && <Divider sx={{ my: 1 }} />}

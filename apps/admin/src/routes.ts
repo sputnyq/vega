@@ -18,6 +18,8 @@ const fixedAdminRoutes: Record<string, AdminRoute> = {
   "/orders/archived": { path: "/orders/archived", title: "Archivierte Aufträge", description: "Archivierte Aufträge wiederherstellen" },
   "/profile": { path: "/profile", title: "Mein Profil", description: "Mitarbeiterkonto und Sicherheit", profile: true },
   "/settings": { path: "/settings", title: "Optionen", description: "Vorhandene globale Einstellungen", adminOnly: true, settingsArea: "options" },
+  "/maintenance": { path: "/maintenance", title: "Maintenance", description: "Kundenformular einbinden und Runtime-Konfiguration prüfen", adminOnly: true },
+  "/settings/setup": { path: "/maintenance", title: "Maintenance", description: "Kundenformular einbinden und Runtime-Konfiguration prüfen", adminOnly: true },
   "/settings/options": { path: "/settings/options", title: "Optionen", description: "Vorhandene globale Einstellungen", adminOnly: true, settingsArea: "options" },
   "/settings/content": { path: "/settings/services", title: "Leistungen", description: "Leistungen und Preisvorgaben", adminOnly: true, settingsArea: "content", contentSection: "services" },
   "/settings/content/furniture": { path: "/settings/furniture", title: "Möbel", description: "Möbelstammdaten", adminOnly: true, settingsArea: "content", contentSection: "furniture" },
