@@ -93,6 +93,41 @@ Exakte Versionen sind in `package.json`/`package-lock.json` gepinnt; offen ist n
   - Extern versandte E-Mails können nicht als tatsächlicher Versand erkannt werden.
 - Audit-/Aktionsprotokoll: Aktion, Zeitstempel, Benutzername und Auftrags-/Angebotsbezug. Keine Feld-Diffs oder Vorher-/Nachher-Werte. E-Mail-Versand wird nur bei Erfolg als versendet markiert. Audit-Einträge werden mit dem Auftrag gelöscht.
 
+#### Serverautoritative Angebotskalkulation
+
+- Nur Admins und Kundenberater können auf ausdrücklichen Klick über
+  `POST /api/admin/orders/pricing-preview` einen Staff-Entwurf kalkulieren.
+  Der Browser ist weder Katalog- noch Berechnungsquelle. Speichern, Kopieren,
+  PDF-Export und Mailversand kalkulieren nicht automatisch neu.
+- `CatalogOffer.sum` ist der gepflegte Basispreis; `hourPrice` beschreibt
+  weitere Stunden, aber erzeugt keine zusätzliche Arbeitsstunde im Angebot.
+  Ein Rabatt wird ausschließlich auf den Basispreis gerechnet.
+- Fahrtkosten in München nutzen `ridingCosts`; andernorts gilt das Maximum aus
+  dieser Pauschale und `distanceKm * kmPrice * trucks`. Der Kilometerbetrag
+  wird auf das nächste Vielfache von 5 EUR gerundet. Lokale Adressen werden
+  anhand ihres Ortsfelds erkannt; aktive Haupt- und aktivierte Nebenadressen
+  werden berücksichtigt.
+- Halteverbotszonen verwenden die Summe der aktivierten Adressen mal
+  `hvzPrice`. Alle ausgewählten Katalog-Services und Packungen werden anhand
+  der aktuellen Mengen und serverseitigen Einzelpreise einbezogen; Packungen
+  behalten den Hinweis „wird nach Verbrauch berechnet“. Freitextpositionen
+  ohne Tarif blockieren die automatische Kalkulation, nicht das manuelle
+  Angebot.
+- Jede fertige Kondition wird auf Cent gerundet; erst danach wird die
+  Bruttosumme exakt gebildet. Order-Bruttobeträge werden nicht mit der
+  Netto-/Umsatzsteuerarithmetik von Rechnungen vermischt.
+- Berechnete Konditionen können direkt angepasst werden. Eine neue Kalkulation
+  ersetzt bestehende Konditionen erst nach Bestätigung. Gespeicherte
+  Konditionen sind die verbindlichen Beträge; Katalogänderungen werden nur
+  durch eine neue, ausdrücklich bestätigte Kalkulation übernommen.
+- Ein serverseitiger `pricingSnapshot` im bestehenden Order-JSON hält die
+  verwendeten Preisstände für Services, Packungen und AGB sowie die
+  Preisgrundlage. PDF-Tabellen und Angebotsmails verwenden gespeicherte
+  Konditionen; Order-PDF-Preislisten verwenden denselben Snapshot und zeigen
+  bei alten Orders ohne Snapshot keine erfundenen historischen Einzelpreise.
+  Kopien übernehmen den Snapshot unverändert. Keine öffentliche Preisvorschau
+  und keine anonymen Preis-/Snapshot-Overrides.
+
 ### 4.4 Archivierung und Aufbewahrung
 
 - Aufträge werden nur durch ausdrückliche Benutzeraktion archiviert. Eine separate Archivansicht erlaubt Wiederherstellung.
@@ -119,6 +154,11 @@ Exakte Versionen sind in `package.json`/`package-lock.json` gepinnt; offen ist n
   die transaktionale automatische Vergabe. Änderungen bestehender Rechnungen
   beeinflussen den Nummernkreis weiterhin nicht (ADR 0005).
 - Rechnungen sind einfache CRUD-Datensätze ohne Versionshistorie. Änderungen überschreiben den aktuellen DB-Stand.
+- Auftrags- und Rechnungsänderungen verlangen die geladene `revision`.
+  Der Server erhöht sie atomar; ein überholter Stand liefert `409`, ohne
+  den gespeicherten Beleg oder den lokalen Entwurf zu überschreiben.
+  Archivieren und Restore erhöhen die Revision ebenfalls. Das ist
+  Konfliktschutz, keine Versionshistorie.
 - PDFs werden im Backend bei Bedarf erzeugt und heruntergeladen bzw. als Mailanhang erzeugt; es gibt keine dauerhaft gespeicherten PDF-Dateien. Admins sichern benötigte externe PDF-Stände selbst.
 - Gutschriften bleiben optional, eine pro Rechnung, in eigener Tabelle und mit Nummerierungsverhalten wie bisher. Mahnungen werden als Ereignisse an Rechnungen gespeichert. Rechnungen, Gutschriften und Mahnungsereignisse erhalten eigene Archiv-/Purge-Felder; Admins archivieren sie einheitlich und der App-Purge erfolgt jeweils 30 Tage danach.
 
@@ -128,8 +168,15 @@ Exakte Versionen sind in `package.json`/`package-lock.json` gepinnt; offen ist n
 - E-Mail-Vorlagen bleiben codebasiert wie bisher. Kundenberater dürfen den konkreten Text/Betreff vor jedem Versand bearbeiten.
 - Firmenempfänger, Absendername und Absenderadresse sind nicht geheime Admin-Einstellungen. Hostinger API-Token und Mailbox-ID sind ausschließlich serverseitige Umgebungsvariablen.
 - Requests werden zuerst gespeichert. Mailfehler verlieren keine Anfrage; Fehler werden angezeigt/protokolliert und können erneut versucht werden.
+- Automatische Wiederholung gilt nur bei sicher nicht erfolgtem Versand.
+  Unklare Ergebnisse nach dem Send-POST oder verwaiste `SENDING`-Claims
+  werden `UNKNOWN` und benötigen einen belegten Providerabgleich; kein
+  Blind-Retry. Die Bedienung und Recovery stehen in `hostinger-mail-cron.md`.
 - In-App-Mailaktionen protokollieren Actor/Aktion/Zeit. Versand gilt nur bei erfolgreicher Hostinger-API-Antwort als gesendet. Kopieren eines Texts für externen Versand protokolliert keinen tatsächlichen Versand.
 - Bestehende Angebots-/Rechnungs-PDF-Layouts bleiben zunächst erhalten; PDF-Erzeugung wandert vom Browser ins Backend.
+- Lange Rechnungen, Gutschriften und Mahnungen erhalten explizite
+  Seitenumbrüche und wiederholte Tabellenköpfe; Positionen, Summen und
+  Schlussangaben dürfen nicht außerhalb der Seite verschwinden.
 
 ### 4.7 Bilder
 

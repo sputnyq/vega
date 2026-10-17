@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
-import type { CreateOrderInput, CreditNoteInput, EmailDraft } from "@vega/domain";
+import { calculateInvoiceTotals, isInvoiceAmount, type CreateOrderInput, type CreditNoteInput, type EmailDraft } from "@vega/domain";
 import type { AppConfig } from "../config.js";
 import type { Invoice } from "../generated/prisma/client.js";
 import { createConfiguredMailService } from "../mail/configured-mail-service.js";
 import { creditNoteEmail } from "../mail/staff-email-templates.js";
-import { invalidEmail, mailNotConfigured, respondWithSendResult, sendStaffEmail, validateStaffEmailInput } from "../mail/staff-email-service.js";
+import { invalidEmail, mailNotConfigured, respondWithSendResult, respondWithStaffEmailStatus, sendStaffEmail, validateStaffEmailInput } from "../mail/staff-email-service.js";
 import { orderDataWithRelations, orderRelations } from "../orders/order-relations.js";
 import { creditNotePdfFilename, generateCreditNotePdf } from "../pdf/credit-note-pdf.js";
 import { prisma } from "../prisma.js";
@@ -33,6 +33,7 @@ export function createCreditNoteRouter(config: Pick<AppConfig, "mail"> = { mail:
       const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
       if (!invoice) return fail(res, 404, "INVOICE_NOT_FOUND", "Rechnung nicht gefunden.");
       if (invoice.archivedAt) return invoiceArchived(res);
+      if (!isInvoiceAmount(calculateInvoiceTotals(input.value.entries, Number(invoice.taxPercent)).total)) return invalid(res, "Gutschriftbetrag überschreitet den unterstützten Bereich.");
       if (await prisma.creditNote.findUnique({ where: { invoiceId: invoice.id }, select: { id: true } })) return creditExists(res);
       const credit = await prisma.creditNote.create({ data: { id: randomUUID(), invoiceId: invoice.id, ...creditData(input.value, invoice) } });
       res.status(201).json({ data: toCreditNoteDto(credit) });
@@ -44,6 +45,7 @@ export function createCreditNoteRouter(config: Pick<AppConfig, "mail"> = { mail:
       const existing = await prisma.creditNote.findUnique({ where: { id: req.params.id }, include: { invoice: true } });
       if (!existing) return notFound(res);
       if (existing.archivedAt) return creditArchived(res);
+      if (!isInvoiceAmount(calculateInvoiceTotals(input.value.entries, Number(existing.invoice?.taxPercent ?? existing.taxPercent)).total)) return invalid(res, "Gutschriftbetrag überschreitet den unterstützten Bereich.");
       const snapshot = existing.invoice ? creditData(input.value, existing.invoice) : { creditNumber: input.value.creditNumber, creditDate: dateFromIso(input.value.creditDate), text: input.value.text, entries: input.value.entries as object[] };
       const credit = await prisma.creditNote.update({ where: { id: existing.id, archivedAt: null }, data: snapshot });
       res.json({ data: toCreditNoteDto(credit) });
@@ -69,6 +71,13 @@ export function createCreditNoteRouter(config: Pick<AppConfig, "mail"> = { mail:
       const body: EmailDraft = { to: context.to, ...context.draft, attachmentNames: [creditNotePdfFilename(context.credit)] };
       res.setHeader("Cache-Control", "no-store");
       res.json({ data: body });
+    } catch (error) { next(error); }
+  });
+  router.post("/:id/emails/status", async (req, res, next) => {
+    try {
+      const credit = await prisma.creditNote.findUnique({ where: { id: req.params.id }, select: { id: true, invoice: { select: { orderId: true } } } });
+      if (!credit) return notFound(res);
+      await respondWithStaffEmailStatus(req, res, `credit-note:${credit.id}`, credit.invoice?.orderId ? { orderId: credit.invoice.orderId } : {});
     } catch (error) { next(error); }
   });
   router.post("/:id/emails", async (req, res, next) => {

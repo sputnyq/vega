@@ -19,6 +19,15 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
 - Rechnungen dürfen nicht per FK-Cascade mit Orders gelöscht werden.
 - Startkatalog/Preise werden nach Setup manuell durch Admins angelegt.
 - Das Frontend erhält keinen Zugriff auf beliebige Order-IDs/öffentliche Order-Reads.
+- Auftrags-PUTs vergleichen `revision` atomar vor Relationsänderungen;
+  ein veralteter Stand liefert `409`. Archiv/Restore erhöhen die Revision,
+  behalten aber `updatedAt` bei. Kopien sperren ihre aktive Quelle während
+  der Transaktion.
+- Historische Katalog-Snapshots bleiben auch nach Kataloglöschung oder
+  Ausblenden bearbeitbar; Mengenänderungen aktualisieren keine alten
+  Namen/Volumina. Neue bzw. geänderte Referenzen benötigen einen gültigen
+  aktuellen Katalogeintrag. Normalisierte Daten werden vor Persistenz
+  nochmals vollständig validiert.
 
 ## Umsetzungsstand (2026-10-09)
 
@@ -35,3 +44,22 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
   Auftragseigene Mail-Outbox-Inhalte und Mailereignisse werden ebenso wie das
   Aktionsjournal mit dem Auftrag gelöscht, nicht als personenbezogene Waisen
   weiter aufbewahrt.
+
+## Preisstand und serverseitige Kalkulation (2026-10-16)
+
+- Die automatische Preisvorschau ist eine ausdrückliche Staff-Aktion. Sie
+  ersetzt vorhandene Konditionen nur nach Bestätigung; direkte individuelle
+  Konditionsänderungen bleiben möglich.
+- Gespeicherte Angebotsbeträge ändern sich nicht bei Katalogänderung,
+  erneutem Speichern, Kopie, Export oder Mailversand. Nur eine bestätigte
+  Neukalkulation verwendet aktuelle Katalogwerte.
+- Die Berechnungsgrundlage und verwendeten Einzelpreis-/Tarifstände liegen als
+  validierter `pricingSnapshot` im bestehenden Order-JSON. Die endgültigen
+  Angebotspreise sind die gespeicherten Konditionen, keine zweite
+  konkurrierende Preisliste. Kopien erhalten eigenständige Snapshots.
+- Orders ohne Snapshot behalten ihre bisherigen Konditionen; fehlende
+  historische Einzelpreise werden in Preislisten nicht durch aktuelle
+  Katalogwerte ersetzt. Es erfolgt keine Migration von Bestandsdaten.
+- Serverseitige Dezimalarithmetik rundet fertige Konditionen auf Cent und
+  summiert diese Bruttobeträge. Rechnungs- und Mahnberechnungen bleiben
+  getrennt.

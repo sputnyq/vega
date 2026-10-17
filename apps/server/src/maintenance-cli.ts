@@ -14,10 +14,10 @@ try {
     const limit = resolveMaintenanceLimit(process.env.MAIL_MAINTENANCE_LIMIT);
     const result = await runMailMaintenance(mailService, limit);
     // Only counts are logged: never recipients, content, tokens, or provider bodies.
-    console.info(JSON.stringify({ event: "mail-maintenance", sent: result.sent, failed: result.failed, limit }));
+    console.info(JSON.stringify({ event: "mail-maintenance", sent: result.sent, failed: result.failed, unknown: result.unknown, limit }));
     process.exitCode = 0;
   }
-} catch (error) {
-  console.error(JSON.stringify({ event: "mail-maintenance-failed", code: error instanceof Error ? error.message : "MAINTENANCE_FAILED" }));
+} catch {
+  console.error(JSON.stringify({ event: "mail-maintenance-failed", code: "MAINTENANCE_FAILED" }));
   process.exitCode = 1;
 }

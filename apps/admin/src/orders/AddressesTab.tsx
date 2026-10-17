@@ -51,10 +51,10 @@ export function AddressesTab({ value, update, onDetailsChange }: AddressesTabPro
             type="number"
             label="Entfernung in km"
             value={details.distanceKm}
-            onChange={(event) => onDetailsChange({ ...details, distanceKm: Math.max(0, Number(event.target.value)) })}
+            onChange={(event) => onDetailsChange({ ...details, distanceKm: Math.max(0, Number(event.target.value)), distanceSource: "manual" })}
             slotProps={{ htmlInput: { min: 0, max: 10000, step: 1 } }}
           />
-          <RouteDistance value={value} onDistance={(distanceKm) => onDetailsChange({ ...details, distanceKm })} />
+          <RouteDistance value={value} onDistance={(distanceKm) => onDetailsChange({ ...details, distanceKm, distanceSource: "route" })} />
         </Stack>
       </Paper>
       <Grid container spacing={2} sx={{ alignItems: "stretch" }}>

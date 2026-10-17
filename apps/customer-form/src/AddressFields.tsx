@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Autocomplete, Grid, MenuItem } from "@mui/material";
+import { Alert, Autocomplete, Grid } from "@mui/material";
 import type { OrderAddressInput } from "@vega/domain";
 import type { AddressDraft } from "./form-model.js";
 import { request } from "./api.js";
@@ -142,35 +142,5 @@ export function AddressFields({
         </Grid>
       )}
     </Grid>
-  );
-}
-
-export function SelectField({
-  label,
-  value,
-  options,
-  onChange,
-  required = true,
-}: {
-  label: string;
-  value: string | undefined;
-  options: string[];
-  onChange: (value: string) => void;
-  required?: boolean;
-}) {
-  return (
-    <Field
-      select
-      required={required}
-      label={label}
-      value={value ?? ""}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {options.map((option) => (
-        <MenuItem key={option} value={option}>
-          {option}
-        </MenuItem>
-      ))}
-    </Field>
   );
 }

@@ -71,9 +71,12 @@ test("manual creation advances atomically only upwards and automatic creation us
 test("editing a manual number never touches the sequence and blank editing keeps the stored number", async (context) => {
   const advance = mockMethod(context, prisma.invoiceNumberSequence, "updateMany", () => { throw new Error("Unexpected sequence update"); });
   const allocate = mockMethod(context, prisma.invoiceNumberSequence, "update", () => { throw new Error("Unexpected sequence allocation"); });
-  mockMethod(context, prisma.invoice, "update", async (args: { data: Prisma.InvoiceUncheckedUpdateInput }) => args.data);
-  assert.equal((await updateInvoice("invoice", { ...input, invoiceNumber: "R-9000" }, "R-1")).invoiceNumber, "R-9000");
-  assert.equal((await updateInvoice("invoice", input, "R-1")).invoiceNumber, "R-1");
+  mockMethod(context, prisma, "$transaction", async (operation: (tx: Prisma.TransactionClient) => Promise<unknown>) => operation(prisma));
+  let saved: Prisma.InvoiceUncheckedUpdateManyInput = {};
+  mockMethod(context, prisma.invoice, "updateMany", async (args: { data: Prisma.InvoiceUncheckedUpdateManyInput }) => { saved = args.data; return { count: 1 }; });
+  mockMethod(context, prisma.invoice, "findUniqueOrThrow", async () => saved);
+  assert.equal((await updateInvoice("invoice", { ...input, invoiceNumber: "R-9000" }, "R-1", 0)).invoiceNumber, "R-9000");
+  assert.equal((await updateInvoice("invoice", input, "R-1", 1)).invoiceNumber, "R-1");
   assert.equal(advance.mock.callCount(), 0);
   assert.equal(allocate.mock.callCount(), 0);
 });

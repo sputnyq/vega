@@ -92,11 +92,15 @@ for (const scenario of ["archived", "deleted", "restored"] as const) {
       if (scenario === "deleted") return null;
       return { archivedAt: scenario === "archived" ? new Date("2026-10-11T10:00:00Z") : null };
     });
-    context.mock.method(client.invoice, "update", async (input: unknown) => {
-      assert.ok(typeof input === "object" && input !== null && "where" in input);
-      assert.deepEqual(input.where, { id: "invoice-test", archivedAt: null });
-      throw Object.assign(new Error("Record no longer matches the update condition"), { code: "P2025" });
-    });
+    context.mock.method(client, "$transaction", async (operation: (tx: unknown) => Promise<unknown>) => operation({
+      invoice: {
+        updateMany: async (input: { where: unknown; data: { revision: unknown } }) => {
+          assert.deepEqual(input.where, { id: "invoice-test", archivedAt: null, revision: 4 });
+          assert.deepEqual(input.data.revision, { increment: 1 });
+          return { count: 0 };
+        },
+      },
+    }));
     const app = express();
     app.use(express.json());
     app.use("/invoices", createInvoiceRouter());
@@ -106,11 +110,74 @@ for (const scenario of ["archived", "deleted", "restored"] as const) {
     const address = server.address();
     assert.ok(address && typeof address !== "string");
     const response = await fetch(`http://127.0.0.1:${address.port}/invoices/invoice-test`, {
-      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(invoiceInput),
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...invoiceInput, revision: 4 }),
     });
     assert.equal(response.status, scenario === "deleted" ? 404 : 409);
     const body = await response.json() as { error: { code: string } };
     assert.equal(body.error.code, scenario === "archived" ? "INVOICE_ARCHIVED" : scenario === "deleted" ? "INVOICE_NOT_FOUND" : "INVOICE_CONFLICT");
     assert.equal(reads, 2);
   });
+}
+
+test("invoice PUT requires a bounded numeric revision and rejects raw JSON overflow", async (context) => {
+  let reads = 0;
+  context.mock.method(client.invoice, "findUnique", async () => { reads += 1; return null; });
+  const base = await listen(context);
+  for (const revision of [undefined, null, "0", -1, 0.1, 2_147_483_647, 1e100]) {
+    const response = await fetch(`${base}/invoice-test`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...invoiceInput, revision }),
+    });
+    assert.equal(response.status, 400, String(revision));
+  }
+  const response = await fetch(base, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...invoiceInput, entries: [{ description: "x", quantity: 1, unitPrice: "overflow" }] }).replace('"overflow"', "1e400"),
+  });
+  assert.equal(response.status, 400);
+  assert.equal(reads, 0);
+});
+
+test("two stale invoice drafts cannot overwrite each other and successful saves return the new revision", async (context) => {
+  const now = new Date("2026-10-11T10:00:00Z");
+  let stored = {
+    id: "invoice-test", ...invoiceInput, invoiceDate: now, invoiceNumber: "R-42",
+    customerNameSnapshot: "Test", orderNumberSnapshot: null, archivedAt: null, revision: 0, createdAt: now, updatedAt: now,
+  };
+  context.mock.method(client.invoice, "findUnique", async () => ({ ...stored }));
+  context.mock.method(client, "$transaction", async (operation: (tx: unknown) => Promise<unknown>) => operation({
+    invoice: {
+      updateMany: async ({ where, data }: { where: { revision: number }; data: { text: string; revision: { increment: number } } }) => {
+        if (where.revision !== stored.revision) return { count: 0 };
+        stored = { ...stored, text: data.text, revision: stored.revision + data.revision.increment };
+        return { count: 1 };
+      },
+      findUniqueOrThrow: async () => ({ ...stored }),
+    },
+  }));
+  const base = await listen(context);
+  const save = (text: string, revision: number) => fetch(`${base}/invoice-test`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...invoiceInput, text, revision }),
+  });
+  const first = await save("First draft", 0);
+  assert.equal(first.status, 200);
+  assert.equal((await first.json() as { data: { revision: number } }).data.revision, 1);
+  const stale = await save("Stale draft", 0);
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json() as { error: { code: string } }).error.code, "INVOICE_CONFLICT");
+  assert.equal(stored.text, "First draft");
+  assert.equal((await save("Refreshed draft", 1)).status, 200);
+  assert.equal(stored.revision, 2);
+});
+
+async function listen(context: test.TestContext) {
+  const app = express();
+  app.use(express.json());
+  app.use("/invoices", createInvoiceRouter());
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  return `http://127.0.0.1:${address.port}/invoices`;
 }

@@ -5,19 +5,42 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Alert, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { adminTheme } from "../src/theme.js";
-import { theme as customerTheme } from "../../customer-form/src/theme.js";
 
 test("checkboxes use their default left alignment in both applications", () => {
-  assert.equal(adminTheme.components?.MuiCheckbox?.styleOverrides?.root, undefined);
-  assert.equal(customerTheme.components?.MuiCheckbox?.styleOverrides?.root, undefined);
+  assert.equal(
+    adminTheme.components?.MuiCheckbox?.styleOverrides?.root,
+    undefined,
+  );
+  assert.equal(
+    customerTheme.components?.MuiCheckbox?.styleOverrides?.root,
+    undefined,
+  );
 });
 
 test("admin headings use semantic colors without replacing explicit colors", () => {
-  const html = renderToStaticMarkup(createElement(ThemeProvider, { theme: adminTheme },
-    createElement(Typography, { component: "h2", variant: "h6" }, "Berechnungsoptionen")));
+  const html = renderToStaticMarkup(
+    createElement(
+      ThemeProvider,
+      { theme: adminTheme },
+      createElement(
+        Typography,
+        { component: "h2", variant: "h6" },
+        "Berechnungsoptionen",
+      ),
+    ),
+  );
   assert.match(html, /color:var\(--mui-palette-text-primary\)/u);
-  const explicit = renderToStaticMarkup(createElement(ThemeProvider, { theme: adminTheme },
-    createElement(Typography, { component: "h2", variant: "h6", color: "error" }, "Titel")));
+  const explicit = renderToStaticMarkup(
+    createElement(
+      ThemeProvider,
+      { theme: adminTheme },
+      createElement(
+        Typography,
+        { component: "h2", variant: "h6", color: "error" },
+        "Titel",
+      ),
+    ),
+  );
   assert.match(explicit, /color:var\(--mui-palette-error-main\)/u);
 });
 
@@ -25,9 +48,18 @@ test("admin typography and compact fields are preserved", () => {
   assert.match(adminTheme.typography.fontFamily, /-apple-system/u);
   assert.equal(adminTheme.typography.button.textTransform, "none");
   assert.equal(adminTheme.shape.borderRadius, 8);
-  assert.equal(adminTheme.components?.MuiTextField?.defaultProps?.margin, "dense");
-  assert.equal(adminTheme.components?.MuiTextField?.defaultProps?.size, "small");
-  assert.equal(adminTheme.components?.MuiButton?.defaultProps?.disableElevation, true);
+  assert.equal(
+    adminTheme.components?.MuiTextField?.defaultProps?.margin,
+    "dense",
+  );
+  assert.equal(
+    adminTheme.components?.MuiTextField?.defaultProps?.size,
+    "small",
+  );
+  assert.equal(
+    adminTheme.components?.MuiButton?.defaultProps?.disableElevation,
+    true,
+  );
 });
 
 test("light and dark schemes provide distinct legible surfaces", () => {
@@ -58,7 +90,11 @@ test("glass styles override their opaque fallback in both color schemes", () => 
 });
 
 test("content surfaces use opaque semantic colors", () => {
-  for (const component of ["MuiPaper", "MuiCard", "MuiOutlinedInput"] as const) {
+  for (const component of [
+    "MuiPaper",
+    "MuiCard",
+    "MuiOutlinedInput",
+  ] as const) {
     const root = adminTheme.components?.[component]?.styleOverrides?.root;
     assert.ok(typeof root === "object" && root !== null);
     assert.equal(root.backgroundColor, "var(--mui-palette-background-paper)");
@@ -80,8 +116,13 @@ test("focus and reduced motion preferences work in both modes", () => {
       ["success", "#233B32", "#C4EAD6"],
       ["info", "#25364D", "#D0E1FF"],
     ] as const) {
-      const html = renderToStaticMarkup(createElement(ThemeProvider, { theme: adminTheme },
-        createElement(Alert, { variant: "filled", severity }, "Nachricht")));
+      const html = renderToStaticMarkup(
+        createElement(
+          ThemeProvider,
+          { theme: adminTheme },
+          createElement(Alert, { variant: "filled", severity }, "Nachricht"),
+        ),
+      );
       assert.ok(html.includes(`background-color:${background}`));
       assert.ok(html.includes(`color:${foreground}`));
       assert.match(html, /\.dark/u);

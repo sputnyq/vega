@@ -1,10 +1,10 @@
 # Hostinger-Cron: Mail-Outbox-Retry
 
-**Stand:** 2026-10-10
+**Stand:** 2026-10-16
 **Geltung:** Retry für alle Mails der Outbox (Anfrage-Benachrichtigungen und In-App-Versand).
 **Prinzip:** Öffentliche Anfragen werden sofort beantwortet (`201 { orderNumber }`);
 der Versand läuft zweistufig: Sofortversuch nach dem DB-Commit plus dieser
-Cron-Lauf als Retry für alles Liegengebliebene. Keine öffentliche
+Cron-Lauf als Retry für sicher wiederholbare Versuche. Keine öffentliche
 Wartungsroute, keine zweite Mail-App.
 
 ## Was der Lauf tut
@@ -12,18 +12,48 @@ Wartungsroute, keine zweite Mail-App.
 - `apps/server/src/maintenance-cli.ts` lädt dieselbe Runtime-Konfiguration wie
   die App und ruft `deliverDueOutboxMail()` auf (`PENDING`/`FAILED` mit
   `nextAttemptAt <= now`, max. `MAIL_MAINTENANCE_LIMIT`, Default 25, Cap 200).
-- Erfolg → `SENT` + genau ein `EmailEvent`. Transienter Fehler (429/5xx,
-  Timeout/Netzwerk) → `FAILED` mit exponentiellem `nextAttemptAt` und späterem
-  Retry. Permanente Fehler bleiben sichtbar stehen.
-- Geloggt werden nur Zähler (`sent`, `failed`, `limit`), niemals Empfänger,
+- Erfolg (`204`, ohne Body) → `SENT` + genau ein `EmailEvent`, atomar mit
+  ggf. Mahnungs-`sentAt` und Optionsangebots-Journal.
+- Sicher nicht gesendet und wiederholbar (z. B. fehlgeschlagener
+  Absender-Preflight oder explizite `429`-Ablehnung) → `FAILED` mit
+  exponentiellem `nextAttemptAt`. Permanente Ablehnung → `REJECTED`,
+  kein automatischer Retry.
+- Netzwerkfehler/Timeout nach Beginn des Send-POSTs, `5xx`, unerwartete
+  Antwort oder unklarer DB-Abschluss nach Versand → `UNKNOWN`.
+  Diese Einträge werden **niemals automatisch erneut gesendet**.
+  Auch ein eventuell bereits erfolgreicher, aber nicht bestätigter DB-Commit
+  darf keinen zweiten Provideraufruf auslösen.
+- Verwaiste `SENDING`-Claims werden nach 70 Sekunden (10 Sekunden
+  Provider-Timeout plus 60 Sekunden Reserve) atomar auf `UNKNOWN` gesetzt.
+  Der Claim bleibt damit auch nach Prozessabbruch sicher gesperrt.
+- Geloggt werden nur Zähler (`sent`, `failed`, `unknown`, `limit`), niemals Empfänger,
   Inhalte, Token oder Providerantworten.
-- Exit-Code `0` = Lauf abgeschlossen (auch bei `failed > 0`, das ist bei
-  transienten Fehlern normal). Exit-Code `1` = Crash oder Mailtransport nicht
+- `failed` zählt fehlgeschlagene Versuche dieses Laufs, einschließlich
+  neuer unklarer Ergebnisse. `unknown` zählt alle aktuell ungeklärten
+  Einträge. Exit-Code `0` bedeutet nur: Lauf abgeschlossen, **nicht**
+  „alle Mails gesendet“. `unknown > 0` verlangt Betreiberprüfung.
+  Exit-Code `1` = Crash oder Mailtransport nicht
   konfiguriert.
 
 Noch **nicht** in diesem Lauf enthalten: Order-Purge (60 Tage),
-Finanz-Purge (30 Tage) und `UNKNOWN`-Reconciliation. Das bleibt offen und ist
-ein separates Go-live-Gate.
+Finanz-Purge (30 Tage) und automatischer Providerabgleich.
+Purge bleibt offene Go-live-Arbeit; für `UNKNOWN` gibt es die unten
+beschriebene manuelle Recovery.
+
+## Versanddialog und Statusprüfung
+
+Der Dialog speichert pro Dokument nur Versandkennung und Zustand in
+`sessionStorage`, keine Empfänger, Betreffe oder Mailtexte. Nach Antwortverlust,
+Dialog-Neuöffnung oder Reload verwendet „Status prüfen“ dieselbe Kennung und
+sendet **keinen** neuen Entwurf an den Mailtransport.
+
+`POST …/emails/status` ist autorisiert wie der jeweilige Dokumentbereich.
+Eine noch nicht eingereihte Kennung wird atomar auf `NOT_QUEUED`
+stillgelegt (`MAIL_CANCELLED`, ohne Mailinhalt). Das verhindert, dass ein
+verspäteter Originalrequest nach dem Statuscheck doch noch versendet wird.
+Erst nach `NOT_QUEUED`, sicherer Ablehnung oder abgeschlossenem Versand darf
+ausdrücklich ein neuer Entwurf mit neuer Kennung gestartet werden.
+`SENDING`, `RETRY_SCHEDULED` und `UNKNOWN` erlauben keinen neuen Versand.
 
 ## Was auf Hostinger anzulegen ist
 
@@ -46,12 +76,55 @@ ein separates Go-live-Gate.
 ## Verifikation (Release-Nachweis)
 
 1. Einmal manuell im Zielverzeichnis starten und die JSON-Zeile prüfen:
-   `{"event":"mail-maintenance","sent":N,"failed":M,"limit":25}`.
+   `{"event":"mail-maintenance","sent":N,"failed":M,"unknown":U,"limit":25}`.
 2. In der Datenbank prüfen, dass fällige `EmailOutbox`-Einträge auf `SENT`
    wechseln und genau ein `EmailEvent` je Eintrag entsteht.
 3. Cron-Protokoll des Hostings prüfen: regelmäßige `0`-Exits, keine `1`-Exits.
-4. Einen fehlgeschlagenen Eintrag (`FAILED` + `lastErrorCode`) manuell
-   korrigieren und den nächsten Lauf abwarten, statt blind zu wiederholen.
+4. Sicher wiederholbare Fehler (`FAILED` + `lastErrorCode`) beheben und
+   den nächsten Lauf abwarten. `UNKNOWN` ausschließlich wie unten auflösen;
+   Status oder Idempotency-Key nicht per SQL zurücksetzen.
+
+## Unklaren Versand manuell abgleichen
+
+Die maßgebliche OpenAPI-Spezifikation
+[`hostinger-email-api-definition.json`](../hostinger-email-api-definition.json)
+beschreibt für den Send-POST eine Kopie in `INBOX.Sent`, aber keinen
+Idempotency-Key und keinen Statusendpunkt für diesen POST. Ein fehlender
+Treffer im Gesendet-Ordner ist **kein** Beleg dafür, dass nicht gesendet wurde.
+
+1. Unsichere Einträge ohne Mailinhalte auflisten:
+   `node apps/server/dist/mail/mail-reconciliation-cli.js inspect`.
+2. Vor Auflösung **App-Prozess und alle Mail-Cron-Läufe stoppen**. Laufende
+   Provideranfragen müssen beendet sein; nötigenfalls die 70-Sekunden-Frist
+   abwarten. `--workers-stopped` bestätigt diesen Betreiber-Schritt, ersetzt
+   ihn aber nicht technisch.
+3. Den ursprünglichen Versand anhand Nachricht, Zeitpunkt und Empfänger mit
+   `INBOX.Sent` bzw. dem Anbieter abgleichen. Nicht erneut eine Testmail senden.
+   Den Nachweis außerhalb der CLI sichern; als `evidenceRef` nur eine
+   Referenz ohne Mailinhalte oder Zugangsdaten verwenden.
+4. Genau einen belegten Ausgang auflösen:
+
+```sh
+# Bestätigter Originalversand: UID aus INBOX.Sent und originaler UTC-Zeitpunkt.
+node apps/server/dist/mail/mail-reconciliation-cli.js resolve \
+  OUTBOX_ID sent OPERATOR TICKET_REF SENT_UID 2026-10-16T12:00:00Z --workers-stopped
+
+# Nur bei ausdrücklicher Anbieterbestätigung, dass nicht gesendet wurde.
+node apps/server/dist/mail/mail-reconciliation-cli.js resolve \
+  OUTBOX_ID not-sent OPERATOR TICKET_REF --provider-confirmed-not-sent --workers-stopped
+```
+
+`sent` setzt `SENT`, Versandjournal, ggf. Mahnungs-`sentAt` und
+Optionsangebots-Aktion atomar. Dies belegt die Providerübergabe, nicht die
+Zustellung beim Kunden. `not-sent` setzt `PENDING` für einen späteren sicheren
+Retry, ohne ein Versandereignis zu erfinden. Beide Wege erzeugen atomar einen
+terminalen Outbox-Nachweis (`MAIL_RECONCILIATION`/`RESOLVED`) mit Operator,
+Versuchsnummer und Evidenzreferenz. Eine zweite oder konkurrierende Auflösung
+wird abgewiesen. CLI-Fehler liefern Exit-Code `1`, Erfolg `0`.
+
+Danach App/Cron wieder starten, Status und Zähler kontrollieren.
+Ohne belastbaren Providerbeleg bleibt `UNKNOWN` stehen; die CLI kann
+den tatsächlichen Versand nicht selbst feststellen.
 
 ## Offene Gates
 
@@ -60,3 +133,5 @@ ein separates Go-live-Gate.
 - Vollständige Mailkonfiguration (Firmen-/Absenderadresse) bleibt
   Go-live-Voraussetzung: Ohne sie bleiben Firmenmails als sichtbarer
   Konfigurationsfehler stehen.
+- Provider-Proof inkl. Send-Erfolg, Ablehnung, unklarem Ausgang und manuellem
+  Abgleich bleibt vor dem Produktivbetrieb erforderlich.

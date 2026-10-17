@@ -1,6 +1,5 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../prisma.js";
-import { listPackings, listServices, listServiceRates } from "../catalog/catalog-service.js";
 import { generateOrderPdf, orderPdfEditDate, orderPdfFilename } from "../pdf/order-pdf.js";
 import { orderDataWithRelations, type orderRelations } from "./order-relations.js";
 
@@ -8,13 +7,11 @@ type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof orderRelation
 
 /** Renders the saved order state; used for downloads and mail attachments alike. */
 export async function renderOrderPdf(order: OrderWithRelations): Promise<{ pdf: Buffer; filename: string }> {
-  const [services, packings, rates] = await Promise.all([listServices(), listPackings(), listServiceRates()]);
+  const data = orderDataWithRelations(order);
+  const pricingSnapshot = data.pricingSnapshot;
   const input = {
-    orderNumber: order.orderNumber, data: orderDataWithRelations(order), rates,
-    services: [
-      ...services.map((service) => ({ ...service, kind: "service" as const })),
-      ...packings.map((packing) => ({ ...packing, kind: "packaging" as const })),
-    ],
+    orderNumber: order.orderNumber, data, rates: pricingSnapshot?.rates ?? [],
+    services: (pricingSnapshot?.services ?? []).map((service) => ({ ...service, show: true, media: null, description: "" })),
   };
   const [latestActivity, lastEdit] = await Promise.all([
     prisma.orderActivityEvent.findFirst({ where: { orderId: order.id, action: { in: ["UPDATED", "COPIED", "ARCHIVED", "RESTORED"] } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { action: true, createdAt: true } }),

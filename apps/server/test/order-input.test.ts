@@ -63,6 +63,21 @@ test("rejects malformed and oversized payload sections", () => {
   assert.equal(validateOrderCreateInput(null).ok, false);
 });
 
+test("catalog references must be positive integer IDs for furniture, services and packing", () => {
+  for (const catalogId of [0, 0.5, -1, 2_147_483_648]) {
+    const input = orderFixture();
+    input.details!.furniture.items[0]!.catalogId = catalogId;
+    input.details!.extras.services[0]!.catalogId = catalogId;
+    input.details!.extras.services[1]!.catalogId = catalogId;
+    const result = validateOrderCreateInput(input, { allowStaffPricing: true });
+    assert.equal(result.ok, false);
+    if (result.ok) continue;
+    for (const field of ["details.furniture.items.0.catalogId", "details.extras.services.0.catalogId", "details.extras.services.1.catalogId"]) {
+      assert.ok(result.issues.some((issue) => issue.field === field));
+    }
+  }
+});
+
 test("validates and persists secondary addresses while keeping prices staff-only", () => {
   const details = {
     showSecondaryFrom: true,
@@ -110,6 +125,16 @@ test("allows a staff draft with empty legacy fields but still requires public su
   assert.equal(staffResult.ok, true);
   if (staffResult.ok) assert.equal(staffResult.value.customer.firstName, "");
   assert.equal(validateOrderCreateInput(draft).ok, false);
+});
+
+test("anonymous orders cannot forge staff distance provenance", () => {
+  const input = orderFixture();
+  input.details!.distanceKm = 0;
+  input.details!.distanceSource = "route";
+  const result = validateOrderCreateInput(input);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.ok(result.issues.some((issue) => issue.field === "details.distanceSource"));
+  assert.equal(validateOrderCreateInput(input, { allowStaffPricing: true }).ok, true);
 });
 
 test("preserves the complete normalized payload for public and staff orders", () => {

@@ -132,6 +132,24 @@ export function createAuth(config: AppConfig) {
           });
         }
       }),
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.context.returned instanceof APIError) return;
+        const enrollmentCompleted = ctx.path === "/two-factor/verify-totp"
+          && ctx.context.session !== null
+          && !ctx.context.session.user.twoFactorEnabled
+          && ctx.context.newSession !== null;
+        if (ctx.path !== "/two-factor/enable" && ctx.path !== "/two-factor/disable" && !enrollmentCompleted) return;
+
+        const current = ctx.context.newSession ?? ctx.context.session;
+        if (!current) return;
+        // Better Auth rotates only the active session on enrollment. Revoke
+        // peers both when setup starts and when it completes, including sessions
+        // opened during setup; a changed user flag must not upgrade those peers.
+        const sessions = await ctx.context.internalAdapter.listSessions(current.user.id);
+        await Promise.all(sessions
+          .filter((session) => session.token !== current.session.token)
+          .map((session) => ctx.context.internalAdapter.deleteSession(session.token)));
+      }),
     },
   });
   return Object.assign(auth, {
