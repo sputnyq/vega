@@ -28,6 +28,7 @@
     "db:migrate:status": "prisma migrate status",
     "db:check-schema": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
     "db:seed": "prisma db seed",
+    "db:import-legacy-catalog": "tsx prisma/import-legacy-catalog.ts",
     "auth:generate-schema": "auth generate --config apps/server/src/auth.ts --adapter prisma --output prisma/schema.prisma",
     "auth:recover-admin": "tsx prisma/recover-admin.ts",
     "build": "npm run db:generate && npm run typecheck && npm run build:server && npm run build:frontends",

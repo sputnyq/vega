@@ -1,21 +1,28 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { AddOutlined, DeleteOutlined } from "@mui/icons-material";
 import {
   Box,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
   Divider,
   Grid,
   IconButton,
-  InputAdornment,
+  Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
 import { AdminAlert as Alert } from "../components/AdminNotifications.js";
-import { AddOutlined, BoyOutlined, DeleteOutlined, LocalShippingOutlined } from "@mui/icons-material";
-import type { CatalogOfferDto } from "@vega/domain";
+import type {
+  CatalogOfferDto,
+  CatalogServiceRateDto,
+  ServiceRateKey,
+} from "@vega/domain";
+import { apiRequest } from "../api/api-request.js";
 import { useCatalogCollection } from "./useCatalogCollection.js";
 
 const offerGroups = [
@@ -24,292 +31,638 @@ const offerGroups = [
   { trucks: 3, workers: [5, 6, 7, 8] },
   { trucks: 4, workers: [7, 8, 9, 10] },
 ] as const;
+const truckCounts = [1, 2, 3, 4] as const;
+const defaultHours = [8, 7, 6, 5, 4, 3, 2] as const;
+const allHours = Array.from({ length: 24 }, (_, index) => 24 - index);
 
-const money = (value: number) => value.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+function truckRateKey(trucks: number): ServiceRateKey {
+  return `ridingCostsTruck${trucks}` as ServiceRateKey;
+}
 
-interface OfferCardProps {
+export function validPrice(value: string): number | null {
+  const price = Number(value);
+  return value.trim() &&
+    Number.isFinite(price) &&
+    price >= 0 &&
+    Math.abs(Math.round(price * 100) - price * 100) < 0.00001
+    ? price
+    : null;
+}
+
+export function shouldDeleteOfferValue(value: string): boolean {
+  return !value.trim() || Number(value.trim().replace(",", ".")) === 0;
+}
+
+interface WorkerRowDraft {
   trucks: number;
   workers: number;
-  offers: CatalogOfferDto[];
-  loading: boolean;
-  disabled: boolean;
-  create: (offer: Omit<CatalogOfferDto, "id">) => Promise<void>;
-  update: (offer: CatalogOfferDto, patch: Partial<CatalogOfferDto>) => Promise<void>;
-  remove: (offer: CatalogOfferDto) => Promise<void>;
-  onError: (cause: unknown) => void;
+  hourPrice: string;
+  newWorker: boolean;
 }
 
 export function OffersPage() {
   const catalog = useCatalogCollection<CatalogOfferDto>("offers");
+  const [truckRates, setTruckRates] = useState<
+    Partial<Record<ServiceRateKey, string>>
+  >({});
+  const [savedTruckRates, setSavedTruckRates] = useState<
+    Partial<Record<ServiceRateKey, string>>
+  >({});
+  const [truckRatesLoading, setTruckRatesLoading] = useState(true);
+  const [savingTruckRate, setSavingTruckRate] = useState<number | null>(null);
+  const [truckRateError, setTruckRateError] = useState<string | null>(null);
+  const [truckRateMessage, setTruckRateMessage] = useState<string | null>(null);
+  const [workerRowDrafts, setWorkerRowDrafts] = useState<WorkerRowDraft[]>([]);
+  const [hourPriceDrafts, setHourPriceDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [cellDrafts, setCellDrafts] = useState<Record<string, string>>({});
+  const [offerError, setOfferError] = useState<string | null>(null);
 
-  async function create(offer: Omit<CatalogOfferDto, "id">) {
-    await catalog.create(offer);
-  }
+  useEffect(() => {
+    let active = true;
+    apiRequest<CatalogServiceRateDto[]>("/api/admin/catalog/service-rates")
+      .then((rates) => {
+        if (!active) return;
+        const values = Object.fromEntries(
+          rates.map(({ key, price }) => [key, String(price)]),
+        ) as Partial<Record<ServiceRateKey, string>>;
+        for (const trucks of truckCounts) values[truckRateKey(trucks)] ??= "0";
+        setTruckRates(values);
+        setSavedTruckRates(values);
+      })
+      .catch((cause: unknown) => {
+        if (active)
+          setTruckRateError(
+            cause instanceof Error
+              ? cause.message
+              : "LKW-Anfahrtskosten konnten nicht geladen werden.",
+          );
+      })
+      .finally(() => {
+        if (active) setTruckRatesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  async function update(offer: CatalogOfferDto, patch: Partial<CatalogOfferDto>) {
+  const hours = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...defaultHours,
+          ...catalog.items.map((offer) => offer.includedHours),
+        ]),
+      ).sort((left, right) => right - left),
+    [catalog.items],
+  );
+
+  async function update(
+    offer: CatalogOfferDto,
+    patch: Partial<CatalogOfferDto>,
+  ) {
     const { id, ...current } = offer;
     await catalog.update(id, { ...current, ...patch });
   }
 
-  async function remove(offer: CatalogOfferDto) {
-    await catalog.remove(offer.id);
-  }
-
   async function recover(cause: unknown) {
     await catalog.reload();
-    catalog.setError(cause instanceof Error ? cause.message : "Das Angebot konnte nicht gespeichert werden.");
+    catalog.setError(
+      cause instanceof Error
+        ? cause.message
+        : "Das Angebot konnte nicht gespeichert werden.",
+    );
   }
+
+  async function saveTruckRate(trucks: number) {
+    const key = truckRateKey(trucks);
+    const value = truckRates[key] ?? "0";
+    if (value === savedTruckRates[key]) return;
+    const price = validPrice(value);
+    if (price === null) {
+      setTruckRateError(
+        "Bitte geben Sie einen gültigen Preis mit höchstens zwei Nachkommastellen ein.",
+      );
+      return;
+    }
+    setSavingTruckRate(trucks);
+    setTruckRateError(null);
+    setTruckRateMessage(null);
+    try {
+      const saved = await apiRequest<CatalogServiceRateDto>(
+        `/api/admin/catalog/service-rates/${key}`,
+        "PUT",
+        { price },
+      );
+      setTruckRates((current) => ({ ...current, [key]: String(saved.price) }));
+      setSavedTruckRates((current) => ({
+        ...current,
+        [key]: String(saved.price),
+      }));
+      setTruckRateMessage("LKW-Anfahrtskosten gespeichert.");
+    } catch (cause) {
+      setTruckRateError(
+        cause instanceof Error
+          ? cause.message
+          : "LKW-Anfahrtskosten konnten nicht gespeichert werden.",
+      );
+    } finally {
+      setSavingTruckRate(null);
+    }
+  }
+
+  function rowKey(trucks: number, workers: number) {
+    return `${trucks}:${workers}`;
+  }
+
+  function cellKey(trucks: number, workers: number, hours: number) {
+    return `${trucks}:${workers}:${hours}`;
+  }
+
+  function addWorkerRow(trucks: number) {
+    const existing = new Set([
+      ...(offerGroups.find((group) => group.trucks === trucks)?.workers ?? []),
+      ...catalog.items
+        .filter((offer) => offer.trucks === trucks)
+        .map((offer) => offer.workers),
+      ...workerRowDrafts
+        .filter((row) => row.trucks === trucks)
+        .map((row) => row.workers),
+    ]);
+    const workers = Array.from({ length: 100 }, (_, index) => index + 1).find(
+      (count) => !existing.has(count),
+    );
+    if (workers === undefined) {
+      setOfferError(
+        "Für diese LKW-Anzahl sind bereits alle Trägerzeilen angelegt.",
+      );
+      return;
+    }
+    setOfferError(null);
+    setWorkerRowDrafts((current) => [
+      ...current,
+      {
+        trucks,
+        workers,
+        hourPrice: "0",
+        newWorker: true,
+      },
+    ]);
+  }
+
+  function startAddingOffer(
+    trucks: number,
+    workers: number,
+    rowOffers: CatalogOfferDto[],
+  ) {
+    const key = rowKey(trucks, workers);
+    if (workerRowDrafts.some((row) => rowKey(row.trucks, row.workers) === key))
+      return;
+    setOfferError(null);
+    setWorkerRowDrafts((current) => [
+      ...current,
+      {
+        trucks,
+        workers,
+        hourPrice: hourPriceDrafts[key] ?? String(rowOffers[0]?.hourPrice ?? 0),
+        newWorker: false,
+      },
+    ]);
+  }
+
+  function cancelWorkerRow(trucks: number, workers: number) {
+    const key = rowKey(trucks, workers);
+    setWorkerRowDrafts((current) =>
+      current.filter((row) => rowKey(row.trucks, row.workers) !== key),
+    );
+    setCellDrafts((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([cell]) => !cell.startsWith(`${key}:`)),
+      ),
+    );
+  }
+
+  async function saveWorkerHourPrice(
+    trucks: number,
+    workers: number,
+    value: string,
+  ) {
+    const price = validPrice(value);
+    if (price === null) {
+      setOfferError(
+        "Bitte geben Sie einen gültigen Stundenpreis mit höchstens zwei Nachkommastellen ein.",
+      );
+      return;
+    }
+    const key = rowKey(trucks, workers);
+    const entries = catalog.items.filter(
+      (offer) => offer.trucks === trucks && offer.workers === workers,
+    );
+    setHourPriceDrafts((current) => ({ ...current, [key]: String(price) }));
+    if (entries.length === 0) {
+      setWorkerRowDrafts((current) =>
+        current.map((row) =>
+          rowKey(row.trucks, row.workers) === key
+            ? { ...row, hourPrice: String(price) }
+            : row,
+        ),
+      );
+      return;
+    }
+    if (entries.every((offer) => offer.hourPrice === price)) return;
+    setOfferError(null);
+    try {
+      await Promise.all(
+        entries.map((offer) => update(offer, { hourPrice: price })),
+      );
+    } catch (cause) {
+      setOfferError(
+        cause instanceof Error
+          ? cause.message
+          : "Stundenpreis konnte nicht gespeichert werden.",
+      );
+      await catalog.reload();
+    }
+  }
+
+  async function saveOfferCell(
+    trucks: number,
+    workers: number,
+    includedHours: number,
+    value: string,
+  ) {
+    const key = cellKey(trucks, workers, includedHours);
+    const existing = catalog.items.find(
+      (offer) =>
+        offer.trucks === trucks &&
+        offer.workers === workers &&
+        offer.includedHours === includedHours,
+    );
+    if (shouldDeleteOfferValue(value)) {
+      setCellDrafts((current) => {
+        const { [key]: _cleared, ...rest } = current;
+        return rest;
+      });
+      if (existing) {
+        try {
+          await catalog.remove(existing.id);
+        } catch (cause) {
+          await recover(cause);
+        }
+      }
+      return;
+    }
+    const sum = validPrice(value);
+    if (sum === null) {
+      setOfferError(
+        "Bitte geben Sie einen gültigen Gesamtpreis mit höchstens zwei Nachkommastellen ein.",
+      );
+      return;
+    }
+    const keyForRow = rowKey(trucks, workers);
+    const rowDraft = workerRowDrafts.find(
+      (row) => rowKey(row.trucks, row.workers) === keyForRow,
+    );
+    const rowOffers = catalog.items.filter(
+      (offer) => offer.trucks === trucks && offer.workers === workers,
+    );
+    const hourPrice = validPrice(
+      rowDraft?.hourPrice ??
+        hourPriceDrafts[keyForRow] ??
+        String(rowOffers[0]?.hourPrice ?? 0),
+    );
+    if (hourPrice === null) {
+      setOfferError("Bitte geben Sie zuerst einen gültigen Stundenpreis ein.");
+      return;
+    }
+    const ridingCosts = Number(truckRates[truckRateKey(trucks)] ?? 0);
+    const existingAtHours = rowOffers.find(
+      (offer) => offer.includedHours === includedHours,
+    );
+    setOfferError(null);
+    try {
+      if (existingAtHours) {
+        await update(existingAtHours, { sum, hourPrice, ridingCosts });
+      } else {
+        await catalog.create({
+          name: `${workers} Träger · ${trucks} LKW`,
+          workers,
+          trucks,
+          includedHours,
+          sum,
+          hourPrice,
+          ridingCosts,
+          sort: Math.max(0, ...catalog.items.map((offer) => offer.sort)) + 1,
+        });
+      }
+      setCellDrafts((current) => {
+        const { [cellKey(trucks, workers, includedHours)]: _saved, ...rest } =
+          current;
+        return rest;
+      });
+      cancelWorkerRow(trucks, workers);
+    } catch (cause) {
+      setOfferError(
+        cause instanceof Error
+          ? cause.message
+          : "Das Angebot konnte nicht gespeichert werden.",
+      );
+      await catalog.reload();
+    }
+  }
+
+  const rateError = truckRateError;
+  const disabled =
+    catalog.loading ||
+    Boolean(catalog.error) ||
+    truckRatesLoading ||
+    Boolean(rateError);
+  const columnCount = 5 + hours.length;
 
   return (
     <Stack spacing={2}>
       {catalog.error && <Alert severity="error">{catalog.error}</Alert>}
-      {offerGroups.map(({ trucks, workers }) => (
-        <Box key={trucks}>
-          <Typography component="h2" variant="h4" sx={{ mb: 1 }}>{trucks} LKW</Typography>
-          <Grid container spacing={2}>
-            {workers.map((workerCount) => (
-              <Grid key={`${trucks}-${workerCount}`} size={{ xs: 12, sm: 6, md: 4 }}>
-                <OfferCard
-                  trucks={trucks}
-                  workers={workerCount}
-                  offers={catalog.items.filter((offer) => offer.trucks === trucks && offer.workers === workerCount)}
-                  loading={catalog.loading}
-                  disabled={catalog.loading || Boolean(catalog.error)}
-                  create={create}
-                  update={update}
-                  remove={remove}
-                  onError={(cause) => void recover(cause)}
-                />
-              </Grid>
-            ))}
-          </Grid>
+      {rateError && <Alert severity="error">{rateError}</Alert>}
+      {truckRateMessage && <Alert severity="success">{truckRateMessage}</Alert>}
+      {offerError && <Alert severity="error">{offerError}</Alert>}
+      <Paper variant="outlined">
+        <Box sx={{ overflowX: { xs: "auto", md: "visible" } }}>
+          <Table
+            size="small"
+            sx={{
+              minWidth: 1200,
+              "& thead th": {
+                position: "sticky",
+                top: { xs: "58px", md: "68px" },
+                zIndex: 3,
+                bgcolor: "background.paper",
+                fontWeight: 700,
+              },
+              "& th:not(:last-child), & td:not(:last-child)": {
+                borderRight: "1px solid",
+                borderRightColor: "divider",
+              },
+            }}
+          >
+            <TableHead>
+              <TableRow>
+                <TableCell>LKW</TableCell>
+                <TableCell>Anfahrt</TableCell>
+                <TableCell
+                  align="right"
+                  sx={{ fontWeight: 700, color: "text.primary" }}
+                >
+                  Träger
+                </TableCell>
+                <TableCell align="right">Stundenpreis</TableCell>
+                {hours.map((hour) => (
+                  <TableCell key={hour} align="right">
+                    {hour}
+                  </TableCell>
+                ))}
+                <TableCell align="right" />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {offerGroups.map(({ trucks, workers: predefinedWorkers }) => {
+                const groupOffers = catalog.items.filter(
+                  (offer) => offer.trucks === trucks,
+                );
+                const workerCounts = Array.from(
+                  new Set([
+                    ...predefinedWorkers,
+                    ...groupOffers.map((offer) => offer.workers),
+                    ...workerRowDrafts
+                      .filter((row) => row.trucks === trucks)
+                      .map((row) => row.workers),
+                  ]),
+                ).sort((left, right) => left - right);
+                const rateKey = truckRateKey(trucks);
+                return (
+                  <Fragment key={trucks}>
+                    {workerCounts.map((workers, index) => {
+                      const rowOffers = groupOffers.filter(
+                        (offer) => offer.workers === workers,
+                      );
+                      const workerKey = rowKey(trucks, workers);
+                      const rowDraft = workerRowDrafts.find(
+                        (row) => rowKey(row.trucks, row.workers) === workerKey,
+                      );
+                      return (
+                        <TableRow key={`${trucks}-${workers}`}>
+                          {index === 0 && (
+                            <>
+                              <TableCell
+                                rowSpan={workerCounts.length}
+                                sx={{ fontWeight: 700 }}
+                              >
+                                {trucks}
+                              </TableCell>
+                              <TableCell
+                                rowSpan={workerCounts.length}
+                                sx={{ minWidth: 140 }}
+                              >
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="number"
+                                  label="Anfahrtskosten"
+                                  value={truckRates[rateKey] ?? "0"}
+                                  disabled={
+                                    truckRatesLoading ||
+                                    savingTruckRate === trucks
+                                  }
+                                  onChange={(event) =>
+                                    setTruckRates((current) => ({
+                                      ...current,
+                                      [rateKey]: event.target.value,
+                                    }))
+                                  }
+                                  onBlur={() => void saveTruckRate(trucks)}
+                                  slotProps={{
+                                    htmlInput: { min: 0, step: "0.01" },
+                                    input: { endAdornment: "€" },
+                                  }}
+                                />
+                              </TableCell>
+                            </>
+                          )}
+                          <TableCell align="right" sx={{ minWidth: 90 }}>
+                            <Typography sx={{ fontWeight: 700 }}>
+                              {workers}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right" sx={{ minWidth: 135 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="number"
+                              aria-label={`Stundenpreis ${workers} Träger, ${trucks} LKW`}
+                              value={
+                                hourPriceDrafts[workerKey] ??
+                                rowDraft?.hourPrice ??
+                                String(rowOffers[0]?.hourPrice ?? "")
+                              }
+                              disabled={
+                                disabled ||
+                                (rowOffers.length === 0 && !rowDraft)
+                              }
+                              onChange={(event) =>
+                                setHourPriceDrafts((current) => ({
+                                  ...current,
+                                  [workerKey]: event.target.value,
+                                }))
+                              }
+                              onBlur={(event) =>
+                                void saveWorkerHourPrice(
+                                  trucks,
+                                  workers,
+                                  event.target.value,
+                                )
+                              }
+                              slotProps={{
+                                htmlInput: { min: 0, step: "0.01" },
+                                input: { endAdornment: "€" },
+                              }}
+                            />
+                          </TableCell>
+                          {hours.map((hour) => {
+                            const offer = rowOffers.find(
+                              (entry) => entry.includedHours === hour,
+                            );
+                            const hasOffer =
+                              offer !== undefined &&
+                              !(offer.sum === 0 && offer.hourPrice === 0);
+                            if (!hasOffer && !rowDraft)
+                              return <TableCell key={hour} />;
+                            if (!hasOffer) {
+                              const key = cellKey(trucks, workers, hour);
+                              return (
+                                <TableCell
+                                  key={hour}
+                                  align="right"
+                                  sx={{ minWidth: 110 }}
+                                >
+                                  <TextField
+                                    size="small"
+                                    type="number"
+                                    aria-label={`Neuer Gesamtpreis ${workers} Träger, ${trucks} LKW, ${hour} Stunden`}
+                                    value={cellDrafts[key] ?? ""}
+                                    disabled={disabled}
+                                    onChange={(event) =>
+                                      setCellDrafts((current) => ({
+                                        ...current,
+                                        [key]: event.target.value,
+                                      }))
+                                    }
+                                    onBlur={(event) =>
+                                      void saveOfferCell(
+                                        trucks,
+                                        workers,
+                                        hour,
+                                        event.target.value,
+                                      )
+                                    }
+                                    slotProps={{
+                                      htmlInput: { min: 0, step: "0.01" },
+                                    }}
+                                  />
+                                </TableCell>
+                              );
+                            }
+                            return (
+                              <OfferCell
+                                key={hour}
+                                offer={offer}
+                                disabled={disabled}
+                                save={(next) =>
+                                  saveOfferCell(trucks, workers, hour, next)
+                                }
+                              />
+                            );
+                          })}
+                          <TableCell align="right">
+                            {rowDraft ? (
+                              <IconButton
+                                size="small"
+                                aria-label={`Trägerzeile ${workers} für ${trucks} LKW abbrechen`}
+                                disabled={disabled}
+                                onClick={() => cancelWorkerRow(trucks, workers)}
+                              >
+                                <DeleteOutlined fontSize="small" />
+                              </IconButton>
+                            ) : (
+                              <IconButton
+                                size="small"
+                                aria-label={`Angebot hinzufügen (${trucks} LKW, ${workers} Träger)`}
+                                disabled={
+                                  disabled ||
+                                  allHours.every((hour) =>
+                                    rowOffers.some(
+                                      (offer) => offer.includedHours === hour,
+                                    ),
+                                  )
+                                }
+                                onClick={() =>
+                                  startAddingOffer(trucks, workers, rowOffers)
+                                }
+                              >
+                                <AddOutlined fontSize="small" />
+                              </IconButton>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    <TableRow>
+                      <TableCell colSpan={columnCount}>
+                        <Button
+                          size="small"
+                          startIcon={<AddOutlined />}
+                          disabled={disabled}
+                          onClick={() => addWorkerRow(trucks)}
+                        >
+                          Trägerzeile hinzufügen ({trucks} LKW)
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
         </Box>
-      ))}
+      </Paper>
     </Stack>
   );
 }
 
-function OfferCard({ trucks, workers, offers, loading, disabled, create, update, remove, onError }: OfferCardProps) {
-  const entries = [...offers].sort((left, right) => right.includedHours - left.includedHours);
-  const [ridingCosts, setRidingCosts] = useState(String(entries[0]?.ridingCosts ?? 0));
-  const [hourPrice, setHourPrice] = useState(String(entries[0]?.hourPrice ?? 0));
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setRidingCosts(String(entries[0]?.ridingCosts ?? 0));
-    setHourPrice(String(entries[0]?.hourPrice ?? 0));
-  }, [entries[0]?.ridingCosts, entries[0]?.hourPrice]);
-
-  async function updateSharedRate(field: "ridingCosts" | "hourPrice", value: string) {
-    if (!entries.length) return;
-    const price = Number(value);
-    if (!value.trim() || !Number.isFinite(price) || price < 0 || Math.round(price * 100) !== price * 100) {
-      onError(new Error("Bitte geben Sie einen gültigen Preis mit höchstens zwei Nachkommastellen ein."));
-      return;
-    }
-    if (entries.every((offer) => offer[field] === price)) return;
-    setSaving(true);
-    try {
-      await Promise.all(entries.map((offer) => update(offer, { [field]: price })));
-    } catch (cause) {
-      onError(cause);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function addOffer() {
-    const occupiedHours = new Set(offers.map((offer) => offer.includedHours));
-    const includedHours = Array.from({ length: 24 }, (_, index) => index + 1).find((hours) => !occupiedHours.has(hours));
-    if (includedHours === undefined) {
-      onError(new Error("Für diese Kombination sind bereits alle 24 Stundenstufen angelegt."));
-      return;
-    }
-    setSaving(true);
-    try {
-      await create({
-        name: `${workers} Träger · ${trucks} LKW`,
-        workers,
-        trucks,
-        includedHours,
-        sum: 0,
-        hourPrice: Number(hourPrice) || 0,
-        ridingCosts: Number(ridingCosts) || 0,
-        sort: Math.max(0, ...offers.map((offer) => offer.sort)) + 1,
-      });
-    } catch (cause) {
-      onError(cause);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deleteOffer(offer: CatalogOfferDto) {
-    if (!window.confirm("Möchten Sie dieses Angebot wirklich löschen?")) return;
-    setSaving(true);
-    try {
-      await remove(offer);
-    } catch (cause) {
-      onError(cause);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card variant="outlined" elevation={0} sx={{ height: "100%" }}>
-      <CardHeader
-        sx={{ p: 1 }}
-        title={
-          <Box sx={{ display: "flex", justifyContent: "center", width: "100%" }}>
-            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              <Typography variant="h5">{workers}</Typography>
-              <BoyOutlined fontSize="large" />
-              <Divider orientation="vertical" flexItem />
-              <Typography variant="h5">{trucks}</Typography>
-              <LocalShippingOutlined fontSize="large" />
-            </Box>
-          </Box>
-        }
-      />
-      <CardContent>
-        <Stack spacing={1.5}>
-          <Grid container spacing={1.5} sx={{ pt: 1 }}>
-            <Grid size={{ xs: 6 }}>
-              <TextField
-                fullWidth
-                type="number"
-                label="Anfahrtskosten"
-                value={ridingCosts}
-                disabled={disabled || saving || entries.length === 0}
-                onChange={(event) => setRidingCosts(event.target.value)}
-                onBlur={() => void updateSharedRate("ridingCosts", ridingCosts)}
-                slotProps={{ htmlInput: { min: 0, step: "0.01" }, input: { endAdornment: "€" } }}
-              />
-            </Grid>
-            <Grid size={{ xs: 6 }}>
-              <TextField
-                fullWidth
-                type="number"
-                label="Stundenpreis"
-                value={hourPrice}
-                disabled={disabled || saving || entries.length === 0}
-                onChange={(event) => setHourPrice(event.target.value)}
-                onBlur={() => void updateSharedRate("hourPrice", hourPrice)}
-                slotProps={{ htmlInput: { min: 0, step: "0.01" }, input: { endAdornment: <InputAdornment position="end">€/Std</InputAdornment> } }}
-              />
-            </Grid>
-          </Grid>
-          <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-            <Button
-              size="small"
-              startIcon={<AddOutlined />}
-              aria-label={`Angebot anlegen (${trucks} LKW, ${workers} Träger)`}
-              disabled={disabled || saving}
-              onClick={() => void addOffer()}
-            >
-              Angebot anlegen
-            </Button>
-          </Box>
-          {loading ? (
-            <Typography color="text.secondary">Wird geladen …</Typography>
-          ) : entries.length === 0 ? (
-            <Typography color="text.secondary" align="center">Noch keine Angebote.</Typography>
-          ) : (
-            <Stack spacing={1}>
-              {entries.map((offer) => (
-                <OfferRow
-                  key={offer.id}
-                  offer={offer}
-                  disabled={disabled || saving}
-                  update={update}
-                  remove={() => void deleteOffer(offer)}
-                  onError={onError}
-                />
-              ))}
-            </Stack>
-          )}
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface OfferRowProps {
+function OfferCell({
+  offer,
+  disabled,
+  save,
+}: {
   offer: CatalogOfferDto;
   disabled: boolean;
-  update: OfferCardProps["update"];
-  remove: () => void;
-  onError: (cause: unknown) => void;
-}
-
-function OfferRow({ offer, disabled, update, remove, onError }: OfferRowProps) {
-  const [hours, setHours] = useState(String(offer.includedHours));
+  save: (value: string) => void;
+}) {
   const [sum, setSum] = useState(String(offer.sum));
-
-  useEffect(() => {
-    setHours(String(offer.includedHours));
-    setSum(String(offer.sum));
-  }, [offer.includedHours, offer.sum]);
-
-  async function save(field: "includedHours" | "sum", value: string) {
-    const parsed = Number(value);
-    const invalidHours = field === "includedHours" && (!Number.isInteger(parsed) || parsed < 1 || parsed > 24);
-    const invalidSum = field === "sum" && Math.round(parsed * 100) !== parsed * 100;
-    if (!value.trim() || !Number.isFinite(parsed) || parsed < 0 || invalidHours || invalidSum) {
-      const message = field === "includedHours"
-        ? "Bitte geben Sie eine ganze Stundenzahl zwischen 1 und 24 ein."
-        : "Bitte geben Sie einen gültigen Gesamtpreis mit höchstens zwei Nachkommastellen ein.";
-      onError(new Error(message));
-      return;
-    }
-    if (offer[field] === parsed) return;
-    try {
-      await update(offer, { [field]: parsed });
-    } catch (cause) {
-      onError(cause);
-    }
-  }
+  useEffect(() => setSum(String(offer.sum)), [offer.sum]);
 
   return (
-    <Box sx={{ py: 1, borderBottom: 1, borderColor: "divider" }}>
-      <Stack spacing={0.5}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
-          <Typography variant="body2">Anfahrt: {money(offer.ridingCosts)}</Typography>
-          <Typography variant="body2">Stundenpreis: {money(offer.hourPrice)} / Std</Typography>
-          <IconButton color="error" size="small" aria-label="Angebot löschen" disabled={disabled} onClick={remove}>
-            <DeleteOutlined />
-          </IconButton>
-        </Stack>
-        <Grid container spacing={1}>
-          <Grid size={{ xs: 5 }}>
-            <TextField
-              fullWidth
-              type="number"
-              label="Stunden"
-              aria-label="Inklusive Stunden"
-              value={hours}
-              disabled={disabled}
-              onChange={(event) => setHours(event.target.value)}
-              onBlur={() => void save("includedHours", hours)}
-              slotProps={{ htmlInput: { min: 1, max: 24, step: 1 } }}
-            />
-          </Grid>
-          <Grid size={{ xs: 7 }}>
-            <TextField
-              fullWidth
-              type="number"
-              label="Gesamt"
-              aria-label="Gesamtpreis"
-              value={sum}
-              disabled={disabled}
-              onChange={(event) => setSum(event.target.value)}
-              onBlur={() => void save("sum", sum)}
-              slotProps={{ htmlInput: { min: 0, step: "0.01" }, input: { endAdornment: "€" } }}
-            />
-          </Grid>
-        </Grid>
-      </Stack>
-    </Box>
+    <TableCell align="right" sx={{ minWidth: 110 }}>
+      <TextField
+        size="small"
+        type="number"
+        aria-label={`Gesamtpreis ${offer.workers} Träger, ${offer.trucks} LKW, ${offer.includedHours} Stunden`}
+        value={sum}
+        disabled={disabled}
+        onChange={(event) => setSum(event.target.value)}
+        onBlur={() => save(sum)}
+        slotProps={{ htmlInput: { min: 0, step: "0.01" } }}
+        sx={{ width: 92 }}
+      />
+    </TableCell>
   );
 }

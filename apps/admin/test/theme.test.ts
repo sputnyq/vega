@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Alert, Typography } from "@mui/material";
+import { Alert, Grid, IconButton, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { adminTheme } from "../src/theme.js";
+import { theme as customerTheme } from "../../customer-form/src/theme.js";
 
 test("checkboxes use their default left alignment in both applications", () => {
   assert.equal(
@@ -60,6 +61,72 @@ test("admin typography and compact fields are preserved", () => {
     adminTheme.components?.MuiButton?.defaultProps?.disableElevation,
     true,
   );
+});
+
+test("both app themes give icon buttons a consistent square target and text alignment", () => {
+  const root = adminTheme.components?.MuiIconButton?.styleOverrides?.root;
+  assert.ok(typeof root === "object" && root !== null);
+  assert.equal(root.width, 40);
+  assert.equal(root.height, 40);
+  assert.equal(root.minWidth, 40);
+  assert.equal(root.minHeight, 40);
+  assert.equal(root.verticalAlign, "middle");
+  assert.equal(root.flexShrink, 0);
+  const customerRoot =
+    customerTheme.components?.MuiIconButton?.styleOverrides?.root;
+  assert.ok(typeof customerRoot === "object" && customerRoot !== null);
+  assert.equal(customerRoot.width, 40);
+  assert.equal(customerRoot.height, 40);
+  assert.equal(customerRoot.verticalAlign, "middle");
+
+  const html = renderToStaticMarkup(
+    createElement(
+      ThemeProvider,
+      { theme: adminTheme },
+      createElement(
+        "div",
+        null,
+        createElement(
+          IconButton,
+          { size: "small", "aria-label": "Small icon" },
+          "S",
+        ),
+        createElement(IconButton, { "aria-label": "Standard icon" }, "M"),
+      ),
+    ),
+  );
+  assert.equal([...html.matchAll(/<button\b/gu)].length, 2);
+  assert.match(html, /aria-label="Small icon"/u);
+  assert.match(html, /aria-label="Standard icon"/u);
+  assert.match(html, /width:40px;height:40px;min-width:40px;min-height:40px/u);
+});
+
+test("admin grid containers center their children vertically by default", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ThemeProvider,
+      { theme: adminTheme },
+      createElement(
+        Grid,
+        { container: true },
+        createElement(Grid, { size: 6 }, "Grid item"),
+      ),
+    ),
+  );
+  assert.match(html, /align-items:center/u);
+
+  const customerHtml = renderToStaticMarkup(
+    createElement(
+      ThemeProvider,
+      { theme: customerTheme },
+      createElement(
+        Grid,
+        { container: true },
+        createElement(Grid, { size: 6 }, "Grid item"),
+      ),
+    ),
+  );
+  assert.match(customerHtml, /align-items:center/u);
 });
 
 test("light and dark schemes provide distinct legible surfaces", () => {

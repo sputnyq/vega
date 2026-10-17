@@ -63,3 +63,28 @@ Archivieren erfolgt explizit. Restore stoppt die 60-Tage-Frist; erneutes Archivi
 - Serverseitige Dezimalarithmetik rundet fertige Konditionen auf Cent und
   summiert diese Bruttobeträge. Rechnungs- und Mahnberechnungen bleiben
   getrennt.
+
+## Positionspreise für Leistungen und Packmaterial (2026-10-17)
+
+- Beim Auswählen eines Katalogeintrags wird dessen Einzelpreis im
+  Auftragseditor vorbelegt. Admins und Kundenberater können den Preis pro
+  Auftragsposition ändern; Freitextpositionen benötigen für die automatische
+  Kalkulation einen explizit eingegebenen Einzelpreis.
+- Der optionale Einzelpreis gehört zum jeweiligen Auftrags-JSON, nicht zum
+  globalen Katalog. Die serverseitige Staff-Validierung begrenzt den Wert;
+  öffentliche Anfragen dürfen keine Einzelpreise setzen. Die ausdrückliche
+  Konditionsberechnung verwendet den eingegebenen Einzelpreis, andernfalls
+  den aktuellen Katalogpreis.
+- Der Preis-Override ist Teil der Preisgrundlage im `pricingSnapshot`. Eine
+  spätere Katalogänderung überschreibt gespeicherte Auftrags-Einzelpreise
+  nicht; erst eine ausdrückliche Änderung oder Neukalkulation kann sie ändern.
+
+## Informative Netto-/MwSt.-Anzeige der Konditionssumme (2026-10-17)
+
+- Die gespeicherte Konditionssumme bleibt ein Bruttobetrag und wird nicht
+  verändert. Die Admin-Konditionskarte zeigt zusätzlich eine informative
+  Aufteilung mit fest 19 %: Netto = Brutto / 1,19, MwSt. = Brutto − Netto;
+  Rundung erfolgt auf Cent und die MwSt. wird als Differenz berechnet.
+- Diese Anzeige ist keine Rechnungsberechnung und legt keinen
+  Rechnungssteuersatz fest. Rechnungssteuer bleibt unabhängig am jeweiligen
+  Rechnungsbeleg.

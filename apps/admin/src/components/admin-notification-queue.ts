@@ -39,6 +39,9 @@ export function adminNotificationReducer(
   return { visible: next ? [...visible, next] : visible, queued };
 }
 
-export function adminNotificationAutoHideDuration(severity: AdminNotificationSeverity) {
+export function adminNotificationAutoHideDuration(
+  severity: AdminNotificationSeverity,
+) {
+  if (severity === "error") return 20_000;
   return severity === "success" ? 3_000 : null;
 }

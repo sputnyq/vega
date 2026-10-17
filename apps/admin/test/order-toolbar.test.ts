@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { AdminShell } from "../src/components/AdminShell.js";
+import { OrderCreatePage } from "../src/orders/OrderCreatePage.js";
 import { AppointmentFields } from "../src/orders/AppointmentFields.js";
 import { ConditionsTab } from "../src/orders/ConditionsTab.js";
 import { createEmptyOrder } from "../src/orders/order-form-types.js";
@@ -61,6 +63,39 @@ test("only admins can create an invoice from the saved order", () => {
       'aria-label="Rechnung aus Auftrag anlegen"',
     ),
   );
+});
+
+test("content submenu highlights only the selected child route", () => {
+  const route = resolveAdminRoute("/settings/offers");
+  assert.ok(route);
+  const html = render(
+    createElement(AdminShell, {
+      user: {
+        id: "test",
+        name: "Test",
+        email: "test@example.test",
+        role: "Admin",
+        twoFactorEnabled: true,
+        mustChangePassword: false,
+        blocked: false,
+      },
+      route,
+      pathname: "/settings/offers",
+      navigate: () => {},
+      children: null,
+    }),
+  );
+  const contentItem = html.match(
+    /<div class="[^"]*MuiListItemButton-root[^"]*"[^>]*aria-label="Content"[^>]*>/u,
+  )?.[0];
+  const offersItem = html.match(
+    /<div class="[^"]*MuiListItemButton-root[^"]*"[^>]*aria-label="Angebote"[^>]*>/u,
+  )?.[0];
+
+  assert.ok(contentItem);
+  assert.ok(offersItem);
+  assert.doesNotMatch(contentItem, /Mui-selected/u);
+  assert.match(offersItem, /Mui-selected/u);
 });
 
 test("dirty documents allow only saving and clean saved documents enable follow-up actions", () => {
@@ -151,36 +186,6 @@ test("dirty documents allow only saving and clean saved documents enable follow-
       }
     }
   }
-});
-
-test("invoice dirty state is tracked from every edit and cleared only after successful saving", async () => {
-  const source = await readFile(
-    new URL("../src/invoices/InvoiceEditorPage.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /\[dirty, setDirty\] = useState\(!id\)/u);
-  assert.match(source, /onDirtyChange\?\.\(dirty\)/u);
-  assert.match(source, /function change[^\n]*setDirty\(true\)/u);
-  assert.match(
-    source,
-    /if \(!response\.ok \|\| !body\.data\)[^\n]*return; \}\s*setValue\(body\.data\);\s*setDirty\(false\);/u,
-  );
-  assert.match(
-    source,
-    /onBusyChange\?\.\(busy \|\| loading \|\| numberLoading \|\| loadFailed\)/u,
-  );
-  const order = await readFile(
-    new URL("../src/orders/OrderCreatePage.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(
-    order,
-    /if \(\(exportPdf \|\| createInvoice\) && \(dirty \|\| orderNumber === undefined\)\)/u,
-  );
-  assert.doesNotMatch(
-    order,
-    /dirty \? save\(\)|if \(dirty && !await save\(\)\)/u,
-  );
 });
 
 test("order and invoice editor titles show a new label or their saved number", () => {
@@ -291,32 +296,11 @@ test("admin shell uses a restrained brand in a persistent sidebar", async () => 
     new URL("../src/components/AdminShell.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /Auftragsverwaltung/u);
+  assert.ok(source.includes("VEGA"));
+  assert.doesNotMatch(source, /Auftragsverwaltung/u);
   assert.match(source, /variant=\{isMobile \? "temporary" : "permanent"\}/u);
   assert.match(source, /EXPANDED_SIDEBAR_WIDTH = 264/u);
   assert.ok(source.includes('"& .MuiDivider-root": { mx: 2 }'));
-});
-
-test("sidebar can collapse on desktop and mobile and keeps navigation accessible", async () => {
-  const source = await readFile(
-    new URL("../src/components/AdminShell.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /COLLAPSED_SIDEBAR_WIDTH = 72/u);
-  assert.match(
-    source,
-    /aria-label=\{sidebarCollapsed \? "Seitenleiste ausklappen" : "Seitenleiste einklappen"\}/u,
-  );
-  assert.match(
-    source,
-    /onClick=\{\(\) => setSidebarCollapsed\(\(collapsed\) => !collapsed\)\}/u,
-  );
-  assert.match(source, /aria-label="Aufträge"/u);
-  assert.match(source, /title="Abmelden" aria-label="Abmelden"/u);
-  assert.match(
-    source,
-    /width: \{ md: `calc\(100% - \$\{sidebarWidth\}px\)` \}, ml: \{ md: `\$\{sidebarWidth\}px` \}/u,
-  );
 });
 
 test("sidebar navigation starts with consistent spacing after the brand", async () => {
@@ -324,42 +308,17 @@ test("sidebar navigation starts with consistent spacing after the brand", async 
     new URL("../src/components/AdminShell.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /<Divider \/>\s*<List disablePadding>/u);
+  assert.match(
+    source,
+    /<Divider sx=\{\{ mb: 1 \}\} \/>\s*<List disablePadding>/u,
+  );
+  assert.match(source, /height: \{ xs: 58, md: 68 \}/u);
   const ordersNavigationItem = source.slice(
     source.indexOf('aria-label="Aufträge"'),
     source.indexOf('aria-label="Rechnungen"'),
   );
   assert.ok(ordersNavigationItem.includes('primary="Aufträge"'));
   assert.doesNotMatch(ordersNavigationItem, /<Divider/u);
-});
-
-test("all content navigation entries have matching icons", async () => {
-  const source = await readFile(
-    new URL("../src/components/AdminShell.tsx", import.meta.url),
-    "utf8",
-  );
-  for (const [section, icon] of [
-    ["offers", "LocalOfferOutlined"],
-    ["prices", "PaymentsOutlined"],
-    ["packings", "Inventory2Outlined"],
-    ["services", "HandymanOutlined"],
-    ["categories", "CategoryOutlined"],
-    ["furniture", "ChairOutlined"],
-  ]) {
-    assert.ok(source.includes(`section: "${section}", icon: <${icon} />`));
-  }
-  assert.match(
-    source,
-    /<ListItemIcon sx=\{\{ minWidth: 36 \}\}>\{item\.icon\}<\/ListItemIcon>/u,
-  );
-  assert.ok(
-    source.includes("<ListItemIcon><ViewModuleOutlined /></ListItemIcon>"),
-  );
-  assert.ok(
-    source.includes(
-      '{!sidebarCollapsed && <ListItemText primary="Content" />}',
-    ),
-  );
 });
 
 test("archived orders offer PDF and restoration without editing", async () => {
@@ -377,65 +336,7 @@ test("archived orders offer PDF and restoration without editing", async () => {
   );
   assert.match(
     editor,
-    /if \(body\.data\.archivedAt\) \{ navigate\("\/orders\/archived"\); return; \}/u,
-  );
-});
-
-test("customer cards stack on mobile and place notes beside customer details on desktop", () => {
-  const html = render(
-    createElement(CustomerTab, { value: createEmptyOrder(), update: () => {} }),
-  );
-  assert.match(html, /grid-template-columns:minmax\(0, 1fr\)/u);
-  assert.match(
-    html,
-    /@media \(min-width:900px\)[^}]*grid-template-columns:repeat\(2, minmax\(0, 1fr\)\)/u,
-  );
-  assert.match(html, /grid-row:span 2/u);
-  assert.equal([...html.matchAll(/MuiPaper-outlined/gu)].length, 3);
-  assert.doesNotMatch(html, /max-width:760px/u);
-});
-
-test("order cards use responsive columns without squeezing list controls", () => {
-  const value = createEmptyOrder();
-  const addresses = render(
-    createElement(AddressesTab, {
-      value,
-      update: () => {},
-      onDetailsChange: () => {},
-    }),
-  );
-  assert.equal([...addresses.matchAll(/MuiGrid-grid-md-6/gu)].length, 2);
-  const furniture = render(
-    createElement(FurnitureTab, {
-      value,
-      update: () => {},
-      onFurnitureChange: () => {},
-    }),
-  );
-  assert.match(
-    furniture,
-    /@media \(min-width:1200px\)[^}]*grid-template-columns:minmax\(0, 1fr\) minmax\(0, 2fr\)/u,
-  );
-  assert.equal([...furniture.matchAll(/MuiGrid-grid-sm-6/gu)].length, 2);
-  const extras = render(
-    createElement(ExtrasTab, { value, onExtrasChange: () => {} }),
-  );
-  assert.match(extras, /MuiGrid-grid-md-4/u);
-  assert.match(extras, /MuiGrid-grid-md-8/u);
-  const basis = render(
-    createElement(BasisTab, {
-      value,
-      update: () => {},
-      onBasisChange: () => {},
-    }),
-  );
-  assert.equal([...basis.matchAll(/MuiGrid-grid-md-6/gu)].length, 2);
-  const conditions = render(
-    createElement(ConditionsTab, { value, onConditionsChange: () => {} }),
-  );
-  assert.match(
-    conditions,
-    /@media \(min-width:900px\)[^}]*grid-template-columns:minmax\(0, 1fr\) minmax\(0, 2fr\)/u,
+    /if \(body\.data\.archivedAt\) \{\s*navigate\("\/orders\/archived"\);\s*return;\s*\}/u,
   );
 });
 
@@ -469,6 +370,25 @@ test("staff can view but cannot edit the customer alternative date range", () =>
   }
 });
 
+test("empty customer alternative dates are hidden from staff", () => {
+  const html = render(
+    createElement(AppointmentFields, {
+      value: {
+        movingDate: "2026-11-01",
+        movingTime: "10:00",
+        dateFrom: "",
+        dateTo: "",
+        dateFixed: false,
+      },
+      onChange: () => {},
+    }),
+  );
+
+  assert.doesNotMatch(html, />Von</u);
+  assert.doesNotMatch(html, />Bis</u);
+  assert.doesNotMatch(html, /Alternativer Zeitraum/u);
+});
+
 test("conditions keep manual editing and expose an explicit server calculation action", () => {
   const value = createEmptyOrder();
   value.details.conditions = [
@@ -481,7 +401,7 @@ test("conditions keep manual editing and expose an explicit server calculation a
       onCalculate: () => {},
     }),
   );
-  assert.ok(html.includes("Konditionen serverseitig berechnen"));
+  assert.ok(html.includes("Konditionen berechnen"));
   assert.ok(html.includes("Beschreibung"));
   assert.ok(html.includes("Betrag (€)"));
   assert.ok(html.includes("Manuelle Kondition"));

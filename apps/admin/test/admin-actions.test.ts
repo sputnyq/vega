@@ -1,20 +1,37 @@
 import assert from "node:assert/strict";
-import { createElement } from "react";
+import { createElement, useEffect } from "react";
 import test from "node:test";
 import { mount } from "./dom-test-helpers.js";
 import { AdminShell } from "../src/components/AdminShell.js";
-import { AdminNotifications } from "../src/components/AdminNotifications.js";
+import { AdminNotifications, useAdminNotification } from "../src/components/AdminNotifications.js";
 import { resolveAdminRoute } from "../src/routes.js";
 import type { StaffUser } from "../src/types.js";
 import { OrdersPage } from "../src/orders/OrdersPage.js";
 
 const user: StaffUser = { id: "staff", name: "Test", email: "staff@example.test", role: "Admin", twoFactorEnabled: true, mustChangePassword: false, blocked: false };
+function ErrorToastTrigger() {
+  const notify = useAdminNotification();
+  useEffect(() => notify("error", "Testfehler"), [notify]);
+  return null;
+}
 function shell(navigate: (path: string) => void, orderIsCopy = false) {
   const route = resolveAdminRoute("/edit/1001")!;
   return createElement(AdminNotifications, null, createElement(AdminShell, {
     user, route, pathname: route.path, navigate, orderIsCopy, children: null,
   }));
 }
+
+test("error toast icon and message are vertically centered", async () => {
+  const app = await mount(createElement(AdminNotifications, null, createElement(ErrorToastTrigger)));
+  try {
+    await app.flush();
+    const alert = app.container.querySelector<HTMLElement>('[role="alert"]');
+    assert.ok(alert);
+    assert.equal(app.window.getComputedStyle(alert).alignItems, "center");
+  } finally {
+    await app.cleanup();
+  }
+});
 
 test("copy locks repeated clicks, reports server failures and re-enables follow-up actions", async () => {
   const originalFetch = globalThis.fetch;

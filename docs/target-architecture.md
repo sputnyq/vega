@@ -141,18 +141,18 @@ WordPress bleibt CMS und Einbettungsfläche. Es ist nicht länger Order-Backend,
 
 ## Rollen-/Berechtigungsmatrix
 
-| Bereich/Aktion | Admin | Kundenberater | Öffentlich |
-|---|---:|---:|---:|
-| Eigene Authentifizierung/2FA | ja | ja | nein |
-| Kundenanfragen lesen/bearbeiten | ja | ja | nein |
-| Angebotskopie erstellen/kopieren/anpassen/archivieren | ja | ja | nein |
-| Preis einer einzelnen Angebotskopie anpassen | ja | ja | nein |
-| Globale Preise, Services, Möbel, Kategorien ändern | ja | nein | nein |
-| Mitarbeiter/Accounts verwalten | ja | nein | nein |
-| Rechnungen, Gutschriften, Mahnungen | ja | nein | nein |
-| Öffentliche Katalogprojektion lesen | ja | ja | ja, nur Safe DTO |
-| Neue Anfrage absenden | ja | ja | ja, Rate-Limited |
-| Aufträge/Kunden öffentlich lesen | nein | nein | nein |
+| Bereich/Aktion                                        | Admin | Kundenberater |       Öffentlich |
+| ----------------------------------------------------- | ----: | ------------: | ---------------: |
+| Eigene Authentifizierung/2FA                          |    ja |            ja |             nein |
+| Kundenanfragen lesen/bearbeiten                       |    ja |            ja |             nein |
+| Angebotskopie erstellen/kopieren/anpassen/archivieren |    ja |            ja |             nein |
+| Preis einer einzelnen Angebotskopie anpassen          |    ja |            ja |             nein |
+| Globale Preise, Services, Möbel, Kategorien ändern    |    ja |          nein |             nein |
+| Mitarbeiter/Accounts verwalten                        |    ja |          nein |             nein |
+| Rechnungen, Gutschriften, Mahnungen                   |    ja |          nein |             nein |
+| Öffentliche Katalogprojektion lesen                   |    ja |            ja | ja, nur Safe DTO |
+| Neue Anfrage absenden                                 |    ja |            ja | ja, Rate-Limited |
+| Aufträge/Kunden öffentlich lesen                      |  nein |          nein |             nein |
 
 Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater` erhält keine versteckten Admin-APIs.
 
@@ -209,17 +209,27 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   (`POST /api/admin/orders/pricing-preview`), kein Effekt beim Speichern,
   Kopieren, Exportieren oder Mailversand. Sie verwendet den gepflegten
   `CatalogOffer.sum`, einen Basisrabatt, Fahrtkosten, Halteverbotszonen sowie
-  ausgewählte Katalog-Services und Packungen. Fahrtkosten außerhalb Münchens
-  sind das Maximum aus Tarifpauschale und Kilometerpreis mal Entfernung und
-  LKW-Anzahl; der Kilometerbetrag wird auf das nächste Vielfache von 5 EUR
-  gerundet. Der Rabatt gilt nur für den Basispreis. Fertige Konditionen werden
+  ausgewählte Katalog-Services und Packungen. Der Katalog-Einzelpreis wird bei
+  Auswahl vorbelegt; Admins und Kundenberater dürfen ihn pro Auftragsposition
+  überschreiben oder für Freitextpositionen eingeben. Die API validiert und
+  persistiert diese Staff-Einzelpreise und verwendet sie bei der ausdrücklichen
+  Vorschau; Freitextpositionen ohne Einzelpreis sind nicht automatisch
+  kalkulierbar. Fahrtkosten außerhalb Münchens
+  sind das Maximum aus dem zentralen Anfahrtstarif pro LKW-Anzahl (unabhängig
+  von der Trägerzahl) und Kilometerpreis mal Entfernung und LKW-Anzahl; der
+  Kilometerbetrag wird auf das nächste Vielfache von 5 EUR gerundet. In München
+  gilt der zentrale Anfahrtstarif pro LKW-Anzahl. Der Rabatt gilt nur für den
+  Basispreis. Fertige Konditionen werden
   auf Cent gerundet und als Bruttobeträge summiert; die Rechnungsarithmetik
-  bleibt davon getrennt.
+  bleibt davon getrennt. Die Konditionskarte darf zusätzlich die
+  Bruttosumme informativ mit fest 19 % in Netto und MwSt. aufteilen
+  (`Netto = Brutto / 1,19`); diese Anzeige ändert weder Orders noch
+  Rechnungssteuersätze.
 - Berechnete Konditionen bleiben im Admin-Editor anpassbar. Erneutes Ersetzen
   vorhandener Konditionen verlangt eine Bestätigung. Katalognormaländerungen
   ändern gespeicherte Preise nicht. Der serverseitige `pricingSnapshot` im
-  bestehenden Order-JSON hält verwendete Katalog-/Tarifpreise und
-  Berechnungsgrundlagen fest; die finalen Beträge liegen ausschließlich in den
+  bestehenden Order-JSON hält verwendete Katalog-/Tarifpreise, optionale
+  positionsbezogene Staff-Einzelpreise und Berechnungsgrundlagen fest; die finalen Beträge liegen ausschließlich in den
   Konditionen. Vorschau- und Katalogkonflikte liefern `409`. Orders ohne
   Snapshot bleiben bearbeitbar und werden nicht nachträglich neu bepreist.
 - Preisrelevante fehlende Grundlagen, insbesondere eine unbekannte Entfernung
@@ -277,7 +287,8 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
   Kein generischer Google-Proxy, kein Place-Speicher, kein öffentlicher Order-Read.
 - `admin` Router verlangen gültige Better-Auth-Session plus Rollen-/Capability-Check.
 - Die Streckenberechnung unter `/api/admin/routes` (Depot → 2–4 Umzugsadressen → Depot,
-  nur auf expliziten Klick, Kilometer gerundet in den ungespeicherten Entwurf) ist
+  Kilometer gerundet in den ungespeicherten Entwurf; automatische Erst- und
+  Adressänderungsberechnung über dieselbe Staff-API, Button als manueller Retry) ist
   ausschließlich authentifizierte Admin-API für Admin/Kundenberater.
 - Admin-only Finanzrouten liegen unter `/api/admin/invoices`; Kundenberater und
   öffentliche Clients erhalten keinen Finanzbeleg-Zugriff.
@@ -312,14 +323,14 @@ Alle Rechte werden im Backend geprüft. `Admin` hat alle Rechte; `Kundenberater`
 
 ## Privacy/Retention und unbeaufsichtigte Tasks
 
-| Objekt | Verhalten |
-|---|---|
-| Neue Anfrage | `edited=false`; bleibt aktiv, bis explizit archiviert |
-| Angebotskopie | eigenständiger Datensatz, eigene Nummer, `edited=true` |
-| Archivierter Auftrag/Kopie | Restore-fähig; Purge nach 60 Tagen ab aktueller Archivierung |
-| Audit eines Auftrags | minimaler Aktionsdatensatz; zusammen mit Order-Purge entfernt |
-| GCS-Objekt | keine Order-Purge-Kaskade; Lifecycle nach 180 Tagen ab Upload |
+| Objekt                                 | Verhalten                                                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Neue Anfrage                           | `edited=false`; bleibt aktiv, bis explizit archiviert                                                                                                         |
+| Angebotskopie                          | eigenständiger Datensatz, eigene Nummer, `edited=true`                                                                                                        |
+| Archivierter Auftrag/Kopie             | Restore-fähig; Purge nach 60 Tagen ab aktueller Archivierung                                                                                                  |
+| Audit eines Auftrags                   | minimaler Aktionsdatensatz; zusammen mit Order-Purge entfernt                                                                                                 |
+| GCS-Objekt                             | keine Order-Purge-Kaskade; Lifecycle nach 180 Tagen ab Upload                                                                                                 |
 | Rechnung, Gutschrift, Mahnungsereignis | Admin-Archivierung und Restore; einheitlicher App-Purge 30 Tage nach Archivierung. Externe gesetzliche Archivierung bleibt Betreiberprozess und Go-live-Gate. |
-| Invoice PDF | bei Bedarf aus aktuellem DB-Stand; nicht persistent in App/GCS |
+| Invoice PDF                            | bei Bedarf aus aktuellem DB-Stand; nicht persistent in App/GCS                                                                                                |
 
 Hostinger Cron läuft täglich, verarbeitet abgelaufene archivierte Datensätze und Mail-Retries. Purge ist transaktional/idempotent. Vor finaler Implementierung ist zu prüfen, ob Managed Node Cron eine CLI-Ausführung erlaubt; sonst wird ein kurzlebiger, signierter interner Trigger verwendet.

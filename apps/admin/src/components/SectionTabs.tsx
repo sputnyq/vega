@@ -19,12 +19,10 @@ export function SectionTabs({ label, value, tabs, onChange, sticky = false }: Se
   return (
     <Box sx={sticky ? {
       position: "sticky",
-      top: { xs: 58, md: 68 },
+      top: { xs: 66, md: 76 },
       zIndex: 2,
       pb: 1,
       bgcolor: "background.default",
-      borderBottom: "1px solid",
-      borderColor: "divider",
     } : { pb: 1 }}>
       <Tabs
         value={value}
