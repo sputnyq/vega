@@ -13,7 +13,7 @@ test("furniture categories follow configured order and ID without mutating the c
 test("furniture editing sends selected category IDs and deletion requires confirmation", async () => {
   const originalFetch = globalThis.fetch;
   const categories = [{ id: 2, name: "Küche", sort: 20 }, { id: 1, name: "Wohnzimmer", sort: 10 }];
-  const furniture = { id: 7, name: "Sofa", volume: 2, step: 1, sortOrder: 0, categoryIds: [1], categoryRefs: [categories[1]] };
+  const furniture = { id: 7, name: "Sofa", volume: 2, step: 0.5, sortOrder: 0, categoryIds: [1], categoryRefs: [categories[1]] };
   const writes: Array<{ method: string; body?: unknown }> = [];
   globalThis.fetch = async (url, init) => {
     if (!init?.method || init.method === "GET") return Response.json({ data: String(url).endsWith("/categories") ? categories : [furniture] });
@@ -26,12 +26,15 @@ test("furniture editing sends selected category IDs and deletion requires confir
     await app.click(app.container.querySelector('button[aria-haspopup="menu"]')!);
     await app.click([...app.window.document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Bearbeiten")!);
     const dialog = app.window.document.querySelector('[role="dialog"]')!;
+    const stepInput = [...dialog.querySelectorAll<HTMLInputElement>('input[type="number"]')].find((input) => input.value === "0.5")!;
+    assert.equal(stepInput.min, "0.5");
+    assert.equal(stepInput.step, "0.5");
     const checkboxes = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
     assert.deepEqual(checkboxes.map((box) => box.closest("label")!.textContent), ["Wohnzimmer", "Küche"]);
     assert.deepEqual(checkboxes.map((box) => box.checked), [true, false]);
     await app.click(checkboxes[1]!);
     await app.click([...dialog.querySelectorAll("button")].find((button) => button.textContent === "Speichern")!);
-    assert.deepEqual(writes, [{ method: "PUT", body: { name: "Sofa", volume: 2, step: 1, sortOrder: 0, categoryIds: [1, 2] } }]);
+    assert.deepEqual(writes, [{ method: "PUT", body: { name: "Sofa", volume: 2, step: 0.5, sortOrder: 0, categoryIds: [1, 2] } }]);
     await app.click(app.container.querySelector('button[aria-haspopup="menu"]')!);
     app.window.confirm = () => false;
     await app.click([...app.window.document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Löschen")!);

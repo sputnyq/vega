@@ -94,7 +94,13 @@ export function validateFurnitureInput(input: unknown): CatalogValidation<Catalo
   if (typeof volume !== "number" || !Number.isFinite(volume) || volume < 0 || volume > 100_000 || Math.abs(volume * 100 - Math.round(volume * 100)) > 0.00001) {
     issues.push({ field: "volume", message: "Bitte geben Sie ein gültiges Volumen mit höchstens zwei Nachkommastellen ein." });
   }
-  const step = record.step === undefined ? 1 : parseInteger(record, "step", issues, { min: 1, max: 100_000 }) ?? 1;
+  const rawStep = record.step === undefined ? 1 : record.step;
+  const step = typeof rawStep === "number" && Number.isFinite(rawStep) && rawStep >= 0.5 && rawStep <= 100_000
+    ? rawStep
+    : 0;
+  if (step === 0 || Math.abs(step * 2 - Math.round(step * 2)) > 0.00001) {
+    issues.push({ field: "step", message: "Bitte geben Sie ein Vielfaches von 0,5 zwischen 0,5 und 100.000 ein." });
+  }
   const value: CatalogFurnitureInput = {
     name,
     categoryIds,

@@ -22,7 +22,10 @@ test("furniture uses only required catalog fields with step and sorting defaults
   assert.deepEqual(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 0.5, step: 2, sortOrder: 7 }), {
     ok: true, value: { name: "Stuhl", categoryIds: [], volume: 0.5, step: 2, sortOrder: 7 },
   });
-  for (const step of [null, 0, -1, 1.5, "1"]) assert.equal(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 1, step }).ok, false);
+  assert.deepEqual(validateFurnitureInput({ name: "Regalboden", categoryIds: [], volume: 0.5, step: 0.5 }), {
+    ok: true, value: { name: "Regalboden", categoryIds: [], volume: 0.5, step: 0.5, sortOrder: 0 },
+  });
+  for (const step of [null, 0, -1, 0.25, 1.25, "1"]) assert.equal(validateFurnitureInput({ name: "Stuhl", categoryIds: [], volume: 1, step }).ok, false);
 });
 
 test("furniture rejects malformed category references, negative measures, and invalid steps", () => {

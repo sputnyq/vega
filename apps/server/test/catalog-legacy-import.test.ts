@@ -42,8 +42,7 @@ test("legacy import maps categories, furniture, services, packing, offers and bo
   const wardrobe = plan.furniture[0];
   assert.equal(wardrobe.input.name, "Schrank zerlegbar, je Laufmeter");
   assert.equal(wardrobe.input.volume, 1);
-  // Legacy half steps are impossible in the target structure and round up to one.
-  assert.equal(wardrobe.input.step, 1);
+  assert.equal(wardrobe.input.step, 0.5);
   assert.equal(wardrobe.input.sortOrder, 7);
   assert.deepEqual(wardrobe.categoryNames, ["Wohnung"]);
   const bicycle = plan.furniture[1];
@@ -76,8 +75,19 @@ test("legacy import skips invalid records and reports every decision", () => {
   assert.equal(plan.furniture.some((entry) => entry.legacyId === 3999), false);
   assert.ok(plan.skipped.some((line) => line.includes("3283") && line.includes("ohne Namen")));
   assert.ok(plan.skipped.some((line) => line.includes("Ohne Kategorie")));
-  assert.ok(plan.skipped.some((line) => line.includes("Bruchschritt 0.5")));
+  assert.ok(!plan.skipped.some((line) => line.includes("Schrittgröße 0.5")));
   assert.ok(plan.skipped.some((line) => line.includes("2 Zähler-Datensätze")));
+});
+
+test("legacy import defaults unsupported fractional steps to one with a warning", () => {
+  const plan = buildLegacyCatalogImportPlan({
+    ...PAYLOAD,
+    items: [
+      { name: "Sondermaß", volume: 1, step: "0.25", categoryRefs: [{ name: "Wohnung" }] },
+    ],
+  });
+  assert.equal(plan.furniture[0]?.input.step, 1);
+  assert.ok(plan.skipped.some((line) => line.includes("ungültige Schrittgröße 0.25")));
 });
 
 test("legacy import rejects malformed payloads, comma decimals and invalid volumes", () => {

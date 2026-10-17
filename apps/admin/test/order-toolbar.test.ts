@@ -98,6 +98,45 @@ test("content submenu highlights only the selected child route", () => {
   assert.match(offersItem, /Mui-selected/u);
 });
 
+test("management submenu groups users and maintenance and highlights the active child", () => {
+  const route = resolveAdminRoute("/settings/users");
+  assert.ok(route);
+  const html = render(
+    createElement(AdminShell, {
+      user: {
+        id: "test",
+        name: "Test",
+        email: "test@example.test",
+        role: "Admin",
+        twoFactorEnabled: true,
+        mustChangePassword: false,
+        blocked: false,
+      },
+      route,
+      pathname: "/settings/users",
+      navigate: () => {},
+      children: null,
+    }),
+  );
+  const managementItem = html.match(
+    /<div class="[^"]*MuiListItemButton-root[^"]*"[^>]*aria-label="Verwaltung"[^>]*>/u,
+  )?.[0];
+  const usersItem = html.match(
+    /<div class="[^"]*MuiListItemButton-root[^"]*"[^>]*aria-label="Nutzer"[^>]*>/u,
+  )?.[0];
+  const maintenanceItem = html.match(
+    /<div class="[^"]*MuiListItemButton-root[^"]*"[^>]*aria-label="Maintenance"[^>]*>/u,
+  )?.[0];
+
+  assert.ok(managementItem);
+  assert.ok(usersItem);
+  assert.ok(maintenanceItem);
+  assert.match(managementItem, /aria-expanded="true"/u);
+  assert.doesNotMatch(managementItem, /Mui-selected/u);
+  assert.match(usersItem, /Mui-selected/u);
+  assert.doesNotMatch(maintenanceItem, /Mui-selected/u);
+});
+
 test("dirty documents allow only saving and clean saved documents enable follow-up actions", () => {
   const user: StaffUser = {
     id: "test",

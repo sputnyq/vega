@@ -23,7 +23,7 @@ function toFurnitureDto(furniture: {
   id: number;
   name: string;
   volume: unknown;
-  step: number;
+  step: unknown;
   sortOrder: number;
   categories: Array<{ category: { id: number; name: string } }>;
 }): CatalogFurnitureDto {
@@ -34,7 +34,7 @@ function toFurnitureDto(furniture: {
     categoryIds: categoryRefs.map(({ id }) => id),
     categoryRefs,
     volume: Number(furniture.volume),
-    step: furniture.step,
+    step: Number(furniture.step),
     sortOrder: furniture.sortOrder,
   };
 }

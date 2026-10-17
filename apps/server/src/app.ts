@@ -25,6 +25,7 @@ import { createUploadRouter } from "./uploads/upload-routes.js";
 import { createUploadService, UploadError } from "./uploads/upload-service.js";
 import { createCustomerFormRouter } from "./customer-form-routes.js";
 import { createSettingsRouter } from "./settings/settings-routes.js";
+import { createMaintenanceRouter } from "./maintenance/maintenance-routes.js";
 import { createRouteRouter } from "./maps/route-routes.js";
 import { createAdminPlacesRouter } from "./maps/admin-places-routes.js";
 import { createStaffRouter } from "./staff/staff-routes.js";
@@ -191,6 +192,7 @@ export function createApp(config: AppConfig, dependencies: {
   // their 401/403 responses and only completed staff consume quota.
   app.use("/api/admin", requireCompletedStaff(auth));
   app.use("/api/admin", createAdminRateLimit());
+  app.use("/api/admin/maintenance", requireAdmin(auth), createMaintenanceRouter(config, customerFormBuild));
   app.use("/api/admin/settings", requireAdmin(auth), createSettingsRouter(config));
   app.use("/api/admin/staff", requireAdmin(auth), createStaffRouter(auth, config));
   app.use("/api/admin/places", createAdminPlacesRouter(config));
@@ -362,7 +364,7 @@ import(${JSON.stringify(asset)}).catch(() => { root.textContent = "Das Umzugsfor
     if (!existsSync(`${adminBuild}/index.html`)) return next();
     res.sendFile(`${adminBuild}/index.html`);
   });
-  app.get(["/forgot-password", "/reset-password"], assetRateLimit, (_req, res, next) => {
+  app.get(["/forgot-password", "/reset-password", "/maintenance"], assetRateLimit, (_req, res, next) => {
     if (!existsSync(`${adminBuild}/index.html`)) return next();
     return res.sendFile(`${adminBuild}/index.html`);
   });

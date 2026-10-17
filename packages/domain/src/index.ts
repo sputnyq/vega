@@ -8,6 +8,7 @@ export {
   MAX_INVOICE_SEQUENCE_VALUE,
 } from "./invoice-number.js";
 export { isValidEmailAddress } from "./email.js";
+export type { SetupVariableDto, SetupInfoDto, SetupCheckDto, SetupSmokeTestDto } from "./setup.js";
 export { calculateOrderPricing, OrderPricingError } from "./order-pricing.js";
 export type {
   CalculateOrderPricingInput,
