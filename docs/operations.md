@@ -56,6 +56,29 @@ versioniert). `dev` und `build` generieren automatisch. Migrationen seeden nicht
 dafür `npm run db:seed`. Der `mariadb@3.5.4`-Override ist in
 `proof-01-integration-compatibility.md` begründet.
 
+### Legacy-Katalogimport
+
+`npm run db:import-legacy-catalog` liest den Katalog der Bestands-App
+(`umzug-meister.de/wp-json/um-configurator/v1`) und überträgt ihn in die
+aktuellen Katalogtabellen:
+
+```sh
+npm run db:import-legacy-catalog             # Vorschau ohne Datenänderung
+npm run db:import-legacy-catalog -- --apply  # schreibt transaktional
+```
+
+Der Import ersetzt den gesamten Katalog (Kategorien, Möbel mit
+Kategorie-Verknüpfungen, Services, Packmaterial, Angebote) sowie `boxCbm` und
+`kleiderboxCbm` in `appSettings`; die Transaktion ist dabei atomar. Er
+übernimmt nur Felder der Zielstruktur: Legacy-`t35` wird zu `trucks`,
+`desc`/`description` zu `description`, `imgUrl` zu `media`; die entfernten
+Felder (`montagePrice`, `extraPrice`, `bulky`, `m100`, `m150`, `colli`, Slug)
+und `Counter`-Zähler werden verworfen. Datensätze ohne Namen oder Kategorie,
+ungültige Preise/Volumen und Bruchschritte werden übersprungen und als Hinweis
+gemeldet. Der Plan liegt in
+`apps/server/src/catalog/legacy-import.ts`, das Skript in
+`prisma/import-legacy-catalog.ts`.
+
 Die Migration `20261016150000_document_revisions` muss vor dem neuen
 Serverstand ausgerollt sein. Sie ergänzt `Order.revision` und
 `Invoice.revision` mit Startwert `0`; alte offene Bearbeitungsseiten müssen

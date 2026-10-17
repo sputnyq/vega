@@ -1,4 +1,5 @@
 import {
+  MAX_TRUCKS,
   SERVICE_RATE_KEYS,
   type CatalogCategoryInput,
   type CatalogFurnitureInput,
@@ -148,7 +149,7 @@ export function validatePackingInput(input: unknown): CatalogValidation<CatalogP
 export function validateOfferInput(input: unknown): CatalogValidation<CatalogOfferInput> {
   const { record, issues } = parseRecord(input);
   const workers = parseInteger(record, "workers", issues, { min: 1, max: 100 });
-  const trucks = parseInteger(record, "trucks", issues, { min: 1, max: 20 });
+  const trucks = parseInteger(record, "trucks", issues, { min: 1, max: MAX_TRUCKS });
   const includedHours = parseInteger(record, "includedHours", issues, { min: 1, max: 24 });
   const value = {
     name: parseName(record, issues),

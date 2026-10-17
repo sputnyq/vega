@@ -1,5 +1,20 @@
-import { AddOutlined, CompareArrowsOutlined, RemoveOutlined } from "@mui/icons-material";
-import { Alert, Box, Grid, IconButton, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { useCallback, useState } from "react";
+import {
+  AddOutlined,
+  CompareArrowsOutlined,
+  RemoveOutlined,
+} from "@mui/icons-material";
+import {
+  Alert,
+  Box,
+  Grid,
+  IconButton,
+  Paper,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import type { OrderDetailsInput } from "@vega/domain";
 import { AddressFields } from "./AddressFields.js";
 import { createEmptyAddress, type OrderFormValue } from "./order-form-types.js";
@@ -9,10 +24,23 @@ interface AddressesTabProps {
   value: OrderFormValue;
   update: (patch: Partial<OrderFormValue>) => void;
   onDetailsChange: (details: OrderDetailsInput) => void;
+  /** False while the order is still loading; suppresses automatic route calculation. */
+  ready?: boolean;
 }
 
-export function AddressesTab({ value, update, onDetailsChange }: AddressesTabProps) {
+export function AddressesTab({
+  value,
+  update,
+  onDetailsChange,
+  ready = true,
+}: AddressesTabProps) {
   const { details } = value;
+  // Bumped when a route-relevant field loses focus so RouteDistance recalculates a changed address.
+  const [routeBlurToken, setRouteBlurToken] = useState(0);
+  const signalRouteBlur = useCallback(
+    () => setRouteBlurToken((token) => token + 1),
+    [],
+  );
 
   function toggleSecondary(kind: "from" | "to") {
     if (kind === "from") {
@@ -20,7 +48,11 @@ export function AddressesTab({ value, update, onDetailsChange }: AddressesTabPro
         const { secondaryFrom: _removed, ...rest } = details;
         onDetailsChange({ ...rest, showSecondaryFrom: false });
       } else {
-        onDetailsChange({ ...details, secondaryFrom: createEmptyAddress(), showSecondaryFrom: true });
+        onDetailsChange({
+          ...details,
+          secondaryFrom: createEmptyAddress(),
+          showSecondaryFrom: true,
+        });
       }
       return;
     }
@@ -28,7 +60,11 @@ export function AddressesTab({ value, update, onDetailsChange }: AddressesTabPro
       const { secondaryTo: _removed, ...rest } = details;
       onDetailsChange({ ...rest, showSecondaryTo: false });
     } else {
-      onDetailsChange({ ...details, secondaryTo: createEmptyAddress(), showSecondaryTo: true });
+      onDetailsChange({
+        ...details,
+        secondaryTo: createEmptyAddress(),
+        showSecondaryTo: true,
+      });
     }
   }
 
@@ -46,73 +82,184 @@ export function AddressesTab({ value, update, onDetailsChange }: AddressesTabPro
     <Stack spacing={2}>
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={1.5}>
-          <Typography component="h2" variant="h6">Entfernung</Typography>
+          <Typography component="h2" variant="h6">
+            Entfernung
+          </Typography>
           <TextField
             type="number"
             label="Entfernung in km"
             value={details.distanceKm}
-            onChange={(event) => onDetailsChange({ ...details, distanceKm: Math.max(0, Number(event.target.value)), distanceSource: "manual" })}
+            onChange={(event) =>
+              onDetailsChange({
+                ...details,
+                distanceKm: Math.max(0, Number(event.target.value)),
+                distanceSource: "manual",
+              })
+            }
             slotProps={{ htmlInput: { min: 0, max: 10000, step: 1 } }}
           />
-          <RouteDistance value={value} onDistance={(distanceKm) => onDetailsChange({ ...details, distanceKm, distanceSource: "route" })} />
+          <RouteDistance
+            value={value}
+            blurToken={routeBlurToken}
+            ready={ready}
+            onDistance={(distanceKm) =>
+              onDetailsChange({
+                ...details,
+                distanceKm,
+                distanceSource: "route",
+              })
+            }
+          />
         </Stack>
       </Paper>
       <Grid container spacing={2} sx={{ alignItems: "stretch" }}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, height: "100%" }}>
+          <Paper
+            variant="outlined"
+            sx={{ p: { xs: 2, sm: 3 }, height: "100%" }}
+          >
             <Stack spacing={2}>
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Typography component="h2" variant="h6" color="error.main">
-                  {details.showSecondaryFrom ? "1. Beladestelle" : "Beladestelle"}
+                  {details.showSecondaryFrom
+                    ? "1. Beladestelle"
+                    : "Beladestelle"}
                 </Typography>
-                <Tooltip title={details.showSecondaryFrom ? "2. Beladestelle entfernen" : "Beladestelle hinzufügen"}>
-                  <IconButton color={details.showSecondaryFrom ? "error" : "success"} onClick={() => toggleSecondary("from")} aria-label="Weitere Beladestelle umschalten">
-                    {details.showSecondaryFrom ? <RemoveOutlined /> : <AddOutlined />}
+                <Tooltip
+                  title={
+                    details.showSecondaryFrom
+                      ? "2. Beladestelle entfernen"
+                      : "Beladestelle hinzufügen"
+                  }
+                >
+                  <IconButton
+                    color={details.showSecondaryFrom ? "error" : "success"}
+                    onClick={() => toggleSecondary("from")}
+                    aria-label="Weitere Beladestelle umschalten"
+                  >
+                    {details.showSecondaryFrom ? (
+                      <RemoveOutlined />
+                    ) : (
+                      <AddOutlined />
+                    )}
                   </IconButton>
                 </Tooltip>
               </Box>
-              <AddressFields title="" value={value.from} onChange={(from) => update({ from: { ...value.from, ...from } })} />
+              <AddressFields
+                title=""
+                value={value.from}
+                onRouteFieldBlur={signalRouteBlur}
+                onChange={(from) =>
+                  update({ from: { ...value.from, ...from } })
+                }
+              />
               {details.showSecondaryFrom && details.secondaryFrom && (
                 <>
                   <Box sx={{ display: "flex", justifyContent: "center" }}>
                     <Tooltip title="1. und 2. Beladestelle tauschen">
-                      <IconButton onClick={() => exchange("from")} aria-label="Beladestellen tauschen"><CompareArrowsOutlined /></IconButton>
+                      <IconButton
+                        onClick={() => exchange("from")}
+                        aria-label="Beladestellen tauschen"
+                      >
+                        <CompareArrowsOutlined />
+                      </IconButton>
                     </Tooltip>
                   </Box>
-                  <AddressFields title="2. Beladestelle" value={details.secondaryFrom} onChange={(secondaryFrom) => {
-                    const current = details.secondaryFrom;
-                    if (current) onDetailsChange({ ...details, secondaryFrom: { ...current, ...secondaryFrom } });
-                  }} />
+                  <AddressFields
+                    title="2. Beladestelle"
+                    value={details.secondaryFrom}
+                    onRouteFieldBlur={signalRouteBlur}
+                    onChange={(secondaryFrom) => {
+                      const current = details.secondaryFrom;
+                      if (current)
+                        onDetailsChange({
+                          ...details,
+                          secondaryFrom: { ...current, ...secondaryFrom },
+                        });
+                    }}
+                  />
                 </>
               )}
             </Stack>
           </Paper>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, height: "100%" }}>
+          <Paper
+            variant="outlined"
+            sx={{ p: { xs: 2, sm: 3 }, height: "100%" }}
+          >
             <Stack spacing={2}>
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Typography component="h2" variant="h6" color="primary.main">
-                  {details.showSecondaryTo ? "1. Entladestelle" : "Entladestelle"}
+                  {details.showSecondaryTo
+                    ? "1. Entladestelle"
+                    : "Entladestelle"}
                 </Typography>
-                <Tooltip title={details.showSecondaryTo ? "2. Entladestelle entfernen" : "Entladestelle hinzufügen"}>
-                  <IconButton color={details.showSecondaryTo ? "error" : "success"} onClick={() => toggleSecondary("to")} aria-label="Weitere Entladestelle umschalten">
-                    {details.showSecondaryTo ? <RemoveOutlined /> : <AddOutlined />}
+                <Tooltip
+                  title={
+                    details.showSecondaryTo
+                      ? "2. Entladestelle entfernen"
+                      : "Entladestelle hinzufügen"
+                  }
+                >
+                  <IconButton
+                    color={details.showSecondaryTo ? "error" : "success"}
+                    onClick={() => toggleSecondary("to")}
+                    aria-label="Weitere Entladestelle umschalten"
+                  >
+                    {details.showSecondaryTo ? (
+                      <RemoveOutlined />
+                    ) : (
+                      <AddOutlined />
+                    )}
                   </IconButton>
                 </Tooltip>
               </Box>
-              <AddressFields title="" value={value.to} onChange={(to) => update({ to: { ...value.to, ...to } })} />
+              <AddressFields
+                title=""
+                value={value.to}
+                showApartmentDetails={false}
+                onRouteFieldBlur={signalRouteBlur}
+                onChange={(to) => update({ to: { ...value.to, ...to } })}
+              />
               {details.showSecondaryTo && details.secondaryTo && (
                 <>
                   <Box sx={{ display: "flex", justifyContent: "center" }}>
                     <Tooltip title="1. und 2. Entladestelle tauschen">
-                      <IconButton onClick={() => exchange("to")} aria-label="Entladestellen tauschen"><CompareArrowsOutlined /></IconButton>
+                      <IconButton
+                        onClick={() => exchange("to")}
+                        aria-label="Entladestellen tauschen"
+                      >
+                        <CompareArrowsOutlined />
+                      </IconButton>
                     </Tooltip>
                   </Box>
-                  <AddressFields title="2. Entladestelle" value={details.secondaryTo} onChange={(secondaryTo) => {
-                    const current = details.secondaryTo;
-                    if (current) onDetailsChange({ ...details, secondaryTo: { ...current, ...secondaryTo } });
-                  }} />
+                  <AddressFields
+                    title="2. Entladestelle"
+                    value={details.secondaryTo}
+                    showApartmentDetails={false}
+                    onRouteFieldBlur={signalRouteBlur}
+                    onChange={(secondaryTo) => {
+                      const current = details.secondaryTo;
+                      if (current)
+                        onDetailsChange({
+                          ...details,
+                          secondaryTo: { ...current, ...secondaryTo },
+                        });
+                    }}
+                  />
                 </>
               )}
             </Stack>

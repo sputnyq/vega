@@ -53,7 +53,7 @@ export function App() {
   const [invoiceNumber, setInvoiceNumber] = useState<string>();
   const [totpPassword, setTotpPassword] = useState<string | undefined>();
   const [voluntaryTotpSetup, setVoluntaryTotpSetup] = useState(false);
-  const [twoFactorRequired, setTwoFactorRequired] = useState(() => window.location.pathname === "/two-factor");
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const route = resolveAdminRoute(pathname);
   const isAuthPath = pathname === "/login" || pathname === "/two-factor";
   const isPasswordResetPath = pathname === "/forgot-password" || pathname === "/reset-password";

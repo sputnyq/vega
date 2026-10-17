@@ -17,7 +17,13 @@ interface SectionTabsProps {
 
 export function SectionTabs({ label, value, tabs, onChange, sticky = false }: SectionTabsProps) {
   return (
-    <Box sx={sticky ? { position: "sticky", top: 50, zIndex: 2, pb: 1 } : { pb: 1 }}>
+    <Box sx={sticky ? {
+      position: "sticky",
+      top: { xs: 66, md: 76 },
+      zIndex: 2,
+      pb: 1,
+      bgcolor: "background.default",
+    } : { pb: 1 }}>
       <Tabs
         value={value}
         onChange={(_, next: string | number) => onChange(next)}

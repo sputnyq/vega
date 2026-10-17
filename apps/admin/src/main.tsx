@@ -7,7 +7,7 @@ import { adminTheme } from "./theme.js";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ThemeProvider theme={adminTheme}>
+    <ThemeProvider theme={adminTheme} defaultMode="system" modeStorageKey="vega-admin-color-mode" disableTransitionOnChange>
       <CssBaseline />
       <AdminNotifications>
         <App />

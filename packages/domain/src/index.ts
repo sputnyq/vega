@@ -1,8 +1,18 @@
-export { meetsPasswordPolicy, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./password-policy.js";
-export { manualInvoiceNextValue, MAX_INVOICE_SEQUENCE_VALUE } from "./invoice-number.js";
+export {
+  meetsPasswordPolicy,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "./password-policy.js";
+export {
+  manualInvoiceNextValue,
+  MAX_INVOICE_SEQUENCE_VALUE,
+} from "./invoice-number.js";
 export { isValidEmailAddress } from "./email.js";
 export { calculateOrderPricing, OrderPricingError } from "./order-pricing.js";
-export type { CalculateOrderPricingInput, PricedOrderService } from "./order-pricing.js";
+export type {
+  CalculateOrderPricingInput,
+  PricedOrderService,
+} from "./order-pricing.js";
 
 /** Anwendungsrollen; Berechtigungen werden serverseitig durchgesetzt. */
 export type UserRole = "Admin" | "Kundenberater";
@@ -13,7 +23,10 @@ export function isTotpRequired(role: string): boolean {
 }
 
 /** Whether an account still has to finish TOTP enrollment before staff access. */
-export function needsTotpSetup(user: { role: string; twoFactorEnabled?: boolean | null | undefined }): boolean {
+export function needsTotpSetup(user: {
+  role: string;
+  twoFactorEnabled?: boolean | null | undefined;
+}): boolean {
   return isTotpRequired(user.role) && user.twoFactorEnabled !== true;
 }
 
@@ -73,12 +86,20 @@ export interface OrderServiceInput {
   quantity: number;
   kind: "packaging" | "service";
   catalogId?: number;
+  unitPrice?: number;
 }
 
 export interface OrderConditionInput {
   description: string;
   amount: number;
-  kind?: "manual" | "base" | "discount" | "travel" | "parking" | "services" | "packaging";
+  kind?:
+    | "manual"
+    | "base"
+    | "discount"
+    | "travel"
+    | "parking"
+    | "services"
+    | "packaging";
 }
 
 export interface OrderPricingSnapshot {
@@ -95,11 +116,22 @@ export interface OrderPricingSnapshot {
     distanceKm: number;
     distanceSource?: "manual" | "route";
     addresses: Array<{ city: string; parkingSlot: boolean }>;
-    services: Array<{ kind: "service" | "packaging"; catalogId: number | null; quantity: number }>;
+    services: Array<{
+      kind: "service" | "packaging";
+      catalogId: number | null;
+      quantity: number;
+      unitPrice?: number | null;
+    }>;
   };
   offer: CatalogOfferDto | null;
   rates: CatalogServiceRateDto[];
-  services: Array<{ id: number; kind: "service" | "packaging"; name: string; price: number; sort: number }>;
+  services: Array<{
+    id: number;
+    kind: "service" | "packaging";
+    name: string;
+    price: number;
+    sort: number;
+  }>;
 }
 
 export interface OrderDetailsInput {
@@ -161,7 +193,13 @@ export interface CreateOrderInput {
   dateFrom?: string;
   dateTo?: string;
   dateFixed?: boolean;
-  orderSource?: "express" | "individuelle" | "Moebelliste" | "UmzugRuckZuck" | "check24" | "umzugruckzuck24.de";
+  orderSource?:
+    | "express"
+    | "individuelle"
+    | "Moebelliste"
+    | "UmzugRuckZuck"
+    | "check24"
+    | "umzugruckzuck24.de";
   note?: string;
   costsAssumption?: boolean;
 }
@@ -325,7 +363,12 @@ export {
   roundProductToNearestIncrement,
   roundInvoiceAmount,
 } from "./invoice-calculation.js";
-export { MAX_INVOICE_AMOUNT, isInvoiceAmount, isInvoiceDate, validateInvoiceEntries } from "./invoice-validation.js";
+export {
+  MAX_INVOICE_AMOUNT,
+  isInvoiceAmount,
+  isInvoiceDate,
+  validateInvoiceEntries,
+} from "./invoice-validation.js";
 
 /** Legacy accounting tabs: at most three consecutive payment reminders per invoice. */
 export const MAX_REMINDER_LEVEL = 3;
@@ -389,14 +432,26 @@ export function formatGermanDate(isoDate: string): string {
 }
 
 /** Legacy "Verzug": inclusive day count from the previous due date to the reminder due date. */
-export function reminderDelayDays(previousDueDate: string, dueDate: string): number {
-  const days = Math.round((Date.parse(`${dueDate.slice(0, 10)}T00:00:00Z`) - Date.parse(`${previousDueDate.slice(0, 10)}T00:00:00Z`)) / 86400000);
+export function reminderDelayDays(
+  previousDueDate: string,
+  dueDate: string,
+): number {
+  const days = Math.round(
+    (Date.parse(`${dueDate.slice(0, 10)}T00:00:00Z`) -
+      Date.parse(`${previousDueDate.slice(0, 10)}T00:00:00Z`)) /
+      86400000,
+  );
   return Math.max(0, days + 1);
 }
 
-export function reminderGreeting(input: { company: string; salutation?: string | undefined; lastName?: string | undefined }): string {
+export function reminderGreeting(input: {
+  company: string;
+  salutation?: string | undefined;
+  lastName?: string | undefined;
+}): string {
   const lastName = input.lastName?.trim();
-  if (input.company.trim() || !lastName) return "Sehr geehrte Damen und Herren,";
+  if (input.company.trim() || !lastName)
+    return "Sehr geehrte Damen und Herren,";
   if (input.salutation === "Frau") return `Sehr geehrte Frau ${lastName},`;
   if (input.salutation === "Herr") return `Sehr geehrter Herr ${lastName},`;
   return "Sehr geehrte Damen und Herren,";
@@ -406,16 +461,26 @@ export function reminderGreeting(input: { company: string; salutation?: string |
  * Ports the legacy reminder texts. `dueDates[0]` is the invoice due date,
  * `dueDates[n]` the due date of reminder n; the last entry is the new deadline.
  */
-export function reminderText(input: { level: number; greeting: string; outstandingAmount: number; dueDates: string[] }): string {
+export function reminderText(input: {
+  level: number;
+  greeting: string;
+  outstandingAmount: number;
+  dueDates: string[];
+}): string {
   const date = (index: number) => formatGermanDate(input.dueDates[index] ?? "");
   const next = date(input.level);
-  const euro = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(input.outstandingAmount);
-  const notice = "Sofern Sie zwischenzeitlich die Zahlung veranlasst haben, bitten wir Sie, dieses Schreiben als gegenstandslos zu betrachten.";
-  const body = input.level === 1
-    ? `gewiss ist es Ihnen entgangen, dass ein Betrag in Höhe von ${euro} bereits am ${date(0)} fällig war. Zur Vermeidung der Erhebung von Verzugszinsen bitten wir Sie, Ihre Zahlung bis zum ${next} vorzunehmen.\n\nSollten Sie den Ausgleich bereits veranlasst haben, sehen Sie dieses Schreiben bitte als gegenstandslos an.`
-    : input.level === 2
-      ? `auf unsere Mahnung vom ${date(1)} haben Sie leider nicht reagiert. Bitte überweisen Sie den fälligen Betrag bis zum ${next}.\n\nFalls Sie diesen Zahlungstermin nicht einhalten, werden wir Ihnen Kosten des Mahnverfahrens und Verzugszinsen in Rechnung stellen müssen.\n\n${notice}`
-      : `auf unsere Mahnung vom ${date(1)} und 2. Mahnung vom ${date(2)} haben Sie nicht reagiert. Bitte überweisen Sie den fälligen Betrag bis spätestens ${next}. Falls die letzte Zahlungsfrist ohne Eingang des Betrages auf unser Konto verstreicht, sehen wir uns gezwungen, gerichtliche Schritte gegen Sie einleiten zu müssen. Die Kosten des gesamten Verfahrens gehen zu Ihren Lasten.\n\n${notice}`;
+  const euro = new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+  }).format(input.outstandingAmount);
+  const notice =
+    "Sofern Sie zwischenzeitlich die Zahlung veranlasst haben, bitten wir Sie, dieses Schreiben als gegenstandslos zu betrachten.";
+  const body =
+    input.level === 1
+      ? `gewiss ist es Ihnen entgangen, dass ein Betrag in Höhe von ${euro} bereits am ${date(0)} fällig war. Zur Vermeidung der Erhebung von Verzugszinsen bitten wir Sie, Ihre Zahlung bis zum ${next} vorzunehmen.\n\nSollten Sie den Ausgleich bereits veranlasst haben, sehen Sie dieses Schreiben bitte als gegenstandslos an.`
+      : input.level === 2
+        ? `auf unsere Mahnung vom ${date(1)} haben Sie leider nicht reagiert. Bitte überweisen Sie den fälligen Betrag bis zum ${next}.\n\nFalls Sie diesen Zahlungstermin nicht einhalten, werden wir Ihnen Kosten des Mahnverfahrens und Verzugszinsen in Rechnung stellen müssen.\n\n${notice}`
+        : `auf unsere Mahnung vom ${date(1)} und 2. Mahnung vom ${date(2)} haben Sie nicht reagiert. Bitte überweisen Sie den fälligen Betrag bis spätestens ${next}. Falls die letzte Zahlungsfrist ohne Eingang des Betrages auf unser Konto verstreicht, sehen wir uns gezwungen, gerichtliche Schritte gegen Sie einleiten zu müssen. Die Kosten des gesamten Verfahrens gehen zu Ihren Lasten.\n\n${notice}`;
   return `${input.greeting}\n\n${body}\n\nMit freundlichen Grüßen\nAlexander Berent`;
 }
 
@@ -477,9 +542,21 @@ export const SERVICE_RATE_KEYS = [
   "disposalCbmPrice",
   "kmPrice",
   "hvzPrice",
+  "ridingCostsTruck1",
+  "ridingCostsTruck2",
+  "ridingCostsTruck3",
+  "ridingCostsTruck4",
 ] as const;
 
-export type ServiceRateKey = typeof SERVICE_RATE_KEYS[number];
+export type ServiceRateKey = (typeof SERVICE_RATE_KEYS)[number];
+
+/**
+ * Highest truck count with a dedicated riding-cost rate. Travel costs are only
+ * defined for these counts, so offers and order bases must not exceed it.
+ */
+export const MAX_TRUCKS = SERVICE_RATE_KEYS.filter((key) =>
+  key.startsWith("ridingCostsTruck"),
+).length;
 
 export interface CatalogServiceRateDto {
   key: ServiceRateKey;
@@ -488,7 +565,10 @@ export interface CatalogServiceRateDto {
 
 export type CatalogCategoryInput = Pick<CatalogCategoryDto, "name" | "sort">;
 
-export type CatalogFurnitureInput = Omit<CatalogFurnitureDto, "id" | "categoryRefs">;
+export type CatalogFurnitureInput = Omit<
+  CatalogFurnitureDto,
+  "id" | "categoryRefs"
+>;
 
 export type CatalogServiceInput = Omit<CatalogServiceDto, "id">;
 

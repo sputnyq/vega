@@ -114,6 +114,23 @@ test("validates and persists secondary addresses while keeping prices staff-only
   assert.equal(validateOrderCreateInput({ ...validOrder, details: pricedDetails }, { allowStaffPricing: true }).ok, true);
 });
 
+test("order basis rejects a truck count above the configured riding-cost rates", () => {
+  const input = orderFixture();
+  input.details!.basis.trucks = 5;
+  const rejected = validateOrderCreateInput(input, { allowStaffPricing: true });
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok)
+    assert.ok(
+      rejected.issues.some((issue) => issue.field === "details.basis.trucks"),
+    );
+
+  input.details!.basis.trucks = 4;
+  assert.equal(
+    validateOrderCreateInput(input, { allowStaffPricing: true }).ok,
+    true,
+  );
+});
+
 test("allows a staff draft with empty legacy fields but still requires public submissions to be complete", () => {
   const draft = {
     customer: { firstName: "", lastName: "", phone: "" },

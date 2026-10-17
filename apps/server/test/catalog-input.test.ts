@@ -46,7 +46,10 @@ test("service and packing data validate customer-visible prices and safe media U
 test("offers validate bounded workforce and prices; service rates only accept allowlisted keys", () => {
   assert.equal(validateOfferInput({ name: "3 Träger · 1 LKW", workers: 3, trucks: 1, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, true);
   assert.equal(validateOfferInput({ name: "Bad offer", workers: 0, trucks: 1, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, false);
+  assert.equal(validateOfferInput({ name: "7 Träger · 4 LKW", workers: 7, trucks: 4, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, true);
+  assert.equal(validateOfferInput({ name: "5 LKW ohne Tarif", workers: 3, trucks: 5, includedHours: 4, sum: 850, hourPrice: 120, ridingCosts: 20, sort: 0 }).ok, false);
   assert.equal(validateServiceRateInput("kmPrice", { price: 2.5 }).ok, true);
+  assert.equal(validateServiceRateInput("ridingCostsTruck4", { price: 85 }).ok, true);
   assert.equal(validateServiceRateInput("databaseUrl", { price: 2.5 }).ok, false);
   assert.equal(validateServiceRateInput("hvzPrice", { price: -2 }).ok, false);
 });

@@ -7,10 +7,13 @@ import {
   FormControlLabel,
   IconButton,
   Paper,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   Tooltip,
   Typography,
+  useColorScheme,
 } from "@mui/material";
 import { AdminAlert as Alert } from "../components/AdminNotifications.js";
 import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
@@ -53,6 +56,34 @@ export function RecoveryCodesPanel({ codes, onDownload }: { codes: string[]; onD
 }
 
 const SIGNATURE_NAME_MAX = 100;
+
+export function AppearanceSection() {
+  const { mode, setMode } = useColorScheme();
+  return (
+    <Paper component="section" aria-labelledby="appearance-heading" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+      <Stack spacing={1.5}>
+        <Typography component="h2" variant="h6" id="appearance-heading">Darstellung</Typography>
+        <RadioGroup
+          aria-labelledby="appearance-heading"
+          aria-describedby="appearance-description"
+          name="color-mode"
+          value={mode ?? "system"}
+          onChange={(_, value) => {
+            if (value === "light" || value === "dark" || value === "system") setMode(value);
+          }}
+          sx={{ flexDirection: { xs: "column", sm: "row" } }}
+        >
+          <FormControlLabel value="light" control={<Radio />} label="Hell" />
+          <FormControlLabel value="dark" control={<Radio />} label="Dunkel" />
+          <FormControlLabel value="system" control={<Radio />} label="System" />
+        </RadioGroup>
+        <Typography id="appearance-description" variant="body2" color="text.secondary">
+          „System“ folgt automatisch der Darstellung Ihres Betriebssystems. Die Auswahl wird nur in diesem Browser gespeichert.
+        </Typography>
+      </Stack>
+    </Paper>
+  );
+}
 
 export function SignatureSection() {
   const [signatureName, setSignatureName] = useState("");
@@ -308,6 +339,7 @@ export function ProfilePage({ user, onSetupTotp }: { user: StaffUser; onSetupTot
           </Typography>
         </Stack>
       </Paper>
+      <AppearanceSection />
       <SignatureSection />
       <Paper component="section" aria-labelledby="password-heading" variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={1.5}>

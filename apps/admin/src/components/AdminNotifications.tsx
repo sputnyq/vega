@@ -51,7 +51,12 @@ function NotificationToast({ notification, onDismiss }: { notification: AdminNot
 
   return (
     <Slide direction="up" in mountOnEnter>
-      <Alert severity={severity} variant="filled" onClose={() => onDismiss(id)} sx={{ pointerEvents: "auto" }}>
+      <Alert
+        severity={severity}
+        variant="filled"
+        onClose={() => onDismiss(id)}
+        sx={{ pointerEvents: "auto", alignItems: "center" }}
+      >
         {message}
       </Alert>
     </Slide>
